@@ -15,44 +15,77 @@ import {
 } from "../../lib/tracker";
 
 const FEATURE_LABELS: Record<AbandonmentFeatureName, string> = {
-  cart_dwell_time_seconds: "Cart dwell time",
-  cart_pdp_bounce_count: "Cart → PDP bounces",
-  reviews_expanded_count: "Reviews viewed",
-  idle_time_before_checkout: "Idle before checkout",
-  delivery_pincode_checked: "Pincode checked",
-  cart_value_to_aov_ratio: "Cart / AOV ratio",
-  delivery_fee_percentage: "Delivery fee",
-  est_delivery_days: "Est. delivery",
-  has_price_dropped_recently: "Recent price drop",
-  hist_abandonment_rate: "Historical abandonment",
-  discount_sensitivity_score: "Discount sensitivity",
-  past_return_rate: "Past return rate",
-  wishlist_item_count: "Wishlist items",
-  payment_method_saved: "Payment saved",
+  // A. Cart engagement
+  seconds_spent_in_cart: "Time in cart",
+  times_returned_to_product_page: "Returns to product",
+  product_reviews_read: "Reviews read",
+  seconds_idle_before_checkout: "Idle before checkout",
+  delivery_pincode_checks: "Pincode checks",
+  saved_items_in_wishlist: "Wishlist items",
+  // B. Cost friction
+  cart_value_vs_typical_order: "Cart vs usual order",
+  delivery_fee_percent_of_cart: "Delivery fee share",
+  price_dropped_since_first_view: "Price dropped",
+  discount_seeking_tendency: "Discount seeking",
+  failed_coupon_attempts: "Failed coupons",
+  // C. Delivery friction
+  estimated_delivery_days: "Est. delivery",
+  // D. Checkout & trust friction
+  payment_method_on_file: "Card on file",
+  checkout_steps_completed: "Checkout progress",
+  payment_attempts_failed: "Failed payments",
+  is_guest_checkout: "Guest checkout",
+  // E. Customer history
+  past_abandonment_rate: "Past abandonment",
+  past_order_return_rate: "Past returns",
+  lifetime_orders_placed: "Lifetime orders",
+  days_since_last_purchase: "Days since order",
+  // F. Session context
+  is_mobile_session: "Mobile session",
+  is_late_night_session: "Late-night session",
 };
+
+const BOOLEAN_FEATURES = new Set<AbandonmentFeatureName>([
+  "price_dropped_since_first_view",
+  "payment_method_on_file",
+  "is_guest_checkout",
+  "is_mobile_session",
+  "is_late_night_session",
+]);
+
+const RATE_FEATURES = new Set<AbandonmentFeatureName>([
+  "past_abandonment_rate",
+  "discount_seeking_tendency",
+  "past_order_return_rate",
+]);
 
 function percentage(value: number): string {
   return `${(Math.max(0, Math.min(1, value)) * 100).toFixed(1)}%`;
 }
 
 function featureValue(name: AbandonmentFeatureName, value: number): string {
-  if (name === "delivery_pincode_checked" || name === "has_price_dropped_recently" || name === "payment_method_saved") {
-    return value ? "Yes" : "No";
+  if (BOOLEAN_FEATURES.has(name)) return value ? "Yes" : "No";
+  if (RATE_FEATURES.has(name)) return percentage(value);
+  if (name === "seconds_spent_in_cart" || name === "seconds_idle_before_checkout") {
+    return `${value}s`;
   }
-  if (name === "cart_dwell_time_seconds" || name === "idle_time_before_checkout") return `${value}s`;
-  if (name === "delivery_fee_percentage") return `${value.toFixed(2)}%`;
-  if (name === "est_delivery_days") return `${value} days`;
-  if (name === "hist_abandonment_rate" || name === "discount_sensitivity_score" || name === "past_return_rate") {
-    return percentage(value);
-  }
+  if (name === "delivery_fee_percent_of_cart") return `${value.toFixed(2)}%`;
+  if (name === "estimated_delivery_days") return `${value} days`;
+  if (name === "days_since_last_purchase") return `${value}d`;
+  if (name === "checkout_steps_completed") return `${value} / 3`;
+  if (name === "cart_value_vs_typical_order") return `${value.toFixed(2)}x`;
   return Number.isInteger(value) ? String(value) : value.toFixed(3);
 }
 
-function riskStyle(probability: number) {
-  if (probability >= 0.7) return { label: "High", text: "text-red-600", bar: "bg-red-500", bg: "bg-red-50" };
-  if (probability >= 0.4) return { label: "Medium", text: "text-amber-600", bar: "bg-amber-500", bg: "bg-amber-50" };
-  return { label: "Low", text: "text-emerald-600", bar: "bg-emerald-500", bg: "bg-emerald-50" };
-}
+/**
+ * Tier comes from the API, not recomputed here — the backend owns the
+ * thresholds that Phase 2 will fire on, so there is exactly one source of truth.
+ */
+const RISK_STYLES = {
+  high: { label: "High", text: "text-red-600", bar: "bg-red-500", bg: "bg-red-50" },
+  medium: { label: "Medium", text: "text-amber-600", bar: "bg-amber-500", bg: "bg-amber-50" },
+  low: { label: "Low", text: "text-emerald-600", bar: "bg-emerald-500", bg: "bg-emerald-50" },
+} as const;
 
 export function AgentInspector() {
   const [isOpen, setIsOpen] = useState(false);
@@ -68,7 +101,7 @@ export function AgentInspector() {
   if (!snapshot.signals.cartActive) return null;
 
   const probability = prediction?.abandonment_probability ?? 0;
-  const risk = riskStyle(probability);
+  const risk = RISK_STYLES[prediction?.risk_tier ?? "low"];
   const topFeatures = prediction?.top_contributing_features.slice(0, 3) ?? [];
   const impacts = Object.entries(prediction?.feature_impacts ?? {}).sort(
     ([, left], [, right]) => Math.abs(right) - Math.abs(left),
@@ -121,7 +154,9 @@ export function AgentInspector() {
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
                 Active cart telemetry
               </span>
-              <span className="font-medium text-blue-300">14 exact model features</span>
+              <span className="font-medium text-blue-300">
+                {ABANDONMENT_FEATURE_NAMES.length} live session features
+              </span>
             </div>
           </header>
 

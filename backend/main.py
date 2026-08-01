@@ -1,4 +1,4 @@
-"""FastAPI inference service for Phase 1 cart-abandonment prediction."""
+"""FastAPI inference service for cart-abandonment prediction."""
 
 from __future__ import annotations
 
@@ -18,10 +18,12 @@ from pydantic import BaseModel, ConfigDict, Field
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT_DIR = PROJECT_ROOT / "ml" / "artifacts"
 MODEL_PATH = ARTIFACT_DIR / "model.joblib"
+CALIBRATOR_PATH = ARTIFACT_DIR / "calibrator.joblib"
 EXPLAINER_PATH = ARTIFACT_DIR / "explainer.joblib"
 FEATURE_NAMES_PATH = ARTIFACT_DIR / "feature_names.json"
+METRICS_PATH = ARTIFACT_DIR / "metrics.json"
 
-# Add project root to path so we can import ml package
+# Add project root to path so we can import the ml package
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -32,27 +34,53 @@ from ml.feature_engineering import (  # noqa: E402
 )
 
 MODEL: Any = None
+CALIBRATOR: Any = None
 EXPLAINER: Any = None
-FEATURE_NAMES: list[str] = []
+FEATURE_NAMES: list = []
 
 
 class SessionFeatures(BaseModel):
+    """The 22 observable signals a live session can supply.
+
+    Bounds mirror the training distribution; the frontend clamps to the same
+    ranges so inference never sees values the model was not trained on.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    cart_dwell_time_seconds: float = Field(ge=10.0, le=600.0)
-    cart_pdp_bounce_count: int = Field(ge=0, le=10)
-    reviews_expanded_count: int = Field(ge=0, le=8)
-    idle_time_before_checkout: float = Field(ge=0.0, le=300.0)
-    delivery_pincode_checked: int = Field(ge=0, le=5)
-    cart_value_to_aov_ratio: float = Field(ge=0.2, le=4.0)
-    delivery_fee_percentage: float = Field(ge=0.0, le=15.0)
-    est_delivery_days: int = Field(ge=1, le=10)
-    has_price_dropped_recently: int = Field(ge=0, le=1)
-    hist_abandonment_rate: float = Field(ge=0.0, le=1.0)
-    discount_sensitivity_score: float = Field(ge=0.0, le=1.0)
-    past_return_rate: float = Field(ge=0.0, le=0.5)
-    wishlist_item_count: int = Field(ge=0, le=5)
-    payment_method_saved: int = Field(ge=0, le=1)
+    # A. Cart engagement
+    seconds_spent_in_cart: float = Field(ge=0.0, le=900.0)
+    times_returned_to_product_page: int = Field(ge=0, le=10)
+    product_reviews_read: int = Field(ge=0, le=8)
+    seconds_idle_before_checkout: float = Field(ge=0.0, le=300.0)
+    delivery_pincode_checks: int = Field(ge=0, le=5)
+    saved_items_in_wishlist: int = Field(ge=0, le=20)
+
+    # B. Cost friction
+    cart_value_vs_typical_order: float = Field(ge=0.0, le=6.0)
+    delivery_fee_percent_of_cart: float = Field(ge=0.0, le=25.0)
+    price_dropped_since_first_view: int = Field(ge=0, le=1)
+    discount_seeking_tendency: float = Field(ge=0.0, le=1.0)
+    failed_coupon_attempts: int = Field(ge=0, le=6)
+
+    # C. Delivery friction
+    estimated_delivery_days: int = Field(ge=1, le=10)
+
+    # D. Checkout & trust friction
+    payment_method_on_file: int = Field(ge=0, le=1)
+    checkout_steps_completed: int = Field(ge=0, le=3)
+    payment_attempts_failed: int = Field(ge=0, le=5)
+    is_guest_checkout: int = Field(ge=0, le=1)
+
+    # E. Customer history
+    past_abandonment_rate: float = Field(ge=0.0, le=1.0)
+    past_order_return_rate: float = Field(ge=0.0, le=0.5)
+    lifetime_orders_placed: int = Field(ge=0, le=120)
+    days_since_last_purchase: float = Field(ge=0.0, le=400.0)
+
+    # F. Session context
+    is_mobile_session: int = Field(ge=0, le=1)
+    is_late_night_session: int = Field(ge=0, le=1)
 
 
 class FeatureContribution(BaseModel):
@@ -63,13 +91,14 @@ class FeatureContribution(BaseModel):
 class PredictionResponse(BaseModel):
     abandonment_probability: float
     confidence_score: float
-    top_contributing_features: list[FeatureContribution]
-    feature_impacts: dict[str, float]
+    risk_tier: Literal["low", "medium", "high"]
+    top_contributing_features: list
+    feature_impacts: dict
     status: Literal["success"] = "success"
 
 
 def _load_artifacts() -> None:
-    global MODEL, EXPLAINER, FEATURE_NAMES
+    global MODEL, CALIBRATOR, EXPLAINER, FEATURE_NAMES
 
     missing = [
         str(path)
@@ -86,11 +115,14 @@ def _load_artifacts() -> None:
 
     MODEL = joblib.load(MODEL_PATH)
     EXPLAINER = joblib.load(EXPLAINER_PATH)
+    # May legitimately be None: training only keeps a calibrator when it
+    # measurably improved held-out log-loss.
+    CALIBRATOR = joblib.load(CALIBRATOR_PATH) if CALIBRATOR_PATH.exists() else None
     FEATURE_NAMES = json.loads(FEATURE_NAMES_PATH.read_text(encoding="utf-8"))
     if len(FEATURE_NAMES) != len(ALL_FEATURE_NAMES):
         raise RuntimeError(
-            f"feature_names.json must contain exactly {len(ALL_FEATURE_NAMES)} features, "
-            f"got {len(FEATURE_NAMES)}"
+            f"feature_names.json must contain exactly {len(ALL_FEATURE_NAMES)} "
+            f"features, got {len(FEATURE_NAMES)}"
         )
 
 
@@ -101,9 +133,9 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="Flipkart GRiD 8.0 Phase 1 Prediction API",
-    description="Real-time XGBoost cart-abandonment probability with SHAP attribution.",
-    version="1.0.0",
+    title="Flipkart GRiD 8.0 Cart-Abandonment Prediction API",
+    description="Calibrated XGBoost abandonment probability with SHAP attribution.",
+    version="2.0.0",
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -116,13 +148,31 @@ app.add_middleware(
 
 
 @app.get("/health")
-def health() -> dict[str, str | int]:
+def health() -> dict:
     return {
         "status": "online",
         "model": "XGBoost",
         "explainer": "SHAP TreeExplainer",
-        "feature_count": len(FEATURE_NAMES),
+        "raw_feature_count": len(RAW_FEATURE_NAMES),
+        "total_feature_count": len(FEATURE_NAMES),
+        "calibrated": CALIBRATOR is not None,
     }
+
+
+@app.get("/metrics")
+def metrics() -> dict:
+    """Holdout evaluation of the deployed artifact, including the Bayes ceiling."""
+    if not METRICS_PATH.exists():
+        raise HTTPException(status_code=404, detail="metrics.json not found")
+    return json.loads(METRICS_PATH.read_text(encoding="utf-8"))
+
+
+def _risk_tier(probability: float) -> str:
+    if probability >= 0.80:
+        return "high"
+    if probability >= 0.60:
+        return "medium"
+    return "low"
 
 
 def _extract_shap_values(frame: pd.DataFrame) -> np.ndarray:
@@ -145,21 +195,25 @@ def predict_abandonment(payload: SessionFeatures) -> PredictionResponse:
 
     try:
         values = payload.model_dump()
-        # Build raw 14-feature frame from input
         raw_frame = pd.DataFrame(
             [[values[name] for name in RAW_FEATURE_NAMES]],
             columns=RAW_FEATURE_NAMES,
         )
-        # Apply feature engineering: 14 raw → 22 features
         frame = engineer_features(raw_frame)
 
         probability = float(MODEL.predict_proba(frame)[0, 1])
+        if CALIBRATOR is not None:
+            probability = float(CALIBRATOR.predict([probability])[0])
+
+        # Distance from a coin flip, i.e. how decisive the model is here.
         confidence = abs(probability - 0.5) * 2.0
         shap_values = _extract_shap_values(frame)
 
+        # `zip(..., strict=True)` needs Python 3.10+; this service targets 3.9.
+        # The length invariant is already enforced by the shape check above.
         feature_impacts = {
             name: round(float(impact), 6)
-            for name, impact in zip(FEATURE_NAMES, shap_values, strict=True)
+            for name, impact in zip(FEATURE_NAMES, shap_values)
         }
         positive_indices = np.flatnonzero(shap_values > 0.0)
         ordered_positive = positive_indices[
@@ -176,6 +230,7 @@ def predict_abandonment(payload: SessionFeatures) -> PredictionResponse:
         return PredictionResponse(
             abandonment_probability=round(probability, 6),
             confidence_score=round(confidence, 6),
+            risk_tier=_risk_tier(probability),
             top_contributing_features=top_features,
             feature_impacts=feature_impacts,
             status="success",
