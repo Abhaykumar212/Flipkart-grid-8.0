@@ -8,6 +8,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { useTracker } from "../../context/TrackerContext";
 import {
   ABANDONMENT_FEATURE_NAMES,
@@ -56,6 +57,7 @@ function riskStyle(probability: number) {
 
 export function AgentInspector() {
   const [isOpen, setIsOpen] = useState(false);
+  const { pathname } = useLocation();
   const {
     snapshot,
     prediction,
@@ -80,12 +82,13 @@ export function AgentInspector() {
       : prediction
         ? percentage(probability)
         : "Awaiting model";
+  const clearsMobileCheckoutBar = pathname === "/cart" || pathname === "/checkout";
 
   return (
-    <div className="fixed bottom-5 right-5 z-[9999]">
+    <div className={`fixed right-3 z-[9999] lg:bottom-5 lg:right-5 ${clearsMobileCheckoutBar ? "bottom-[calc(5.25rem+env(safe-area-inset-bottom))]" : "bottom-3"}`}>
       {isOpen && (
-        <section className="absolute bottom-16 right-0 flex max-h-[84vh] w-[min(500px,calc(100vw-24px))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.28)]">
-          <header className="bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-5 py-4 text-white">
+        <section className="absolute bottom-16 right-0 flex max-h-[min(72vh,680px)] w-[min(500px,calc(100vw-24px))] flex-col overflow-hidden rounded-[2px] border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.28)]">
+          <header className="bg-fk-footer px-5 py-4 text-white">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/20 text-blue-300">
@@ -143,7 +146,7 @@ export function AgentInspector() {
                 </div>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
                   <div
-                    className={`h-full rounded-full transition-all ${risk.bar}`}
+                    className={`h-full rounded-full transition-[width] motion-reduce:transition-none ${risk.bar}`}
                     style={{ width: prediction ? percentage(probability) : "0%" }}
                   />
                 </div>
@@ -231,17 +234,20 @@ export function AgentInspector() {
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
-        className="flex items-center gap-3 rounded-full border border-white/20 bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-white shadow-[0_10px_30px_rgba(37,99,235,0.35)] transition hover:-translate-y-0.5"
+        className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-fk-blue text-white shadow-[0_6px_20px_rgba(40,116,240,0.35)] transition-transform hover:-translate-y-0.5 motion-reduce:transition-none"
+        aria-expanded={isOpen}
+        aria-label={isOpen ? "Close risk inspector" : "Open risk inspector"}
+        title={`Risk inspector · ${status}`}
       >
         <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/15">
           {prediction ? <BarChart3 className="h-5 w-5" /> : <Activity className="h-5 w-5" />}
           <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-blue-600 bg-emerald-400" />
         </span>
-        <span className="text-left">
+        <span className="hidden text-left">
           <span className="block text-xs font-bold leading-4">Phase 1 Risk</span>
           <span className="block text-[10px] text-blue-100">XGBoost + SHAP</span>
         </span>
-        <span className="ml-1 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold text-white">{status}</span>
+        <span className="ml-1 hidden rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold text-white">{status}</span>
       </button>
     </div>
   );

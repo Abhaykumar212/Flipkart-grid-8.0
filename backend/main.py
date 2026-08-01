@@ -6,7 +6,7 @@ import json
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Union
 
 import joblib
 import numpy as np
@@ -116,7 +116,7 @@ app.add_middleware(
 
 
 @app.get("/health")
-def health() -> dict[str, str | int]:
+def health() -> dict[str, Union[str, int]]:
     return {
         "status": "online",
         "model": "XGBoost",
@@ -159,7 +159,7 @@ def predict_abandonment(payload: SessionFeatures) -> PredictionResponse:
 
         feature_impacts = {
             name: round(float(impact), 6)
-            for name, impact in zip(FEATURE_NAMES, shap_values, strict=True)
+            for name, impact in zip(FEATURE_NAMES, shap_values)
         }
         positive_indices = np.flatnonzero(shap_values > 0.0)
         ordered_positive = positive_indices[

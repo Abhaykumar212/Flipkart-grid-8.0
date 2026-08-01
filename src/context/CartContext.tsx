@@ -12,6 +12,8 @@ const STORAGE_KEY = "fk-cart-v1";
 export interface CartItem {
   productId: string;
   quantity: number;
+  /** Human-readable option selected on the PDP, e.g. "Size: M". */
+  variant?: string;
   /**
    * ISO timestamp of the first add. Not used by the cart UI, but it's the field
    * `ProductSignals.addedToCartAt` / `cartDwellMs` will be derived from once the
@@ -22,28 +24,34 @@ export interface CartItem {
 
 export interface CartState {
   items: CartItem[];
+  promoCode: string | null;
 }
 
 export type CartAction =
-  | { type: "ADD_ITEM"; productId: string; quantity?: number }
-  | { type: "REMOVE_ITEM"; productId: string }
-  | { type: "UPDATE_QUANTITY"; productId: string; quantity: number }
+  | { type: "ADD_ITEM"; productId: string; quantity?: number; variant?: string }
+  | { type: "REMOVE_ITEM"; productId: string; variant?: string }
+  | { type: "UPDATE_QUANTITY"; productId: string; quantity: number; variant?: string }
+  | { type: "APPLY_PROMO"; code: string }
+  | { type: "REMOVE_PROMO" }
   | { type: "CLEAR_CART" };
 
-const EMPTY_STATE: CartState = { items: [] };
+const EMPTY_STATE: CartState = { items: [], promoCode: null };
 
 export function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
     case "ADD_ITEM": {
       const quantity = action.quantity ?? 1;
-      const existing = state.items.find((i) => i.productId === action.productId);
+      const existing = state.items.find(
+        (item) => item.productId === action.productId && item.variant === action.variant,
+      );
 
       // Increment the existing line rather than pushing a duplicate row, and
       // keep the original `addedAt` so dwell time measures from the first add.
       if (existing) {
         return {
+          ...state,
           items: state.items.map((i) =>
-            i.productId === action.productId
+            i.productId === action.productId && i.variant === action.variant
               ? { ...i, quantity: i.quantity + quantity }
               : i,
           ),
@@ -51,11 +59,13 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
       }
 
       return {
+        ...state,
         items: [
           ...state.items,
           {
             productId: action.productId,
             quantity,
+            variant: action.variant,
             addedAt: new Date().toISOString(),
           },
         ],
@@ -63,18 +73,32 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
     }
 
     case "REMOVE_ITEM":
-      return { items: state.items.filter((i) => i.productId !== action.productId) };
+      return {
+        ...state,
+        items: state.items.filter(
+          (item) => !(item.productId === action.productId && item.variant === action.variant),
+        ),
+      };
 
     case "UPDATE_QUANTITY": {
       // Clamped at 1 — dropping to zero never silently removes a line, removal
       // is always an explicit REMOVE_ITEM.
       const quantity = Math.max(1, action.quantity);
       return {
+        ...state,
         items: state.items.map((i) =>
-          i.productId === action.productId ? { ...i, quantity } : i,
+          i.productId === action.productId && i.variant === action.variant
+            ? { ...i, quantity }
+            : i,
         ),
       };
     }
+
+    case "APPLY_PROMO":
+      return { ...state, promoCode: action.code };
+
+    case "REMOVE_PROMO":
+      return { ...state, promoCode: null };
 
     case "CLEAR_CART":
       return EMPTY_STATE;
@@ -105,7 +129,10 @@ function readStoredCart(): CartState {
         typeof i?.quantity === "number" &&
         i.quantity > 0,
     );
-    return { items };
+    const promoCode = typeof (parsed as CartState).promoCode === "string"
+      ? (parsed as CartState).promoCode
+      : null;
+    return { items, promoCode };
   } catch {
     return EMPTY_STATE;
   }
@@ -113,11 +140,14 @@ function readStoredCart(): CartState {
 
 interface CartContextValue {
   items: CartItem[];
+  promoCode: string | null;
   /** Total quantity across all lines — what the navbar badge shows. */
   count: number;
-  addItem: (productId: string, quantity?: number) => void;
-  removeItem: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
+  addItem: (productId: string, quantity?: number, variant?: string) => void;
+  removeItem: (productId: string, variant?: string) => void;
+  updateQuantity: (productId: string, quantity: number, variant?: string) => void;
+  applyPromo: (code: string) => void;
+  removePromo: () => void;
   clearCart: () => void;
 }
 
@@ -137,12 +167,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const value = useMemo<CartContextValue>(
     () => ({
       items: state.items,
+      promoCode: state.promoCode,
       count: state.items.reduce((sum, i) => sum + i.quantity, 0),
-      addItem: (productId, quantity) =>
-        dispatch({ type: "ADD_ITEM", productId, quantity }),
-      removeItem: (productId) => dispatch({ type: "REMOVE_ITEM", productId }),
-      updateQuantity: (productId, quantity) =>
-        dispatch({ type: "UPDATE_QUANTITY", productId, quantity }),
+      addItem: (productId, quantity, variant) =>
+        dispatch({ type: "ADD_ITEM", productId, quantity, variant }),
+      removeItem: (productId, variant) =>
+        dispatch({ type: "REMOVE_ITEM", productId, variant }),
+      updateQuantity: (productId, quantity, variant) =>
+        dispatch({ type: "UPDATE_QUANTITY", productId, quantity, variant }),
+      applyPromo: (code) => dispatch({ type: "APPLY_PROMO", code }),
+      removePromo: () => dispatch({ type: "REMOVE_PROMO" }),
       clearCart: () => dispatch({ type: "CLEAR_CART" }),
     }),
     [state],

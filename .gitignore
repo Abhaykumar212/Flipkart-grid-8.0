@@ -1,5 +1,6 @@
 # Dependencies
 node_modules
+.venv
 /.pnp
 .pnp.js
 
@@ -48,4 +49,3 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
-

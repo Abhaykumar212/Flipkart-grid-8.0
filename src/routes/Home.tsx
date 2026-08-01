@@ -29,16 +29,19 @@ export default function Home() {
         title="Deals of the Day"
         subtitle="Ends in 08:14:22"
         products={dealsOfTheDay}
+        viewAllHref="/products?sort=discount"
       />
       <ProductRail
         title="Best of Electronics"
         subtitle="Laptops & Televisions"
         products={bestOfElectronics}
+        viewAllHref="/category/electronics"
       />
       <ProductRail
         title="Suggested for You"
         subtitle="Based on your activity"
         products={suggestedForYou}
+        viewAllHref="/products?sort=rating"
       />
     </>
   );

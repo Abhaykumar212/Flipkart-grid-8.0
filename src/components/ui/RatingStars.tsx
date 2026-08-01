@@ -45,7 +45,7 @@ export function RatingStars({
   const padding = size === "sm" ? "px-1.5 py-0.5 text-fk-xs" : "px-2 py-0.5 text-fk-sm";
 
   return (
-    <span className={`inline-flex items-center gap-1.5 ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap ${className}`}>
       <span
         className={`inline-flex items-center gap-0.5 rounded-[2px] bg-fk-green font-medium text-white ${padding}`}
       >
@@ -53,7 +53,7 @@ export function RatingStars({
         <Star className="h-2.5 w-2.5 fill-white text-white" />
       </span>
       {count !== undefined && (
-        <span className="text-fk-xs text-fk-muted">
+        <span className="min-w-0 truncate text-fk-xs text-fk-muted tabular-nums">
           ({formatIndianNumber(count)})
         </span>
       )}

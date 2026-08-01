@@ -9,6 +9,11 @@ import { productById } from "../data/products";
 export const FREE_DELIVERY_THRESHOLD = 500;
 export const DELIVERY_CHARGE = 40;
 
+export const PROMO_CODES = {
+  WELCOME10: "10% off up to ₹500",
+  FLIPKART200: "₹200 off orders above ₹2,000",
+} as const;
+
 export interface CartTotals {
   /** Total quantity across all lines. */
   itemCount: number;
@@ -17,6 +22,8 @@ export interface CartTotals {
   /** Sum of selling price x quantity. */
   totalSellingPrice: number;
   discount: number;
+  productDiscount: number;
+  promoDiscount: number;
   deliveryCharge: number;
   isDeliveryFree: boolean;
   totalAmount: number;
@@ -29,7 +36,11 @@ export interface CartTotals {
  * component so the summary card and later agent code share one calculation.
  * Cart entries whose product is missing from the catalog are skipped.
  */
-export function computeCartTotals(items: CartItem[]): CartTotals {
+export function computeCartTotals(
+  items: CartItem[],
+  promoCode: string | null = null,
+  shippingSurcharge = 0,
+): CartTotals {
   let itemCount = 0;
   let totalMrp = 0;
   let totalSellingPrice = 0;
@@ -43,10 +54,17 @@ export function computeCartTotals(items: CartItem[]): CartTotals {
     totalSellingPrice += product.price.sellingPrice * item.quantity;
   }
 
-  const discount = totalMrp - totalSellingPrice;
+  const productDiscount = totalMrp - totalSellingPrice;
+  const normalizedPromo = promoCode?.toUpperCase();
+  const promoDiscount = normalizedPromo === "WELCOME10"
+    ? Math.min(500, Math.round(totalSellingPrice * 0.1))
+    : normalizedPromo === "FLIPKART200" && totalSellingPrice >= 2000
+      ? 200
+      : 0;
+  const discount = productDiscount + promoDiscount;
   const isDeliveryFree =
     totalSellingPrice >= FREE_DELIVERY_THRESHOLD || totalSellingPrice === 0;
-  const deliveryCharge = isDeliveryFree ? 0 : DELIVERY_CHARGE;
+  const deliveryCharge = (isDeliveryFree ? 0 : DELIVERY_CHARGE) + shippingSurcharge;
 
   return {
     itemCount,
@@ -55,7 +73,9 @@ export function computeCartTotals(items: CartItem[]): CartTotals {
     discount,
     deliveryCharge,
     isDeliveryFree,
-    totalAmount: totalSellingPrice + deliveryCharge,
+    totalAmount: Math.max(0, totalSellingPrice + deliveryCharge - promoDiscount),
     savings: discount,
+    productDiscount,
+    promoDiscount,
   };
 }

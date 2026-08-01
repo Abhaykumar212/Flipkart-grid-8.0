@@ -12,7 +12,8 @@ export function PriceSummary({ totals, action }: PriceSummaryProps) {
   const {
     itemCount,
     totalMrp,
-    discount,
+    productDiscount,
+    promoDiscount,
     deliveryCharge,
     isDeliveryFree,
     totalAmount,
@@ -26,7 +27,7 @@ export function PriceSummary({ totals, action }: PriceSummaryProps) {
           Price Details
         </h2>
 
-        <div className="flex flex-col gap-4 px-6 py-4 text-fk-md text-fk-ink">
+        <div className="flex flex-col gap-4 px-6 py-4 text-fk-md text-fk-ink tabular-nums">
           <div className="flex items-center justify-between">
             <span>
               Price ({itemCount} {itemCount === 1 ? "item" : "items"})
@@ -36,8 +37,15 @@ export function PriceSummary({ totals, action }: PriceSummaryProps) {
 
           <div className="flex items-center justify-between">
             <span>Discount</span>
-            <span className="text-fk-green">− {formatINR(discount)}</span>
+            <span className="text-fk-green">− {formatINR(productDiscount)}</span>
           </div>
+
+          {promoDiscount > 0 && (
+            <div className="flex items-center justify-between">
+              <span>Coupon Discount</span>
+              <span className="text-fk-green">− {formatINR(promoDiscount)}</span>
+            </div>
+          )}
 
           <div className="flex items-center justify-between">
             <span>Delivery Charges</span>

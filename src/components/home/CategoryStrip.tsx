@@ -4,22 +4,22 @@ import { homeCategories } from "../../data/categories";
 
 export function CategoryStrip() {
   return (
-    <nav className="mb-3 bg-white px-6 py-3 shadow-fk-card">
-      <ul className="flex items-start justify-between gap-2 overflow-x-auto no-scrollbar">
-        {homeCategories.map(({ label, icon: Icon, tint }) => (
+    <nav className="mb-3 bg-white px-3 py-3 shadow-fk-card sm:px-6" aria-label="Shop by category">
+      <ul className="flex items-start justify-between gap-1 overflow-x-auto overscroll-x-contain no-scrollbar sm:gap-2">
+        {homeCategories.map(({ label, slug, icon: Icon, tint }) => (
           <li key={label}>
             <Link
-              to="#"
-              className="group flex w-[104px] shrink-0 flex-col items-center gap-1.5 py-1"
+              to={slug ? `/category/${slug}` : "/products"}
+              className="group flex w-[88px] shrink-0 flex-col items-center gap-1.5 py-1 sm:w-[104px]"
             >
               <span
-                className={`flex h-16 w-16 items-center justify-center rounded-full transition-transform group-hover:scale-105 ${tint}`}
+                className={`flex h-14 w-14 items-center justify-center rounded-full transition-transform group-hover:scale-105 motion-reduce:transition-none sm:h-16 sm:w-16 ${tint}`}
               >
                 <Icon className="h-7 w-7" strokeWidth={1.75} />
               </span>
-              <span className="flex items-center gap-0.5 text-center text-fk-md font-medium text-fk-ink group-hover:text-fk-blue">
+              <span className="flex max-w-full items-center gap-0.5 truncate text-center text-fk-md font-medium text-fk-ink group-hover:text-fk-blue">
                 {label}
-                <ChevronDown className="h-3 w-3 text-fk-muted" />
+                {slug && <ChevronDown className="h-3 w-3 text-fk-muted" />}
               </span>
             </Link>
           </li>

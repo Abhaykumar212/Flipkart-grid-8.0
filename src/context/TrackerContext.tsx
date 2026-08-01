@@ -113,7 +113,10 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const snapshot = useMemo(() => sessionTracker.getSnapshot(now), [revision, now]);
+  const snapshot = useMemo(() => {
+    void revision;
+    return sessionTracker.getSnapshot(now);
+  }, [revision, now]);
   const startedAt = cartStartedAt(items);
   const warmupRemainingMs = startedAt === null
     ? 0
@@ -173,18 +176,43 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => () => requestController.current?.abort(), []);
 
+  const recordProductVisit = useCallback(
+    (productId: string) => sessionTracker.recordProductVisit(productId),
+    [],
+  );
+  const recordReviewVisibility = useCallback(
+    () => sessionTracker.recordReviewVisibility(),
+    [],
+  );
+  const recordSearch = useCallback((query: string) => sessionTracker.recordSearch(query), []);
+  const recordPincodeCheck = useCallback(
+    (pincode: string) => sessionTracker.recordPincodeCheck(pincode),
+    [],
+  );
+
   const value = useMemo<TrackerContextValue>(() => ({
     snapshot,
     prediction,
     loading,
     error,
     warmupRemainingSeconds: Math.ceil(warmupRemainingMs / 1_000),
-    recordProductVisit: (productId) => sessionTracker.recordProductVisit(productId),
-    recordReviewVisibility: () => sessionTracker.recordReviewVisibility(),
-    recordSearch: (query) => sessionTracker.recordSearch(query),
-    recordPincodeCheck: (pincode) => sessionTracker.recordPincodeCheck(pincode),
+    recordProductVisit,
+    recordReviewVisibility,
+    recordSearch,
+    recordPincodeCheck,
     requestPrediction,
-  }), [snapshot, prediction, loading, error, warmupRemainingMs, requestPrediction]);
+  }), [
+    snapshot,
+    prediction,
+    loading,
+    error,
+    warmupRemainingMs,
+    recordProductVisit,
+    recordReviewVisibility,
+    recordSearch,
+    recordPincodeCheck,
+    requestPrediction,
+  ]);
 
   return <TrackerContext.Provider value={value}>{children}</TrackerContext.Provider>;
 }

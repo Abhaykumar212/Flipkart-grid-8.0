@@ -5,12 +5,12 @@ import { navCategories } from "../../data/categories";
 export function CategoryNav() {
   return (
     <div className="bg-white shadow-fk-card">
-      <nav className="mx-auto flex max-w-fk items-center gap-1 overflow-x-auto px-4 no-scrollbar">
+      <nav className="mx-auto flex max-w-fk items-center gap-1 overflow-x-auto overscroll-x-contain px-3 no-scrollbar sm:px-4" aria-label="Product categories">
         {navCategories.map((cat) => (
           <Link
-            key={cat.label}
-            to="#"
-            className="flex shrink-0 items-center gap-1 px-4 py-3.5 text-fk-md font-medium text-fk-ink hover:text-fk-blue"
+            key={cat.slug}
+            to={`/category/${cat.slug}`}
+            className="flex min-h-12 shrink-0 items-center gap-1 px-3 text-fk-md font-medium text-fk-ink hover:text-fk-blue sm:px-4"
           >
             {cat.label}
             {cat.hasDropdown && (
