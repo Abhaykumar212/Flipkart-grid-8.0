@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useCart } from "../../context/CartContext";
+import { useTracker } from "../../context/TrackerContext";
 
 const accountMenu = [
   { label: "My Profile", icon: User },
@@ -58,7 +59,15 @@ function Dropdown({ items, className = "" }: DropdownProps) {
 
 export function Navbar() {
   const { count } = useCart();
+  const { recordSearch } = useTracker();
   const [query, setQuery] = useState("");
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (query.trim()) {
+      recordSearch(query.trim());
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-fk-blue shadow-[0_1px_2px_0_rgba(0,0,0,0.16)]">
@@ -68,7 +77,7 @@ export function Navbar() {
         {/* Search */}
         <form
           className="relative ml-2 min-w-0 flex-1 xl:ml-8"
-          onSubmit={(e) => e.preventDefault()}
+          onSubmit={handleSearchSubmit}
           role="search"
         >
           <input

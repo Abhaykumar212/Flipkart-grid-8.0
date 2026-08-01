@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { ShoppingCart } from "lucide-react";
 import { useCart } from "../context/CartContext";
+
 import { computeCartTotals } from "../lib/cartTotals";
 import { productById, products } from "../data/products";
 import { Button } from "../components/ui/Button";
@@ -10,16 +11,16 @@ import { ProductRail } from "../components/home/ProductRail";
 
 export default function CartPage() {
   const { items } = useCart();
+
   const navigate = useNavigate();
 
-  // Resolve cart lines against the catalog, dropping any id that no longer exists.
+  // Resolve cart lines against the catalog
   const lines = items.flatMap((item) => {
     const product = productById.get(item.productId);
     return product ? [{ product, quantity: item.quantity }] : [];
   });
 
   const totals = computeCartTotals(items);
-
   const inCart = new Set(items.map((i) => i.productId));
   const recommendations = products.filter((p) => !inCart.has(p.id)).slice(0, 12);
 
@@ -41,6 +42,8 @@ export default function CartPage() {
 
   return (
     <div className="flex flex-col gap-3">
+
+
       <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[65fr_35fr]">
         <div className="flex flex-col gap-3">
           {lines.map(({ product, quantity }) => (

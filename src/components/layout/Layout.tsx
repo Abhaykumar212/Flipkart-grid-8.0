@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { Navbar } from "./Navbar";
 import { CategoryNav } from "./CategoryNav";
 import { Footer } from "./Footer";
+import { AgentInspector } from "../ui/AgentInspector";
 
 export function Layout() {
   return (
@@ -12,6 +13,7 @@ export function Layout() {
         <Outlet />
       </main>
       <Footer />
+      <AgentInspector />
     </div>
   );
 }

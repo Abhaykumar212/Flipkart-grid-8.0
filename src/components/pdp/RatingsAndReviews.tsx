@@ -1,7 +1,9 @@
+import { useEffect, useRef } from "react";
 import { ThumbsUp } from "lucide-react";
 import type { RatingBreakdown, Review } from "../../types/product";
 import { RatingStars } from "../ui/RatingStars";
 import { formatIndianNumber } from "../../lib/format";
+import { useTracker } from "../../context/TrackerContext";
 
 interface RatingsAndReviewsProps {
   ratingDistribution: RatingBreakdown[];
@@ -17,9 +19,31 @@ const reviewDateFormat = new Intl.DateTimeFormat("en-IN", {
 export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndReviewsProps) {
   const sorted = [...ratingDistribution].sort((a, b) => b.stars - a.stars);
   const max = Math.max(...sorted.map((r) => r.count), 1);
+  const sectionRef = useRef<HTMLElement>(null);
+  const recorded = useRef(false);
+  const { recordReviewVisibility } = useTracker();
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !recorded.current) {
+          recorded.current = true;
+          recordReviewVisibility();
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.35 },
+    );
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <section
+      ref={sectionRef}
       className="rounded-[2px] bg-white p-6"
       data-testid="reviews-section"
     >

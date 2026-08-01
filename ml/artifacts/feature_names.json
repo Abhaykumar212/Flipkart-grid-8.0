@@ -1,0 +1,16 @@
+[
+  "cart_dwell_time_seconds",
+  "cart_pdp_bounce_count",
+  "reviews_expanded_count",
+  "idle_time_before_checkout",
+  "delivery_pincode_checked",
+  "cart_value_to_aov_ratio",
+  "delivery_fee_percentage",
+  "est_delivery_days",
+  "has_price_dropped_recently",
+  "hist_abandonment_rate",
+  "discount_sensitivity_score",
+  "past_return_rate",
+  "wishlist_item_count",
+  "payment_method_saved"
+]

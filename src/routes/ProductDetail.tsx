@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Tag } from "lucide-react";
 import { productBySlug } from "../data/products";
@@ -8,6 +9,7 @@ import { PriceBlock } from "../components/ui/PriceBlock";
 import { ImageGallery } from "../components/pdp/ImageGallery";
 import { SpecificationsTable } from "../components/pdp/SpecificationsTable";
 import { RatingsAndReviews } from "../components/pdp/RatingsAndReviews";
+import { useTracker } from "../context/TrackerContext";
 
 const FALLBACK_SELLER = { name: "RetailNet", rating: 4.0 };
 
@@ -15,6 +17,12 @@ export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
   const product = slug ? productBySlug.get(slug) : undefined;
   const navigate = useNavigate();
+  const { recordPincodeCheck, recordProductVisit } = useTracker();
+  const [pincode, setPincode] = useState("");
+
+  useEffect(() => {
+    if (product) recordProductVisit(product.id);
+  }, [product?.id]);
 
   if (!product) {
     return (
@@ -69,13 +77,19 @@ export default function ProductDetail() {
           <div className="mt-5 border-t border-fk-border pt-4">
             <h2 className="text-fk-md font-medium text-fk-ink">Delivery</h2>
             <form
-              onSubmit={(e) => e.preventDefault()}
+              onSubmit={(event) => {
+                event.preventDefault();
+                const normalized = pincode.trim();
+                if (normalized) recordPincodeCheck(normalized);
+              }}
               className="mt-2 flex max-w-xs items-center gap-2"
             >
               <input
                 type="text"
                 placeholder="Enter pincode"
                 aria-label="Enter delivery pincode"
+                value={pincode}
+                onChange={(event) => setPincode(event.target.value)}
                 className="h-9 flex-1 rounded-[2px] border border-fk-border px-3 text-fk-base focus:outline-none focus:border-fk-blue"
               />
               <Button type="submit" variant="outline" size="sm">
