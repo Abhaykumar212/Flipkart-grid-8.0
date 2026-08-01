@@ -12,5 +12,21 @@
   "discount_sensitivity_score",
   "past_return_rate",
   "wishlist_item_count",
-  "payment_method_saved"
+  "payment_method_saved",
+  "price_shock_interaction",
+  "bounce_review_interaction",
+  "checkout_friction",
+  "delivery_anxiety",
+  "dwell_per_bounce",
+  "value_sensitivity",
+  "abandonment_momentum",
+  "delivery_cost_burden",
+  "price_shock_flag",
+  "quality_uncertainty_flag",
+  "long_delivery_flag",
+  "saved_payment_low_value_flag",
+  "dwell_centered",
+  "high_hist_abandonment",
+  "total_friction_score",
+  "engagement_depth"
 ]

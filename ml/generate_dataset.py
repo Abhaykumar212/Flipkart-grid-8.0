@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-ROW_COUNT = 15_000
+ROW_COUNT = 200_000
 RANDOM_SEED = 42
 TARGET_ABANDONMENT_RATE = 0.65
 DATA_PATH = Path(__file__).resolve().parent / "data" / "cart_abandonment_dataset.csv"
@@ -184,7 +184,7 @@ def generate_dataset(
         + 1.45 * quality_uncertainty
         + 0.72 * long_delivery
         - 1.20 * saved_payment_low_value
-        + rng.normal(0.0, 0.78, row_count)
+        + rng.normal(0.0, 0.62, row_count)
     )
     intercept = _calibrate_intercept(signal, TARGET_ABANDONMENT_RATE)
     abandonment_probability = _sigmoid(signal + intercept)

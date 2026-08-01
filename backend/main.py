@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
@@ -19,6 +20,16 @@ ARTIFACT_DIR = PROJECT_ROOT / "ml" / "artifacts"
 MODEL_PATH = ARTIFACT_DIR / "model.joblib"
 EXPLAINER_PATH = ARTIFACT_DIR / "explainer.joblib"
 FEATURE_NAMES_PATH = ARTIFACT_DIR / "feature_names.json"
+
+# Add project root to path so we can import ml package
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from ml.feature_engineering import (  # noqa: E402
+    ALL_FEATURE_NAMES,
+    RAW_FEATURE_NAMES,
+    engineer_features,
+)
 
 MODEL: Any = None
 EXPLAINER: Any = None
@@ -76,8 +87,11 @@ def _load_artifacts() -> None:
     MODEL = joblib.load(MODEL_PATH)
     EXPLAINER = joblib.load(EXPLAINER_PATH)
     FEATURE_NAMES = json.loads(FEATURE_NAMES_PATH.read_text(encoding="utf-8"))
-    if len(FEATURE_NAMES) != 14:
-        raise RuntimeError("feature_names.json must contain exactly 14 features")
+    if len(FEATURE_NAMES) != len(ALL_FEATURE_NAMES):
+        raise RuntimeError(
+            f"feature_names.json must contain exactly {len(ALL_FEATURE_NAMES)} features, "
+            f"got {len(FEATURE_NAMES)}"
+        )
 
 
 @asynccontextmanager
@@ -131,7 +145,14 @@ def predict_abandonment(payload: SessionFeatures) -> PredictionResponse:
 
     try:
         values = payload.model_dump()
-        frame = pd.DataFrame([[values[name] for name in FEATURE_NAMES]], columns=FEATURE_NAMES)
+        # Build raw 14-feature frame from input
+        raw_frame = pd.DataFrame(
+            [[values[name] for name in RAW_FEATURE_NAMES]],
+            columns=RAW_FEATURE_NAMES,
+        )
+        # Apply feature engineering: 14 raw → 22 features
+        frame = engineer_features(raw_frame)
+
         probability = float(MODEL.predict_proba(frame)[0, 1])
         confidence = abs(probability - 0.5) * 2.0
         shap_values = _extract_shap_values(frame)

@@ -1,8 +1,13 @@
 {
-  "roc_auc": 0.7591702136080395,
-  "pr_auc": 0.8537893239059167,
-  "accuracy": 0.703,
-  "train_rows": 12000.0,
-  "test_rows": 3000.0,
-  "positive_rate": 0.6503333333333333
+  "roc_auc": 0.7827343062462655,
+  "pr_auc": 0.8682072556796847,
+  "accuracy": 0.695,
+  "f1_score": 0.7392605257533661,
+  "log_loss": 0.5571404286918094,
+  "cv_roc_auc": 0.7819063044963198,
+  "best_iteration": 1058,
+  "train_rows": 160000.0,
+  "test_rows": 40000.0,
+  "positive_rate": 0.6497,
+  "feature_count": 30
 }

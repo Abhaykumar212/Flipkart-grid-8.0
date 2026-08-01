@@ -1,6 +1,7 @@
 import unittest
 
 from backend.main import SessionFeatures, _load_artifacts, predict_abandonment
+from ml.feature_engineering import ALL_FEATURE_NAMES
 from ml.generate_dataset import FEATURE_NAMES, generate_dataset
 
 
@@ -74,7 +75,8 @@ class InferenceTests(unittest.TestCase):
             abs(response.abandonment_probability - 0.5) * 2,
             places=5,
         )
-        self.assertEqual(set(response.feature_impacts), set(FEATURE_NAMES))
+        # Model now uses 22 features (14 raw + 8 engineered)
+        self.assertEqual(set(response.feature_impacts), set(ALL_FEATURE_NAMES))
         self.assertLessEqual(len(response.top_contributing_features), 3)
         self.assertTrue(all(item.shap_value > 0 for item in response.top_contributing_features))
 
