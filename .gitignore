@@ -1,0 +1,51 @@
+# Dependencies
+node_modules
+/.pnp
+.pnp.js
+
+# Testing & Coverage
+/coverage
+
+# Production & Build outputs
+dist
+dist-ssr
+build
+out
+
+# Misc / Caches
+.eslintcache
+.cache
+.vite
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+

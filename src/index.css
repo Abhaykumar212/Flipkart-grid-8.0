@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand colors */
+  --color-fk-blue: #2874f0;
+  --color-fk-blue-dark: #1a5cc8;
+  --color-fk-yellow: #ffe11b;
+  --color-fk-green: #388e3c;
+  --color-fk-green-dark: #2b7a30;
+  --color-fk-orange: #ff9f00;
+  --color-fk-flame: #fb641b;
+  --color-fk-bg: #f1f3f6;
+  --color-fk-ink: #212121;
+  --color-fk-muted: #878787;
+  --color-fk-border: #e0e0e0;
+  --color-fk-footer: #172337;
+  --color-fk-footer-ink: #878787;
+
+  /* Type scale — Flipkart runs small and tight */
+  --text-fk-xs: 0.6875rem;
+  --text-fk-xs--line-height: 0.875rem;
+  --text-fk-sm: 0.75rem;
+  --text-fk-sm--line-height: 1rem;
+  --text-fk-base: 0.8125rem;
+  --text-fk-base--line-height: 1.125rem;
+  --text-fk-md: 0.875rem;
+  --text-fk-md--line-height: 1.25rem;
+  --text-fk-lg: 1rem;
+  --text-fk-lg--line-height: 1.375rem;
+  --text-fk-xl: 1.125rem;
+  --text-fk-xl--line-height: 1.5rem;
+
+  --font-fk: Roboto, "Segoe UI", Arial, sans-serif;
+
+  --shadow-fk-card: 0 1px 2px 0 rgba(0, 0, 0, 0.08);
+  --shadow-fk-hover: 0 2px 8px 0 rgba(0, 0, 0, 0.16);
+
+  --container-fk: 1248px;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-fk-bg);
+    font-family: var(--font-fk);
+    color: var(--color-fk-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
