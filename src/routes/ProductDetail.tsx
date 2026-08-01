@@ -1,17 +1,22 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Tag } from "lucide-react";
 import { productBySlug } from "../data/products";
 import { formatDeliveryDate } from "../lib/format";
+import {
+  getSpecifications,
+  getDescription,
+  getSeller,
+  getRatingDistribution,
+  getReviews,
+} from "../lib/productDetails";
 import { Button } from "../components/ui/Button";
 import { RatingStars } from "../components/ui/RatingStars";
 import { PriceBlock } from "../components/ui/PriceBlock";
 import { ImageGallery } from "../components/pdp/ImageGallery";
 import { SpecificationsTable } from "../components/pdp/SpecificationsTable";
 import { RatingsAndReviews } from "../components/pdp/RatingsAndReviews";
+import { OffersList } from "../components/pdp/OffersList";
 import { useTracker } from "../context/TrackerContext";
-
-const FALLBACK_SELLER = { name: "RetailNet", rating: 4.0 };
 
 export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -35,10 +40,17 @@ export default function ProductDetail() {
     );
   }
 
-  const { price, rating, offers, delivery, highlights, seller } = product;
-  const totalRatings =
-    product.ratingDistribution?.reduce((sum, r) => sum + r.count, 0) ?? rating.count;
-  const resolvedSeller = seller ?? FALLBACK_SELLER;
+  const { price, rating, offers, delivery, highlights, emi } = product;
+
+  // Every product renders full detail — hand-authored data wins where it
+  // exists, everything else falls back to the deterministic generator so no
+  // PDP in the 50-item catalog ever looks thin.
+  const specifications = getSpecifications(product);
+  const description = getDescription(product);
+  const seller = getSeller(product);
+  const ratingDistribution = getRatingDistribution(product);
+  const reviews = getReviews(product);
+  const totalRatings = ratingDistribution.reduce((sum, r) => sum + r.count, 0);
 
   return (
     <div className="flex flex-col gap-3">
@@ -58,21 +70,9 @@ export default function ProductDetail() {
 
           <PriceBlock mrp={price.mrp} sellingPrice={price.sellingPrice} size="lg" className="mt-3" />
 
-          {offers.length > 0 && (
-            <div className="mt-4">
-              <h2 className="text-fk-md font-medium text-fk-ink">Available offers</h2>
-              <ul className="mt-2 flex flex-col gap-2">
-                {offers.map((offer) => (
-                  <li key={offer} className="flex items-start gap-2 text-fk-base text-fk-ink">
-                    <Tag className="mt-0.5 h-4 w-4 shrink-0 text-fk-green" strokeWidth={2} />
-                    <span>
-                      {offer} <a href="#" className="text-fk-blue">T&amp;C</a>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <div className="mt-4">
+            <OffersList offers={offers} emi={emi} />
+          </div>
 
           <div className="mt-5 border-t border-fk-border pt-4">
             <h2 className="text-fk-md font-medium text-fk-ink">Delivery</h2>
@@ -104,9 +104,9 @@ export default function ProductDetail() {
 
           <div className="mt-4 flex items-center gap-2 border-t border-fk-border pt-4 text-fk-base text-fk-ink">
             <span>
-              Sold by <span className="font-medium">{resolvedSeller.name}</span>
+              Sold by <span className="font-medium">{seller.name}</span>
             </span>
-            <RatingStars variant="pill" size="sm" value={resolvedSeller.rating} />
+            <RatingStars variant="pill" size="sm" value={seller.rating} />
           </div>
 
           {highlights.length > 0 && (
@@ -122,21 +122,14 @@ export default function ProductDetail() {
         </div>
       </div>
 
-      {product.specifications && <SpecificationsTable sections={product.specifications} />}
+      <SpecificationsTable sections={specifications} />
 
-      {product.description && (
-        <section className="rounded-[2px] bg-white p-6">
-          <h2 className="mb-2 text-fk-xl font-medium text-fk-ink">Product Description</h2>
-          <p className="text-fk-base text-fk-ink">{product.description}</p>
-        </section>
-      )}
+      <section className="rounded-[2px] bg-white p-6">
+        <h2 className="mb-2 text-fk-xl font-medium text-fk-ink">Product Description</h2>
+        <p className="text-fk-base text-fk-ink">{description}</p>
+      </section>
 
-      {product.reviews && product.ratingDistribution && (
-        <RatingsAndReviews
-          ratingDistribution={product.ratingDistribution}
-          reviews={product.reviews}
-        />
-      )}
+      <RatingsAndReviews ratingDistribution={ratingDistribution} reviews={reviews} />
     </div>
   );
 }

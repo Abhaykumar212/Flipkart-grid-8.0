@@ -9,7 +9,7 @@ export function CategoryNav() {
         {navCategories.map((cat) => (
           <Link
             key={cat.label}
-            to="#"
+            to={`/search?category=${cat.categorySlug ?? ""}&label=${encodeURIComponent(cat.label)}`}
             className="flex shrink-0 items-center gap-1 px-4 py-3.5 text-fk-md font-medium text-fk-ink hover:text-fk-blue"
           >
             {cat.label}

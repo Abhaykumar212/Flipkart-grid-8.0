@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ChevronDown,
   Search,
@@ -60,12 +60,15 @@ function Dropdown({ items, className = "" }: DropdownProps) {
 export function Navbar() {
   const { count } = useCart();
   const { recordSearch } = useTracker();
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (query.trim()) {
-      recordSearch(query.trim());
+    const trimmed = query.trim();
+    if (trimmed) {
+      recordSearch(trimmed);
+      navigate(`/search?q=${encodeURIComponent(trimmed)}`);
     }
   };
 

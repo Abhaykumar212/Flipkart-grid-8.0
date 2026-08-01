@@ -6,10 +6,10 @@ export function CategoryStrip() {
   return (
     <nav className="mb-3 bg-white px-6 py-3 shadow-fk-card">
       <ul className="flex items-start justify-between gap-2 overflow-x-auto no-scrollbar">
-        {homeCategories.map(({ label, icon: Icon, tint }) => (
+        {homeCategories.map(({ label, icon: Icon, tint, categorySlug }) => (
           <li key={label}>
             <Link
-              to="#"
+              to={`/search?category=${categorySlug ?? ""}&label=${encodeURIComponent(label)}`}
               className="group flex w-[104px] shrink-0 flex-col items-center gap-1.5 py-1"
             >
               <span

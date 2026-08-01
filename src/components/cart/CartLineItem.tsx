@@ -6,6 +6,7 @@ import { PriceBlock } from "../ui/PriceBlock";
 import { AssuredBadge } from "../ui/Badge";
 import { formatDeliveryDate } from "../../lib/format";
 import { useCart } from "../../context/CartContext";
+import { getSeller } from "../../lib/productDetails";
 
 const FALLBACK = "/fallback-product.svg";
 
@@ -20,6 +21,7 @@ export function CartLineItem({ product, quantity, readOnly = false }: CartLineIt
   const { updateQuantity, removeItem } = useCart();
   const [src, setSrc] = useState(product.images[0] ?? FALLBACK);
   const { price, delivery, badges } = product;
+  const seller = getSeller(product);
 
   return (
     <div className="bg-white p-4 sm:p-6" data-testid="cart-item">
@@ -77,7 +79,7 @@ export function CartLineItem({ product, quantity, readOnly = false }: CartLineIt
           </Link>
 
           <div className="mt-1 flex items-center gap-2 text-fk-sm text-fk-muted">
-            <span>Seller: {product.seller?.name ?? "RetailNet"}</span>
+            <span>Seller: {seller.name}</span>
             {badges.assured && <AssuredBadge />}
           </div>
 

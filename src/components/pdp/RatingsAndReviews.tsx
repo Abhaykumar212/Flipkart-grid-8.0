@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { ThumbsUp } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ThumbsUp, ChevronDown } from "lucide-react";
 import type { RatingBreakdown, Review } from "../../types/product";
 import { RatingStars } from "../ui/RatingStars";
 import { formatIndianNumber } from "../../lib/format";
@@ -16,12 +16,51 @@ const reviewDateFormat = new Intl.DateTimeFormat("en-IN", {
   year: "numeric",
 });
 
+/** Reviews shown per page, and how long a review can run before it's truncated. */
+const PAGE_SIZE = 3;
+const TRUNCATE_AT = 150;
+
+function ReviewCard({ review }: { review: Review }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = review.text.length > TRUNCATE_AT;
+  const shownText = isLong && !expanded ? `${review.text.slice(0, TRUNCATE_AT).trimEnd()}…` : review.text;
+
+  return (
+    <article className="py-4 first:pt-0">
+      <div className="flex items-center gap-2">
+        <RatingStars value={review.rating} variant="pill" size="sm" />
+        <h3 className="text-fk-md font-medium text-fk-ink">{review.title}</h3>
+      </div>
+      <p className="mt-1.5 text-fk-base text-fk-ink">
+        {shownText}
+        {isLong && (
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="ml-1.5 font-medium text-fk-blue"
+          >
+            {expanded ? "Read less" : "Read more"}
+          </button>
+        )}
+      </p>
+      <div className="mt-2 flex items-center gap-4 text-fk-sm text-fk-muted">
+        <span className="font-medium text-fk-ink">{review.reviewerName}</span>
+        <span>{reviewDateFormat.format(new Date(review.date))}</span>
+        <span className="ml-auto flex items-center gap-1">
+          <ThumbsUp className="h-3.5 w-3.5" strokeWidth={2} />
+          {formatIndianNumber(review.helpfulCount)}
+        </span>
+      </div>
+    </article>
+  );
+}
+
 export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndReviewsProps) {
   const sorted = [...ratingDistribution].sort((a, b) => b.stars - a.stars);
   const max = Math.max(...sorted.map((r) => r.count), 1);
   const sectionRef = useRef<HTMLElement>(null);
   const recorded = useRef(false);
   const { recordReviewVisibility } = useTracker();
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
     const section = sectionRef.current;
@@ -40,6 +79,16 @@ export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndRev
     observer.observe(section);
     return () => observer.disconnect();
   }, []);
+
+  const visibleReviews = reviews.slice(0, visibleCount);
+  const remaining = reviews.length - visibleReviews.length;
+
+  const showMore = () => {
+    setVisibleCount((v) => Math.min(reviews.length, v + PAGE_SIZE));
+    // Each expansion is a real signal of purchase-intent research — feeds the
+    // same `reviews_expanded_count` feature the initial scroll-into-view records.
+    recordReviewVisibility();
+  };
 
   return (
     <section
@@ -67,24 +116,23 @@ export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndRev
           ))}
         </div>
 
-        <div className="flex flex-col divide-y divide-fk-border">
-          {reviews.map((review) => (
-            <article key={review.id} className="py-4 first:pt-0">
-              <div className="flex items-center gap-2">
-                <RatingStars value={review.rating} variant="pill" size="sm" />
-                <h3 className="text-fk-md font-medium text-fk-ink">{review.title}</h3>
-              </div>
-              <p className="mt-1.5 text-fk-base text-fk-ink">{review.text}</p>
-              <div className="mt-2 flex items-center gap-4 text-fk-sm text-fk-muted">
-                <span className="font-medium text-fk-ink">{review.reviewerName}</span>
-                <span>{reviewDateFormat.format(new Date(review.date))}</span>
-                <span className="ml-auto flex items-center gap-1">
-                  <ThumbsUp className="h-3.5 w-3.5" strokeWidth={2} />
-                  {formatIndianNumber(review.helpfulCount)}
-                </span>
-              </div>
-            </article>
-          ))}
+        <div>
+          <div className="flex flex-col divide-y divide-fk-border">
+            {visibleReviews.map((review) => (
+              <ReviewCard key={review.id} review={review} />
+            ))}
+          </div>
+
+          {remaining > 0 && (
+            <button
+              onClick={showMore}
+              data-testid="show-more-reviews-button"
+              className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-[2px] border border-fk-border py-2.5 text-fk-md font-medium text-fk-blue hover:bg-fk-bg"
+            >
+              Show More Reviews ({remaining} more)
+              <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+          )}
         </div>
       </div>
     </section>
