@@ -6,7 +6,7 @@ import json
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Dict, Literal, Tuple
 
 import joblib
 import numpy as np
@@ -32,6 +32,16 @@ from ml.feature_engineering import (  # noqa: E402
     RAW_FEATURE_NAMES,
     engineer_features,
 )
+
+from . import config  # noqa: E402
+from .agents import gate, root_cause  # noqa: E402
+from .schemas import (  # noqa: E402
+    CartContext,
+    GateDecision,
+    RootCauseResponse,
+    TraceSpan,
+)
+from .trace import Stage, Status, TraceRecorder  # noqa: E402
 
 MODEL: Any = None
 CALIBRATOR: Any = None
@@ -81,6 +91,19 @@ class SessionFeatures(BaseModel):
     # F. Session context
     is_mobile_session: int = Field(ge=0, le=1)
     is_late_night_session: int = Field(ge=0, le=1)
+
+
+class RootCauseRequest(BaseModel):
+    """Everything the Phase 2 agent needs: the model inputs plus real cart state."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    features: SessionFeatures
+    cart_context: CartContext = Field(default_factory=CartContext)
+    # Stable per-browser-session id, used for dedup and budget accounting.
+    session_id: str = "anonymous"
+    # Manual "Re-run analysis" bypasses dedup/cooldown but not the session cap.
+    force: bool = False
 
 
 class FeatureContribution(BaseModel):
@@ -188,27 +211,48 @@ def _extract_shap_values(frame: pd.DataFrame) -> np.ndarray:
     return values[0]
 
 
-@app.post("/api/predict-abandonment", response_model=PredictionResponse)
-def predict_abandonment(payload: SessionFeatures) -> PredictionResponse:
-    if MODEL is None or EXPLAINER is None:
-        raise HTTPException(status_code=503, detail="ML artifacts are not loaded")
+def _run_inference(
+    payload: SessionFeatures, recorder: TraceRecorder
+) -> Tuple[PredictionResponse, Dict[str, float]]:
+    """Feature engineering -> model -> SHAP, emitting a span per stage.
 
-    try:
-        values = payload.model_dump()
+    Shared by the prediction endpoint and the root-cause endpoint so both agree
+    exactly on the numbers, and so the console shows the same stages either way.
+    """
+    values = payload.model_dump()
+
+    with recorder.span(Stage.FEATURE_ENGINEERING, "Engineer features") as span:
         raw_frame = pd.DataFrame(
             [[values[name] for name in RAW_FEATURE_NAMES]],
             columns=RAW_FEATURE_NAMES,
         )
         frame = engineer_features(raw_frame)
+        span["detail"] = {
+            "raw_features": len(RAW_FEATURE_NAMES),
+            "engineered_features": len(FEATURE_NAMES) - len(RAW_FEATURE_NAMES),
+            "total_features": len(FEATURE_NAMES),
+            "engineered_values": {
+                name: round(float(frame.iloc[0][name]), 4)
+                for name in FEATURE_NAMES[len(RAW_FEATURE_NAMES):]
+            },
+        }
 
+    with recorder.span(Stage.MODEL_INFERENCE, "XGBoost inference") as span:
         probability = float(MODEL.predict_proba(frame)[0, 1])
         if CALIBRATOR is not None:
             probability = float(CALIBRATOR.predict([probability])[0])
-
-        # Distance from a coin flip, i.e. how decisive the model is here.
         confidence = abs(probability - 0.5) * 2.0
-        shap_values = _extract_shap_values(frame)
+        tier = _risk_tier(probability)
+        span["detail"] = {
+            "abandonment_probability": round(probability, 6),
+            "risk_tier": tier,
+            "confidence": round(confidence, 6),
+            "calibrator_applied": CALIBRATOR is not None,
+            "trees": int(getattr(MODEL, "n_estimators", 0) or 0),
+        }
 
+    with recorder.span(Stage.SHAP_ATTRIBUTION, "SHAP attribution") as span:
+        shap_values = _extract_shap_values(frame)
         # `zip(..., strict=True)` needs Python 3.10+; this service targets 3.9.
         # The length invariant is already enforced by the shape check above.
         feature_impacts = {
@@ -226,14 +270,139 @@ def predict_abandonment(payload: SessionFeatures) -> PredictionResponse:
             )
             for index in ordered_positive
         ]
+        span["detail"] = {
+            "top_positive_drivers": [
+                {"feature": f.feature, "shap_value": f.shap_value} for f in top_features
+            ],
+            "attributed_features": len(feature_impacts),
+        }
 
-        return PredictionResponse(
-            abandonment_probability=round(probability, 6),
-            confidence_score=round(confidence, 6),
-            risk_tier=_risk_tier(probability),
-            top_contributing_features=top_features,
-            feature_impacts=feature_impacts,
-            status="success",
-        )
+    response = PredictionResponse(
+        abandonment_probability=round(probability, 6),
+        confidence_score=round(confidence, 6),
+        risk_tier=tier,
+        top_contributing_features=top_features,
+        feature_impacts=feature_impacts,
+        status="success",
+    )
+    return response, values
+
+
+@app.post("/api/predict-abandonment", response_model=PredictionResponse)
+def predict_abandonment(payload: SessionFeatures) -> PredictionResponse:
+    if MODEL is None or EXPLAINER is None:
+        raise HTTPException(status_code=503, detail="ML artifacts are not loaded")
+
+    try:
+        prediction, _ = _run_inference(payload, TraceRecorder())
+        return prediction
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Inference failed: {error}") from error
+
+
+@app.get("/api/pipeline-config")
+def pipeline_config() -> dict:
+    """Trigger policy and agent configuration, for display in the console."""
+    return {
+        "rca_threshold": config.RCA_PROBABILITY_THRESHOLD,
+        "min_cart_age_seconds": config.RCA_MIN_CART_AGE_SECONDS,
+        "cooldown_seconds": config.RCA_COOLDOWN_SECONDS,
+        "max_per_session": config.RCA_MAX_PER_SESSION,
+        "rca_model": config.RCA_MODEL,
+        "rca_fallback_model": config.RCA_FALLBACK_MODEL,
+        "reasoning_effort": config.RCA_REASONING_EFFORT,
+        "groq_configured": config.groq_is_configured(),
+        "risk_tiers": {"high": 0.80, "medium": 0.60},
+    }
+
+
+@app.post("/api/root-cause-analysis", response_model=RootCauseResponse)
+def root_cause_analysis(payload: RootCauseRequest) -> RootCauseResponse:
+    """Phase 2: diagnose *why* an at-risk cart is at risk.
+
+    Re-runs inference server-side rather than trusting a client-supplied
+    probability, so the gate decision cannot be spoofed from the browser and the
+    analysis is always grounded in freshly computed SHAP values.
+    """
+    if MODEL is None or EXPLAINER is None:
+        raise HTTPException(status_code=503, detail="ML artifacts are not loaded")
+
+    recorder = TraceRecorder()
+    cart = payload.cart_context
+
+    try:
+        prediction, feature_values = _run_inference(payload.features, recorder)
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Inference failed: {error}") from error
+
+    signature = root_cause.build_feature_signature(feature_values)
+
+    with recorder.span(Stage.RISK_GATE, "Evaluate trigger policy") as span:
+        decision = gate.evaluate(
+            probability=prediction.abandonment_probability,
+            cart_age_seconds=cart.cart_age_seconds,
+            signature=signature,
+            session_id=payload.session_id,
+            store=gate.gate_store,
+            force=payload.force,
+        )
+        span["status"] = Status.OK if decision.fired else Status.SKIPPED
+        span["detail"] = {
+            "fired": decision.fired,
+            "reason": decision.reason,
+            "signature": signature,
+            **decision.checks,
+        }
+
+    gate_model = GateDecision(
+        fired=decision.fired,
+        threshold=decision.threshold,
+        reason=decision.reason,
+        checks=decision.checks,
+    )
+
+    def envelope(status: str, analysis=None, meta=None, message=None) -> RootCauseResponse:
+        meta = meta or {}
+        return RootCauseResponse(
+            pipeline_run_id=recorder.run_id,
+            status=status,
+            prediction=prediction.model_dump(),
+            gate=gate_model,
+            analysis=analysis,
+            model_used=meta.get("model_used"),
+            latency_ms=meta.get("latency_ms", 0.0),
+            message=message,
+            trace=[TraceSpan(**span) for span in recorder.spans],
+        )
+
+    if not decision.fired:
+        return envelope("gate_not_met", message=decision.reason)
+
+    if not config.groq_is_configured():
+        recorder.add(
+            Stage.ROOT_CAUSE_AGENT,
+            "Skipped — GROQ_API_KEY not configured",
+            status=Status.SKIPPED,
+            detail={"hint": "Set GROQ_API_KEY in .env (see .env.example)"},
+        )
+        return envelope(
+            "not_configured",
+            message="GROQ_API_KEY is not set; copy .env.example to .env and add a key.",
+        )
+
+    analysis, meta = root_cause.analyse(
+        probability=prediction.abandonment_probability,
+        risk_tier=prediction.risk_tier,
+        confidence=prediction.confidence_score,
+        features=feature_values,
+        feature_impacts=prediction.feature_impacts,
+        cart=cart,
+        recorder=recorder,
+    )
+
+    if analysis is None:
+        status = "rate_limited" if meta.get("rate_limited") else "error"
+        return envelope(status, meta=meta, message=meta.get("error", "Analysis failed"))
+
+    gate.gate_store.record_run(payload.session_id, signature)
+    return envelope("success", analysis=analysis, meta=meta)

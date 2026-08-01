@@ -7,6 +7,7 @@ import ProductDetail from "./routes/ProductDetail";
 import CartPage from "./routes/CartPage";
 import CheckoutPage from "./routes/CheckoutPage";
 import SearchResultsPage from "./routes/SearchResultsPage";
+import PipelineConsole from "./routes/PipelineConsole";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
               <Route path="cart" element={<CartPage />} />
               <Route path="checkout" element={<CheckoutPage />} />
               <Route path="search" element={<SearchResultsPage />} />
+              <Route path="pipeline" element={<PipelineConsole />} />
             </Route>
           </Routes>
         </TrackerProvider>

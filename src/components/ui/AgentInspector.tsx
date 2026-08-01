@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Activity,
   BarChart3,
@@ -6,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  Workflow,
   X,
 } from "lucide-react";
 import { useTracker } from "../../context/TrackerContext";
@@ -130,6 +132,15 @@ export function AgentInspector() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
+                <Link
+                  to="/pipeline"
+                  onClick={() => setIsOpen(false)}
+                  className="rounded-lg p-2 text-slate-400 transition hover:bg-white/10 hover:text-white"
+                  aria-label="Open pipeline console"
+                  title="Open pipeline console"
+                >
+                  <Workflow className="h-4 w-4" />
+                </Link>
                 <button
                   type="button"
                   onClick={requestPrediction}

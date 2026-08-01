@@ -39,6 +39,35 @@ export const ABANDONMENT_FEATURE_NAMES = [
 
 export type AbandonmentFeatureName = (typeof ABANDONMENT_FEATURE_NAMES)[number];
 
+/**
+ * Features that actually change a diagnosis. Mirrors MATERIAL_FEATURES in
+ * backend/agents/root_cause.py.
+ *
+ * Deliberately excludes the continuously-ticking ones (seconds_spent_in_cart,
+ * seconds_idle_before_checkout). Keying dedup on the full vector would make the
+ * signature change every second, re-firing the agent on every poll.
+ */
+export const MATERIAL_FEATURE_NAMES: AbandonmentFeatureName[] = [
+  "cart_value_vs_typical_order",
+  "delivery_fee_percent_of_cart",
+  "estimated_delivery_days",
+  "payment_method_on_file",
+  "checkout_steps_completed",
+  "payment_attempts_failed",
+  "is_guest_checkout",
+  "failed_coupon_attempts",
+  "times_returned_to_product_page",
+  "product_reviews_read",
+  "price_dropped_since_first_view",
+];
+
+/** Stable key over diagnosis-relevant features only. */
+export function materialSignature(features: AbandonmentFeatures): string {
+  return MATERIAL_FEATURE_NAMES.map(
+    (name) => `${name}=${Math.round((features[name] ?? 0) * 1000) / 1000}`,
+  ).join("|");
+}
+
 export type AbandonmentFeatures = {
   [Feature in AbandonmentFeatureName]: number;
 };
@@ -98,12 +127,62 @@ export interface TrackerSignals {
   cartActive: boolean;
 }
 
+/** Session counters a demo scenario can pre-seed. */
+export interface ScenarioSessionState {
+  cartPdpBounceCount: number;
+  reviewsExpandedCount: number;
+  pincodeCheckCount: number;
+  failedCouponAttempts: number;
+  checkoutStepsCompleted: number;
+  paymentAttemptsFailed: number;
+  idleBeforeCheckoutSeconds: number;
+}
+
+/** Cart state sent alongside the features so the agent can be concrete. */
+export interface CartContextPayload {
+  lines: Array<{
+    product_id: string;
+    title: string;
+    brand: string;
+    category: string;
+    quantity: number;
+    selling_price: number;
+    mrp: number;
+    discount_percent: number;
+    estimated_delivery_days: number;
+    in_stock: boolean;
+    price_dropped_recently: boolean;
+  }>;
+  cart_total: number;
+  mrp_total: number;
+  delivery_fee: number;
+  currency: string;
+  cart_age_seconds: number;
+  current_route: string;
+}
+
 export interface TrackerSnapshot {
   features: AbandonmentFeatures;
   signals: TrackerSignals;
 }
 
-const PREDICTION_URL = "http://localhost:8000/api/predict-abandonment";
+const API_BASE = "http://localhost:8000";
+const PREDICTION_URL = `${API_BASE}/api/predict-abandonment`;
+const ROOT_CAUSE_URL = `${API_BASE}/api/root-cause-analysis`;
+
+/** Stable per-browser-tab id so the backend can dedupe and budget per session. */
+function resolveSessionId(): string {
+  if (typeof window === "undefined") return "server";
+  const KEY = "fk-pipeline-session-id";
+  let id = window.sessionStorage.getItem(KEY);
+  if (!id) {
+    id = `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    window.sessionStorage.setItem(KEY, id);
+  }
+  return id;
+}
+
+export const SESSION_ID = resolveSessionId();
 
 const DEFAULT_HISTORY: ShopperHistory = {
   // Placeholder until an account service exists. Set to a value representative
@@ -381,6 +460,48 @@ export class SessionTracker {
     };
   }
 
+  /** Overwrite shopper-profile assumptions — used by the demo scenario presets. */
+  applyScenario(history: Partial<ShopperHistory>, session: Partial<ScenarioSessionState> = {}): void {
+    this.history = { ...this.history, ...history };
+    if (session.cartPdpBounceCount !== undefined) {
+      this.cartPdpBounceCount = session.cartPdpBounceCount;
+    }
+    if (session.reviewsExpandedCount !== undefined) {
+      this.reviewsExpandedCount = session.reviewsExpandedCount;
+    }
+    if (session.pincodeCheckCount !== undefined) {
+      this.pincodeCheckCount = session.pincodeCheckCount;
+    }
+    if (session.failedCouponAttempts !== undefined) {
+      this.failedCouponAttempts = session.failedCouponAttempts;
+    }
+    if (session.checkoutStepsCompleted !== undefined) {
+      this.checkoutStepsCompleted = session.checkoutStepsCompleted;
+    }
+    if (session.paymentAttemptsFailed !== undefined) {
+      this.paymentAttemptsFailed = session.paymentAttemptsFailed;
+    }
+    if (session.idleBeforeCheckoutSeconds !== undefined) {
+      this.idleBeforeCheckoutSeconds = session.idleBeforeCheckoutSeconds;
+      this.checkoutStarted = true;
+    }
+    this.emit();
+  }
+
+  /** Reset scenario-injected state back to a clean session. */
+  resetScenario(): void {
+    this.history = { ...DEFAULT_HISTORY };
+    this.cartPdpBounceCount = 0;
+    this.reviewsExpandedCount = 0;
+    this.pincodeCheckCount = 0;
+    this.failedCouponAttempts = 0;
+    this.checkoutStepsCompleted = 0;
+    this.paymentAttemptsFailed = 0;
+    this.idleBeforeCheckoutSeconds = 0;
+    this.checkoutStarted = false;
+    this.emit();
+  }
+
   async predict(signal?: AbortSignal): Promise<PredictionResponse> {
     const snapshot = this.getSnapshot();
     if (!snapshot.signals.cartActive) {
@@ -403,6 +524,33 @@ export class SessionTracker {
       throw new Error("Prediction API returned an unsuccessful response");
     }
     return result;
+  }
+
+  /**
+   * Phase 2. The backend re-runs inference itself and owns the trigger decision,
+   * so a non-firing gate is a normal 200 response, not an error.
+   */
+  async requestRootCause(
+    cartContext: CartContextPayload,
+    options: { force?: boolean; signal?: AbortSignal } = {},
+  ): Promise<unknown> {
+    const snapshot = this.getSnapshot();
+    const response = await fetch(ROOT_CAUSE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        features: snapshot.features,
+        cart_context: cartContext,
+        session_id: SESSION_ID,
+        force: Boolean(options.force),
+      }),
+      signal: options.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Root cause API returned ${response.status}`);
+    }
+    return response.json();
   }
 }
 

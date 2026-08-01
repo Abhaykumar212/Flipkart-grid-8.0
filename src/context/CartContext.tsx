@@ -25,7 +25,10 @@ export interface CartState {
 }
 
 export type CartAction =
-  | { type: "ADD_ITEM"; productId: string; quantity?: number }
+  // `addedAt` is an override used only by the demo scenario loader, which
+  // backdates the cart so dwell-time features look like a real session
+  // instead of one that started milliseconds ago.
+  | { type: "ADD_ITEM"; productId: string; quantity?: number; addedAt?: string }
   | { type: "REMOVE_ITEM"; productId: string }
   | { type: "UPDATE_QUANTITY"; productId: string; quantity: number }
   | { type: "CLEAR_CART" };
@@ -56,7 +59,7 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
           {
             productId: action.productId,
             quantity,
-            addedAt: new Date().toISOString(),
+            addedAt: action.addedAt ?? new Date().toISOString(),
           },
         ],
       };
@@ -115,7 +118,7 @@ interface CartContextValue {
   items: CartItem[];
   /** Total quantity across all lines — what the navbar badge shows. */
   count: number;
-  addItem: (productId: string, quantity?: number) => void;
+  addItem: (productId: string, quantity?: number, addedAt?: string) => void;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
@@ -138,8 +141,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     () => ({
       items: state.items,
       count: state.items.reduce((sum, i) => sum + i.quantity, 0),
-      addItem: (productId, quantity) =>
-        dispatch({ type: "ADD_ITEM", productId, quantity }),
+      addItem: (productId, quantity, addedAt) =>
+        dispatch({ type: "ADD_ITEM", productId, quantity, addedAt }),
       removeItem: (productId) => dispatch({ type: "REMOVE_ITEM", productId }),
       updateQuantity: (productId, quantity) =>
         dispatch({ type: "UPDATE_QUANTITY", productId, quantity }),
