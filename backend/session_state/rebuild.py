@@ -50,5 +50,10 @@ def rebuild_from_events(session_id: str, db: Session) -> SessionState:
             "client_timestamp": client_timestamp,
             "metadata": record.metadata_json,
         })
-        state = apply(state, envelope, server_timestamp=server_timestamp)
+        state = apply(
+            state,
+            envelope,
+            server_timestamp=server_timestamp,
+            is_late=record.is_late,
+        )
     return state

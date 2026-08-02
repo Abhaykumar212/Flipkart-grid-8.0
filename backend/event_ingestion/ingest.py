@@ -141,7 +141,12 @@ def ingest_events(
 
             accepted += 1
             accepted_event_ids.setdefault(envelope.session_id, []).append(event_id)
-            state = apply(state, envelope, server_timestamp=server_timestamp)
+            state = apply(
+                state,
+                envelope,
+                server_timestamp=server_timestamp,
+                is_late=is_late,
+            )
             states[envelope.session_id] = state
             if envelope.event_type == EventType.ORDER_COMPLETED:
                 shopping_session.outcome = "CONVERTED"

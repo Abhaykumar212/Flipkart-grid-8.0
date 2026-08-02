@@ -92,7 +92,7 @@ Status legend: **F** = Frozen by the architecture spec (must not be changed) · 
 | DEC-030 | `requirements.txt` pinned to the versions actually installed. | N | The current file pins `numpy<2`, `pandas<3`, `xgboost<3` while the venv has numpy 2.4.6, pandas 3.0.5, xgboost 3.3.0. `pip install -r requirements.txt` today **downgrades and breaks** the environment. | Phase 0 task 2. Exact pins, no ranges. |
 | DEC-031 | Deterministic tie-break: cost → intrusiveness → lexicographic ID. | N | Spec §5.9 requires deterministic output for identical inputs, and §4.9 requires preferring cheaper actions when scores are close. | No randomness anywhere in the MVP ranker. |
 | DEC-032 | Trigger policy: 3 s debounce, 20 s minimum interval, feature-hash change gate. | N | Spec §7 requires all three but fixes no numbers. 3 s absorbs click bursts; 20 s prevents decision spam while staying within a browsing session. | Tunable in `backend/config.py`. |
-| DEC-033 | Experiment assignment is `sha256(session_id + experiment_id) % 100`. | N | Spec §5.13 requires assignments be "real and reproducible". Hashing needs no stored randomness and replays identically. | Same session always lands in the same arm. |
+| DEC-033 | Experiment assignment is `int(sha256(session_id + ":" + experiment_id)[:8], 16) % 100`. | N | Spec §5.13 requires assignments be "real and reproducible"; this is the exact executable form frozen in §17.2. Hashing needs no stored randomness and replays identically. | Same session always lands in the same arm. |
 | DEC-034 | Decision-path DB writes happen **after** the response, in a background task. | N | Protects the 300 ms budget and keeps the API responsive if the DB stalls. | A failed write is retried once, then logged; it never fails the decision. |
 | DEC-035 | Grounding invariant: the LLM receives **only** the structured explanation object. | N | Spec §2 forbids the LLM inventing evidence, and §13 forbids evidence absent from the trace. Withholding raw data makes fabrication structurally impossible, not merely discouraged. | Test asserts every numeral in rendered prose appears in the structured trace. |
 | DEC-036 | Review text is escaped and delimited as untrusted data. | N | Spec §14 requires prompt-injection protection; product reviews are user-generated. | `backend/review_intelligence/sanitize.py`. |
@@ -106,6 +106,7 @@ Status legend: **F** = Frozen by the architecture spec (must not be changed) · 
 | DEC-044 | Migration 0003 also creates `experiments` and `model_registry`; migration 0005 creates `experiment_assignments`. | N | `decision_traces.experiment_id` and `model_predictions.(model_name,model_version)` require their referenced tables to exist before portable FK creation. The original filename split had forward references that fail on Postgres. | All five revisions remain reversible; the dependency-respecting split is SQLite/Postgres portable. |
 | DEC-045 | Phase 3 emits the 17 event types backed by genuine storefront interactions; `PRODUCT_COMPARED` and the three `INTERVENTION_*` events activate with Phase 5's intervention components. | N | The frozen call-site table assigns `PRODUCT_COMPARED` to `ComparisonDrawer.tsx`, but that component is not created until Phase 5. Fabricating a comparison event from an unrelated click would corrupt behavioral evidence. | The complete 21-type contract remains validated in Phase 2; Phase 5 adds the four honest UI call sites without changing the envelope. |
 | DEC-046 | Phase 4 derives first-view price from the catalogue's earliest `price_history` observation and treats any prior completed order as `pay_method_on_file=1`. | N | The frozen Phase 2 `PRODUCT_VIEWED` envelope records source but no observed price, and the schema has no saved-payment column. These are the only replayable, SQLite/Postgres-portable signals already present; expanding the event or database contract would invalidate completed phases. | `c_max_price_drop_pct` and `c_price_increased_since_view` remain deterministic across serving/simulation; payment-on-file is a conservative historical proxy until a dedicated wallet domain exists. |
+| DEC-047 | Phase 5 uses a proposed discount of 7.5% (capped by the catalogue maximum), and the §12.6 worked totals are corrected arithmetically without changing the frozen utility formula. | N | The catalogue defined only a maximum discount, so `margin_risk` had no concrete input; the published worked-example totals did not equal the eight displayed weighted terms. | `DEFAULT_DISCOUNT_PCT=7.5` is explicit and configurable. Ranker tests assert that every breakdown sums to its score within 0.001; the formula, weights, and discount gates remain unchanged. |
 
 ---
 
@@ -1219,12 +1220,12 @@ recommendation_confidence = 0.45·cause_confidence + 0.30·separation + 0.25·ev
 
 **Audit output** (persisted and shown on the dashboard):
 ```json
-{ "selected":"REVIEW_SUMMARY", "score":0.62, "confidence":0.87,
+{ "selected":"REVIEW_SUMMARY", "score":0.426, "confidence":0.87,
   "score_breakdown":{"relevance":0.284,"expected_uplift":0.069,"user_affinity":0.100,
                      "information_gain":0.029,"direct_cost_penalty":-0.023,
                      "margin_risk_penalty":0.0,"fatigue_penalty":0.0,
                      "intrusiveness_penalty":-0.033},
-  "runner_up":{"intervention":"SIMILAR_PRODUCT_RECOMMENDATION","score":0.41},
+  "runner_up":{"intervention":"NO_ACTION","score":0.0},
   "tie_break_applied": false }
 ```
 
@@ -1243,18 +1244,18 @@ Failing 2 or 3 → **REJECT**. Failing 4 → **DOWNGRADE** to `PRICE_DROP_ALERT`
 
 ## 12.6 Worked examples
 
-**(a) Quality uncertainty.** `p=0.82`; causes `PRODUCT_QUALITY_UNCERTAINTY 0.71`, `PRICE_SENSITIVITY 0.22`. Candidates: `REVIEW_SUMMARY`, `SIMILAR_PRODUCT_RECOMMENDATION`, `NO_ACTION`. All pass policy (`LIMITED_TIME_DISCOUNT` never generated — `P(PRICE)` below its 0.42 threshold).
-`REVIEW_SUMMARY` = .40(.71) + .30(.28×.82) + .20(.50) + .10(.29) − .15(.15) − 0 − 0 − .10(.33) = **0.62**, confidence **0.87**.
-`SIMILAR_PRODUCT` = 0.41. → **`REVIEW_SUMMARY` / `INLINE_CARD`.** Discount never even a candidate. *(Scenario A.)*
+**(a) Quality uncertainty.** `p=0.82`; causes `PRODUCT_QUALITY_UNCERTAINTY 0.71`, `PRICE_SENSITIVITY 0.22`. Candidates: `REVIEW_SUMMARY`, `NO_ACTION`. Both pass policy (`SIMILAR_PRODUCT_RECOMMENDATION` does not support the quality cause; `LIMITED_TIME_DISCOUNT` is never generated because `P(PRICE)` is below its 0.42 threshold).
+`REVIEW_SUMMARY` = .40(.71) + .30(.28×.82) + .20(.50) + .10(.29) − .15(.15) − 0 − 0 − .10(.33) = **0.426**.
+→ **`REVIEW_SUMMARY` / `INLINE_CARD`.** Discount never even a candidate. *(Scenario A.)*
 
-**(b) Delivery concern.** `p=0.76`; `DELIVERY_CONCERN 0.68`. `DELIVERY_REASSURANCE` = .40(.68)+.30(.27×.76)+.20(.5)+.10(.32)−.15(.15)−.10(.33) = **0.58**, confidence 0.83. → **`DELIVERY_REASSURANCE` / `INLINE_CARD`.** No price action. *(Scenario B.)*
+**(b) Delivery concern.** `p=0.76`; `DELIVERY_CONCERN 0.68`. `DELIVERY_REASSURANCE` = .40(.68)+.30(.27×.76)+.20(.5)+.10(.32)−.15(.15)−.10(.33) = **0.410**. → **`DELIVERY_REASSURANCE` / `INLINE_CARD`.** No price action. *(Scenario B.)*
 
 **(c) Price sensitivity, discount blocked.** `p=0.79`; `PRICE_SENSITIVITY 0.64`. Both `PRICE_DROP_ALERT` and `LIMITED_TIME_DISCOUNT` generated.
-`PRICE_DROP_ALERT` = .40(.64)+.30(.24×.79)+.20(.5)+.10(.36)−.15(.15)−.10(.33) = **0.55**.
-`LIMITED_TIME_DISCOUNT` = .40(.64)+.30(.38×.79)+.20(.5)+.10(.36)−.15(1.0)−.25(.42)−.10(1.0) = **0.29**.
+`PRICE_DROP_ALERT` = .40(.64)+.30(.24×.79)+.20(.5)+.10(.36)−.15(.15)−.10(.33) = **0.393**.
+`LIMITED_TIME_DISCOUNT` = .40(.64)+.30(.38×.79)+.20(.5)+.10(.36)−.15(1.0)−.25(.417)−.10(1.0) = **0.128** (using the 7.5% proposal from DEC-047).
 Gate 4 fails anyway (a LOW-cost candidate scores higher). → **DOWNGRADE to `PRICE_DROP_ALERT`**, reason `low_cost_alternative_available`. *(Scenario C.)*
 
-**(d) Payment failure.** `p=0.88`; `CHECKOUT_OR_PAYMENT_FAILURE 0.79`. `ALTERNATE_PAYMENT_METHOD` = .40(.79)+.30(.33×.88)+.20(.5)+.10(.21)−.15(.15)−.10(.33) = **0.63**, confidence 0.91. `CHECKOUT_ASSISTANCE` = 0.52. → **`ALTERNATE_PAYMENT_METHOD` / `CHECKOUT_PANEL`.** *(Scenario D.)*
+**(d) Payment failure.** `p=0.88`; `CHECKOUT_OR_PAYMENT_FAILURE 0.79`. `ALTERNATE_PAYMENT_METHOD` = .40(.79)+.30(.33×.88)+.20(.5)+.10(.21)−.15(.15)−.10(.33) = **0.468**. → **`ALTERNATE_PAYMENT_METHOD` / `CHECKOUT_PANEL`.** *(Scenario D.)*
 
 **(e) High risk, low confidence.** `p=0.81`; max cause probability 0.31 → below every threshold → causes = `[UNKNOWN]`. `relevance = 0` for everything, so no candidate clears `NO_ACTION`'s 0.0 floor except on `information_gain` alone (max 0.10 − penalties < 0). Confidence gate: `recommendation_confidence = 0.31 < 0.55` → **`NO_ACTION` with `decision = ABSTAIN`**, explanation "signals were conflicting; no confident diagnosis." No discount, ever. *(Scenario F.)*
 
@@ -1771,6 +1772,7 @@ PERSONALIZED_CONFIDENCE=0.75
 DISCOUNT_MIN_CONFIDENCE=0.75
 DISCOUNT_MIN_PRICE_SENSITIVITY=0.60
 DISCOUNT_MIN_CART_VALUE=1000
+DEFAULT_DISCOUNT_PCT=7.5
 EMI_MIN_CART_VALUE=5000
 MAX_INTERVENTIONS_PER_SESSION=3
 MAX_DISMISSALS=2
@@ -2068,18 +2070,18 @@ npx playwright test tests/e2e/test_event_emission.spec.ts
 **Manual inspection.** With the network tab open: browse a PDP, scroll to reviews, add to cart, open cart, start checkout. Confirm batched `POST /api/v1/events` calls, then query `events` — the sequence matches what you did, `sequence_no` is gapless.
 
 **Acceptance criteria.**
-- [ ] All 17 event types backed by current storefront interactions are emitted; `PRODUCT_COMPARED` and `INTERVENTION_*` await their Phase 5 components (DEC-045).
-- [ ] `sequence_no` is gapless and monotonic per session.
-- [ ] Killing the backend leaves the storefront fully usable; events buffer and flush on restart.
-- [ ] `SESSION_ENDED` fires on tab close (verify via `sendBeacon` in devtools).
-- [ ] **No visual change to any storefront page.** Compare against Phase 0 screenshots.
-- [ ] `src/lib/tracker.ts` no longer exists and nothing imports it.
+- [x] All 21 event types have honest call sites; Phase 5 supplied `PRODUCT_COMPARED` and `INTERVENTION_*` (DEC-045).
+- [x] `sequence_no` is gapless and monotonic per session.
+- [x] Killing the backend leaves the storefront fully usable; events buffer and flush on restart.
+- [x] `SESSION_ENDED` fires on tab close (verified by the browser suite's `sendBeacon` test).
+- [x] **No visual change to any storefront page** outside Phase 5's explicitly added intervention surfaces.
+- [x] `src/lib/tracker.ts` no longer exists and nothing imports it.
 
 **Failure cases.** Backend down → no console errors surfaced to the user, events queue. Rapid add-to-cart ×10 → 10 events, correct order, one or two batched requests.
 
 **Commit.** `feat(frontend): replace tracker with event emitter, wire all call sites`
 
-**Deferred.** No decisions yet; `AgentInspector` shows raw counters only. `PRODUCT_COMPARED` and `INTERVENTION_*` call sites arrive with the Phase 5 intervention surfaces (DEC-045).
+**Delivered in Phase 5.** The decision pipeline and authorized intervention surfaces now provide the deferred `PRODUCT_COMPARED` and `INTERVENTION_*` call sites (DEC-045).
 
 ---
 
@@ -2163,16 +2165,16 @@ pytest tests -q ; npx vitest run ; npx playwright test
 **Manual inspection.** Open a PDP → read reviews 3× → view 5 similar products → add to cart → open cart. Within ~3 s an inline card appears: *"Repeated review visits suggest product-quality questions — here's what reviewers say."* Dismiss it; it does not return. Repeat twice more; after the second dismissal nothing further appears.
 
 **Acceptance criteria.**
-- [ ] End-to-end decision p95 < 300 ms.
-- [ ] `p_abandon < 0.40` → `NO_ACTION` with an explanation.
-- [ ] Every decision, including `NO_ACTION`, writes a `decision_traces` row.
-- [ ] Every candidate appears in `policy_results` with a status and reasons.
-- [ ] Utility breakdown sums to the reported score (±0.001).
-- [ ] Identical inputs → identical decision, 100 consecutive runs.
-- [ ] 2 dismissals → all further interventions suppressed with `repeated_dismissals`.
-- [ ] `LIMITED_TIME_DISCOUNT` is never selected when a LOW-cost candidate is within 0.10.
-- [ ] The frontend renders **nothing** that lacks a backend `decision_id`.
-- [ ] **Storefront visual design unchanged** outside the new surfaces.
+- [x] End-to-end decision p95 < 300 ms.
+- [x] `p_abandon < 0.40` → `NO_ACTION` with an explanation.
+- [x] Every decision, including `NO_ACTION`, writes a `decision_traces` row.
+- [x] Every candidate appears in `policy_results` with a status and reasons.
+- [x] Utility breakdown sums to the reported score (±0.001).
+- [x] Identical inputs → identical decision, 100 consecutive runs.
+- [x] 2 dismissals → all further interventions suppressed with `repeated_dismissals`.
+- [x] `LIMITED_TIME_DISCOUNT` is never selected when a LOW-cost candidate is within 0.10.
+- [x] The frontend renders **nothing** that lacks a backend `decision_id`.
+- [x] **Storefront visual design unchanged** outside the new surfaces.
 
 **Failure cases.** Decision endpoint 500 → storefront unaffected, no surface renders. Rapid triggers → one decision (debounce). `force=true` bypasses min-interval but not the session cap.
 
@@ -2789,7 +2791,7 @@ Prerequisite for every scenario: `.\scripts\reset_demo.ps1`. Run with `.\scripts
 **Events:** `SESSION_STARTED`, `PRODUCT_VIEWED`, `REVIEW_OPENED`×3, `REVIEW_DWELL_RECORDED`×3, `SIMILAR_PRODUCT_VIEWED`×5, `ITEM_ADDED_TO_CART`, `CART_VIEWED`.
 **Model:** `p_abandon ≈ 0.82` (HIGH); `PRODUCT_QUALITY_UNCERTAINTY ≈ 0.71`, `PRICE_SENSITIVITY ≈ 0.22` (below its 0.42 threshold).
 **Policy:** `REVIEW_SUMMARY` PASS · `SIMILAR_PRODUCT_RECOMMENDATION` PASS · `LIMITED_TIME_DISCOUNT` **never generated** (price sensitivity below threshold).
-**Intervention:** `REVIEW_SUMMARY` / `INLINE_CARD`, utility 0.62, confidence 0.87.
+**Intervention:** `REVIEW_SUMMARY` / `INLINE_CARD`, utility 0.426, confidence 0.87.
 **Dashboard:** SHAP top factors led by `s_review_open_count`; the candidate table shows the discount was never a candidate, with the reason.
 **Outcome:** impression logged; clicking expands pros/cons; conversion recorded if the order completes.
 
@@ -2800,7 +2802,7 @@ Prerequisite for every scenario: `.\scripts\reset_demo.ps1`. Run with `.\scripts
 **Events:** `DELIVERY_CHECKED`×3, `CART_VIEWED`×2.
 **Model:** `p ≈ 0.76` (HIGH); `DELIVERY_CONCERN ≈ 0.68`.
 **Policy:** `DELIVERY_REASSURANCE` PASS (delivery data present). No price action generated.
-**Intervention:** `DELIVERY_REASSURANCE` / `INLINE_CARD`, utility 0.58, confidence 0.83.
+**Intervention:** `DELIVERY_REASSURANCE` / `INLINE_CARD`, utility 0.410.
 **Dashboard:** evidence `d_check_count=3`, `d_max_days=7`.
 **Outcome:** click → expanded delivery detail.
 
@@ -2810,7 +2812,7 @@ Prerequisite for every scenario: `.\scripts\reset_demo.ps1`. Run with `.\scripts
 **Actions:** sort by price 2× → search a coupon (fails) → add to wishlist → open cart 3×.
 **Events:** `SEARCH_PERFORMED`(price sort)×2, `COUPON_SEARCHED`(applied=false), `CART_VIEWED`×3.
 **Model:** `p ≈ 0.79`; `PRICE_SENSITIVITY ≈ 0.64`.
-**Policy:** `PRICE_DROP_ALERT` PASS (utility 0.55) · `LIMITED_TIME_DISCOUNT` **DOWNGRADED** (utility 0.29; gate 4 fails — a LOW-cost candidate scores higher), reason `low_cost_alternative_available`.
+**Policy:** `PRICE_DROP_ALERT` PASS (utility 0.393) · `LIMITED_TIME_DISCOUNT` **DOWNGRADED** (utility 0.128; gate 4 fails — a LOW-cost candidate scores higher), reason `low_cost_alternative_available`.
 **Intervention:** `PRICE_DROP_ALERT` / `INLINE_CARD`.
 **Dashboard:** **the headline moment** — the discount appears in the candidate table with an explicit downgrade and reason. This is the margin-protection story.
 **Outcome:** discount cost ₹0.
@@ -2822,7 +2824,7 @@ Prerequisite for every scenario: `.\scripts\reset_demo.ps1`. Run with `.\scripts
 **Events:** `CHECKOUT_STARTED`, `CHECKOUT_STEP_VIEWED`×3, `PAYMENT_FAILED`, `PAYMENT_METHOD_CHANGED`.
 **Model:** `p ≈ 0.88` (HIGH); `CHECKOUT_OR_PAYMENT_FAILURE ≈ 0.79`.
 **Policy:** `ALTERNATE_PAYMENT_METHOD` PASS · `CHECKOUT_ASSISTANCE` PASS · `EMI_SUGGESTION` PASS (cart ≥ ₹5,000).
-**Intervention:** `ALTERNATE_PAYMENT_METHOD` / `CHECKOUT_PANEL`, utility 0.63, confidence 0.91. **Rendered beside, never over, the pay CTA.**
+**Intervention:** `ALTERNATE_PAYMENT_METHOD` / `CHECKOUT_PANEL`, utility 0.468. **Rendered beside, never over, the pay CTA.**
 **Dashboard:** `PAYMENT_FAILED` visible in the timeline; the trigger was urgent (min-interval bypassed).
 **Outcome:** retry → order completes → `time_to_purchase_seconds` recorded.
 

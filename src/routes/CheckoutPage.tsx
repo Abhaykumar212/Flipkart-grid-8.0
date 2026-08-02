@@ -15,6 +15,7 @@ import { PaymentOptions } from "../components/checkout/PaymentOptions";
 import { OrderConfirmation } from "../components/checkout/OrderConfirmation";
 import type { PaymentMethod, PlacedOrder, ShippingMethod } from "../types/checkout";
 import { useSession } from "../context/SessionContext";
+import { InterventionRenderer } from "../components/intervention/InterventionRenderer";
 
 const CHECKOUT_STEP_NAMES = ["", "ADDRESS", "SUMMARY", "PAYMENT"] as const;
 
@@ -94,6 +95,8 @@ export default function CheckoutPage() {
         <div className="flex flex-col gap-3">
           {step === 1 && <AddressForm value={address} onChange={setAddress} onSubmit={() => setStep(2)} />}
           {step > 1 && <AddressSummary address={address} onEdit={() => setStep(1)} />}
+
+          <InterventionRenderer surface="checkout" />
 
           {step === 2 && (
             <>

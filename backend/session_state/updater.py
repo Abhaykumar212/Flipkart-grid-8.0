@@ -1,8 +1,10 @@
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from backend.domain.events import EventEnvelope, EventType
+from backend.domain.interventions import InterventionId
+from backend.recommendation.catalogue import CATALOGUE_BY_ID
 
 from .state import SessionState
 
@@ -54,6 +56,7 @@ def apply(
     event: EventEnvelope,
     *,
     server_timestamp: datetime | None = None,
+    is_late: bool = False,
 ) -> SessionState:
     """Return a new state with one event applied; no I/O and no input mutation."""
     updated = deepcopy(state)
@@ -63,6 +66,7 @@ def apply(
     updated.recent_events.append({
         **event.model_dump(mode="json"),
         "server_timestamp": event_time.isoformat(),
+        "is_late": is_late,
     })
     updated.recent_events = updated.recent_events[-50:]
 
@@ -132,6 +136,16 @@ def apply(
             "outcome": "SHOWN",
         })
         updated.interventions["last_shown_at"] = event_time.isoformat()
+        try:
+            intervention_id = InterventionId(metadata["intervention_id"])
+            definition = CATALOGUE_BY_ID[intervention_id]
+            updated.cooldowns[intervention_id.value] = (
+                event_time + timedelta(minutes=definition.cooldown_minutes)
+            ).isoformat()
+        except (KeyError, ValueError):
+            # The event validator owns reference validation; replay remains robust
+            # if an inactive historical catalogue entry is no longer in code.
+            pass
     elif event.event_type == EventType.INTERVENTION_CLICKED:
         updated.interventions["click_count"] += 1
         for shown in reversed(updated.interventions["shown"]):

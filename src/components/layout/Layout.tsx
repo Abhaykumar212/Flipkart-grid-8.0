@@ -3,6 +3,7 @@ import { Navbar } from "./Navbar";
 import { CategoryNav } from "./CategoryNav";
 import { Footer } from "./Footer";
 import { AgentInspector } from "../ui/AgentInspector";
+import { InterventionRenderer } from "../intervention/InterventionRenderer";
 
 export function Layout() {
   return (
@@ -12,6 +13,7 @@ export function Layout() {
       </a>
       <Navbar />
       <CategoryNav />
+      <InterventionRenderer surface="global" />
       <main id="main-content" className="mx-auto w-full max-w-fk min-w-0 scroll-mt-28 flex-1 px-2 py-3 sm:px-4">
         <Outlet />
       </main>

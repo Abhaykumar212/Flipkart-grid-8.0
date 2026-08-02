@@ -139,7 +139,7 @@ export class EventClient {
   private readonly postEvents: (events: EventEnvelope[]) => Promise<EventAck>;
   private readonly randomUUID: () => string;
   private readonly now: () => Date;
-  private readonly listeners = new Set<() => void>();
+  private readonly listeners = new Set<(events: readonly EventEnvelope[]) => void>();
   private readonly memorySequences = new Map<string, number>();
   private queue: EventEnvelope[];
   private sessionId: string | null = null;
@@ -166,7 +166,7 @@ export class EventClient {
     if (this.queue.length > 0) this.scheduleFlush(FLUSH_DELAY_MS);
   }
 
-  subscribe(listener: () => void): () => void {
+  subscribe(listener: (events: readonly EventEnvelope[]) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
@@ -215,7 +215,7 @@ export class EventClient {
         this.queue = this.queue.filter((event) => !ids.has(event.event_id));
         this.retryCount = 0;
         this.persist();
-        this.listeners.forEach((listener) => listener());
+        this.listeners.forEach((listener) => listener(batch));
         if (this.queue.length > 0) this.scheduleFlush(FLUSH_DELAY_MS);
       })
       .catch(() => {

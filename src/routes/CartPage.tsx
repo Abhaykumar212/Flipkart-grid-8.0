@@ -14,6 +14,7 @@ import { CartLineItem } from "../components/cart/CartLineItem";
 import { PriceSummary } from "../components/cart/PriceSummary";
 import { ProductRail } from "../components/home/ProductRail";
 import { useSession } from "../context/SessionContext";
+import { InterventionRenderer } from "../components/intervention/InterventionRenderer";
 
 export default function CartPage() {
   const { items, promoCode, applyPromo, removePromo } = useCart();
@@ -79,6 +80,8 @@ export default function CartPage() {
             <h1 className="text-xl font-medium text-fk-ink">My Cart ({totals.itemCount})</h1>
             <Link to="/products" className="min-h-11 content-center text-fk-md font-medium text-fk-blue">Continue shopping</Link>
           </header>
+
+          <InterventionRenderer surface="cart" />
 
           {remainingForFreeDelivery > 0 ? (
             <div className="bg-white px-4 py-3 text-fk-base text-fk-ink sm:px-6">

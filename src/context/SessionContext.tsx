@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -23,12 +24,53 @@ interface SessionIdentity {
   sessionId: string;
 }
 
+export interface RecommendedIntervention {
+  decision_id?: string;
+  type: string;
+  display_name?: string;
+  channel: "INLINE_CARD" | "ASSISTANT_PANEL" | "BANNER" | "COMPARISON_DRAWER" | "CHECKOUT_PANEL" | null;
+  headline?: string;
+  body?: string;
+  cta_label?: string;
+  reason: string;
+  confidence: number;
+  discount_pct?: number;
+}
+
+export interface DecisionResponse {
+  decision_id?: string;
+  session_id: string;
+  decision?: "INTERVENE" | "NO_ACTION" | "ABSTAIN";
+  abandonment_probability?: number;
+  risk_level?: "LOW" | "MEDIUM" | "HIGH";
+  recommended_intervention?: RecommendedIntervention;
+  explanation?: Record<string, unknown>;
+  suppressed: boolean;
+  suppression_reason?: string;
+}
+
 interface SessionContextValue {
   sessionId: string;
   emit: <T extends EventType>(eventType: T, input: EventInput<T>) => EventEnvelope | null;
+  latestDecision: DecisionResponse | null;
+  requestDecision: (trigger: EventType | "PERIODIC", force?: boolean) => Promise<DecisionResponse | null>;
+  clearDecision: (decisionId?: string) => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
+const DECISION_TRIGGER_TYPES = new Set<EventType>([
+  "CART_VIEWED",
+  "ITEM_ADDED_TO_CART",
+  "CHECKOUT_STARTED",
+  "PAYMENT_FAILED",
+  "PAYMENT_METHOD_CHANGED",
+  "DELIVERY_CHECKED",
+  "COUPON_SEARCHED",
+  "REVIEW_OPENED",
+  "SIMILAR_PRODUCT_VIEWED",
+  "PRODUCT_COMPARED",
+]);
+const DECISION_DEBOUNCE_MS = 3_100;
 
 function safeGet(key: string): string | null {
   try {
@@ -76,7 +118,27 @@ function initializeSession(): SessionIdentity {
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [identity] = useState(initializeSession);
+  const [latestDecision, setLatestDecision] = useState<DecisionResponse | null>(null);
   const creationRequest = useRef<Promise<unknown> | null>(null);
+  const decisionTimer = useRef<number | null>(null);
+  const pendingTrigger = useRef<EventType | null>(null);
+
+  const requestDecision = useCallback(async (
+    trigger: EventType | "PERIODIC",
+    force = false,
+  ): Promise<DecisionResponse | null> => {
+    try {
+      const response = await apiPost<DecisionResponse>(
+        `/api/v1/sessions/${identity.sessionId}/decisions`,
+        { trigger, force },
+      );
+      if (!response.suppressed && response.decision_id) setLatestDecision(response);
+      return response;
+    } catch {
+      // Decision support is fail-open: commerce remains fully usable.
+      return null;
+    }
+  }, [identity.sessionId]);
 
   useEffect(() => {
     if (creationRequest.current === null) {
@@ -99,13 +161,36 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       eventClient.flushWithBeacon();
     };
     window.addEventListener("pagehide", endSession);
-    return () => window.removeEventListener("pagehide", endSession);
-  }, [identity]);
+    const unsubscribe = eventClient.subscribe((events) => {
+      const trigger = [...events].reverse().find((event) => (
+        DECISION_TRIGGER_TYPES.has(event.event_type)
+      ));
+      if (!trigger) return;
+      pendingTrigger.current = trigger.event_type;
+      if (decisionTimer.current !== null) window.clearTimeout(decisionTimer.current);
+      decisionTimer.current = window.setTimeout(() => {
+        const nextTrigger = pendingTrigger.current;
+        pendingTrigger.current = null;
+        decisionTimer.current = null;
+        if (nextTrigger) void requestDecision(nextTrigger);
+      }, DECISION_DEBOUNCE_MS);
+    });
+    return () => {
+      window.removeEventListener("pagehide", endSession);
+      unsubscribe();
+      if (decisionTimer.current !== null) window.clearTimeout(decisionTimer.current);
+    };
+  }, [identity, requestDecision]);
 
   const value = useMemo<SessionContextValue>(() => ({
     sessionId: identity.sessionId,
     emit: (eventType, input) => eventClient.emit(eventType, input),
-  }), [identity.sessionId]);
+    latestDecision,
+    requestDecision,
+    clearDecision: (decisionId) => setLatestDecision((current) => (
+      !decisionId || current?.decision_id === decisionId ? null : current
+    )),
+  }), [identity.sessionId, latestDecision, requestDecision]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
