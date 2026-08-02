@@ -7,8 +7,12 @@ from typing import Annotated, Literal
 from sqlalchemy.orm import Session
 
 from backend.deps import get_session_store
+from backend.feature_engine.compute import compute_features
+from backend.feature_engine.schema import FEATURE_SCHEMA_VERSION
+from backend.feature_engine.snapshot import write_feature_snapshot
 from backend.storage.db import get_db
 from backend.storage.models import ShoppingSession, User
+from backend.storage.repositories import user_history
 from backend.storage.session_store import SessionStore
 
 from .cache import cache_session_state
@@ -58,6 +62,7 @@ def create_session(
         started_at=now,
         device_type=payload.device_type,
         referral_source=payload.referral_source,
+        is_returning_user=payload.is_returning_user,
     )
     cache_session_state(store, state)
     return {"session_id": session_id, "experiment_group": None}
@@ -76,4 +81,24 @@ def get_session(
         except KeyError as error:
             raise HTTPException(status_code=404, detail="Session not found") from error
         cache_session_state(store, state)
-    return session_response(state)
+
+    history = user_history(db, state.user_id)
+    features = compute_features(state, history)
+    trigger_event_id = (
+        str(state.recent_events[-1]["event_id"])
+        if state.recent_events and state.recent_events[-1].get("event_id")
+        else None
+    )
+    write_feature_snapshot(
+        db,
+        session_id=session_id,
+        features=features,
+        computed_at=history.as_of,
+        trigger_event_id=trigger_event_id,
+    )
+    db.commit()
+    return session_response(
+        state,
+        current_features=features,
+        feature_schema_version=FEATURE_SCHEMA_VERSION,
+    )

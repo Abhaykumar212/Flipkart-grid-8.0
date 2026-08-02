@@ -105,6 +105,7 @@ Status legend: **F** = Frozen by the architecture spec (must not be changed) · 
 | DEC-043 | The schema contains **18 application tables**, not 17. | N | §7 explicitly defines 18 distinct required tables; the repeated “17” count was an arithmetic error. Omitting any one would violate the schema and audit requirements. | Table-count references and the Phase 1 commit boundary are corrected to 18; Alembic’s own `alembic_version` table is not included in that count. |
 | DEC-044 | Migration 0003 also creates `experiments` and `model_registry`; migration 0005 creates `experiment_assignments`. | N | `decision_traces.experiment_id` and `model_predictions.(model_name,model_version)` require their referenced tables to exist before portable FK creation. The original filename split had forward references that fail on Postgres. | All five revisions remain reversible; the dependency-respecting split is SQLite/Postgres portable. |
 | DEC-045 | Phase 3 emits the 17 event types backed by genuine storefront interactions; `PRODUCT_COMPARED` and the three `INTERVENTION_*` events activate with Phase 5's intervention components. | N | The frozen call-site table assigns `PRODUCT_COMPARED` to `ComparisonDrawer.tsx`, but that component is not created until Phase 5. Fabricating a comparison event from an unrelated click would corrupt behavioral evidence. | The complete 21-type contract remains validated in Phase 2; Phase 5 adds the four honest UI call sites without changing the envelope. |
+| DEC-046 | Phase 4 derives first-view price from the catalogue's earliest `price_history` observation and treats any prior completed order as `pay_method_on_file=1`. | N | The frozen Phase 2 `PRODUCT_VIEWED` envelope records source but no observed price, and the schema has no saved-payment column. These are the only replayable, SQLite/Postgres-portable signals already present; expanding the event or database contract would invalidate completed phases. | `c_max_price_drop_pct` and `c_price_increased_since_view` remain deterministic across serving/simulation; payment-on-file is a conservative historical proxy until a dedicated wallet domain exists. |
 
 ---
 
@@ -804,7 +805,7 @@ Defined **once** in `backend/feature_engine/compute.py` (DEC-026). Columns: name
 
 ### Group 2 — Cart (`c_`, 9)
 
-`c_value` float · `c_item_count` int 0–20 · `c_distinct_categories` int 0–5 · `c_value_to_aov_ratio` float 0–6 (`c_value / u_avg_order_value`) · `c_discount_pct_available` float 0–100 (`(mrp_total − value)/mrp_total × 100`) · `c_age_seconds` float 0–3600 (`now − first_add_at`) · `c_promo_applied` 0/1 · `c_max_price_drop_pct` float 0–50 (max drop vs first-view price) · `c_price_increased_since_view` 0/1.
+`c_value` float · `c_item_count` int 0–20 · `c_distinct_categories` int 0–5 · `c_value_to_aov_ratio` float 0–6 (`c_value / u_avg_order_value`) · `c_discount_pct_available` float 0–100 (`(mrp_total − value)/mrp_total × 100`) · `c_age_seconds` float 0–3600 (`now − first_add_at`) · `c_promo_applied` 0/1 · `c_max_price_drop_pct` float 0–50 (max drop vs the catalogue's earliest observed price, DEC-046) · `c_price_increased_since_view` 0/1 (same baseline).
 All defaults 0. No leakage. Used by **R C K**.
 
 ### Group 3 — Product (`p_`, 5)
@@ -819,7 +820,7 @@ Used by **R C** (`DELIVERY_CONCERN`).
 
 ### Group 5 — Payment (`pay_`, 5)
 
-`pay_method_on_file` 0/1 (default 0) · `pay_failure_count` int 0–5 · `pay_method_change_count` int 0–5 · `pay_emi_eligible` 0/1 · `pay_checkout_max_step` int 0–3.
+`pay_method_on_file` 0/1 (default 0; true when the user has a prior completed order, DEC-046) · `pay_failure_count` int 0–5 · `pay_method_change_count` int 0–5 · `pay_emi_eligible` 0/1 · `pay_checkout_max_step` int 0–3.
 Used by **R C** (`CHECKOUT_OR_PAYMENT_FAILURE`, `AFFORDABILITY_OR_EMI_NEED`).
 
 ### Group 6 — Session behavior (`s_`, 18)
@@ -2090,7 +2091,7 @@ npx playwright test tests/e2e/test_event_emission.spec.ts
 
 **Prerequisites.** Phase 3.
 
-**Files.** Create `backend/feature_engine/{compute,schema,snapshot}.py`. Modify `backend/session_state/router.py`, `backend/storage/repositories.py`.
+**Files.** Create `backend/feature_engine/{compute,schema,snapshot}.py`. Modify `backend/session_state/{router,state,rebuild}.py`, `backend/storage/repositories.py`, and `.github/workflows/ci.yml` (feature-engine coverage gate).
 
 **Tasks.**
 1. `schema.py` — `FEATURE_SCHEMA_V1`: ordered names, types, bounds, defaults, and the `RISK_MODEL_FEATURES` list (= all except `i_*`, DEC-025). Serializable to `feature_schema.json`.
@@ -2113,11 +2114,11 @@ pytest tests/unit/test_features.py -q
 **Manual inspection.** Open 3 PDPs, read reviews twice, add to cart, wait 30 s. Confirm `s_product_view_count=3`, `s_review_open_count=2`, `c_item_count=1`, `c_age_seconds≈30`, and that `s_idle_seconds_current` climbs while `c_value` does not.
 
 **Acceptance criteria.**
-- [ ] Exactly 67 features returned, in `FEATURE_SCHEMA_V1` order.
-- [ ] Every value within its declared bounds (property test over 1,000 random states).
-- [ ] Feature computation p95 < 20 ms.
-- [ ] A snapshot row is written per request with the correct `feature_schema_version`.
-- [ ] `RISK_MODEL_FEATURES` has exactly 62 entries and contains no `i_` prefix.
+- [x] Exactly 67 features returned, in `FEATURE_SCHEMA_V1` order.
+- [x] Every value within its declared bounds (property test over 1,000 random states).
+- [x] Feature computation p95 < 20 ms.
+- [x] A snapshot row is written per request with the correct `feature_schema_version`.
+- [x] `RISK_MODEL_FEATURES` has exactly 62 entries and contains no `i_` prefix.
 
 **Failure cases.** Unknown user → documented defaults, no exception. Empty cart → all `c_*` zero, no division-by-zero in `c_value_to_aov_ratio`.
 

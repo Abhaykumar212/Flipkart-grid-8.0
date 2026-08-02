@@ -40,7 +40,7 @@ jobs:
       - name: Seed catalog
         run: python -m scripts.seed_catalog
 
-      - name: Test Phase 2 backend
+      - name: Test backend through Phase 4
         run: >-
           pytest tests/unit tests/integration
           --cov=backend.domain
@@ -48,6 +48,7 @@ jobs:
           --cov=backend.recommendation
           --cov=backend.event_ingestion
           --cov=backend.session_state
+          --cov=backend.feature_engine
           --cov=backend.observability
           --cov=scripts
           --cov-fail-under=80

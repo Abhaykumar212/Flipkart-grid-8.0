@@ -24,6 +24,7 @@ def rebuild_from_events(session_id: str, db: Session) -> SessionState:
         started_at=started_at,
         device_type=shopping_session.device_type,
         referral_source=shopping_session.referral_source,
+        is_returning_user=shopping_session.is_returning_user,
         ended=shopping_session.ended_at is not None,
         order_completed=shopping_session.outcome == "CONVERTED",
     )

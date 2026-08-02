@@ -55,6 +55,7 @@ class SessionState:
     last_event_at: datetime | None = None
     device_type: str | None = None
     referral_source: str | None = None
+    is_returning_user: bool = False
     cart: dict[str, Any] = field(default_factory=_empty_cart)
     counters: dict[str, int] = field(default_factory=lambda: dict(COUNTER_DEFAULTS))
     recent_events: list[dict[str, Any]] = field(default_factory=list)
@@ -76,7 +77,12 @@ class SessionState:
         return data
 
 
-def session_response(state: SessionState) -> dict[str, Any]:
+def session_response(
+    state: SessionState,
+    *,
+    current_features: dict[str, float] | None = None,
+    feature_schema_version: str | None = None,
+) -> dict[str, Any]:
     return {
         "session": {
             "session_id": state.session_id,
@@ -85,6 +91,7 @@ def session_response(state: SessionState) -> dict[str, Any]:
             "last_event_at": state.last_event_at.isoformat() if state.last_event_at else None,
             "device_type": state.device_type,
             "referral_source": state.referral_source,
+            "is_returning_user": state.is_returning_user,
             "current_product_id": state.current_product_id,
             "current_route": state.current_route,
             "ended": state.ended,
@@ -92,8 +99,8 @@ def session_response(state: SessionState) -> dict[str, Any]:
         },
         "cart": state.cart,
         "counters": state.counters,
-        "current_features": None,
-        "feature_schema_version": None,
+        "current_features": current_features,
+        "feature_schema_version": feature_schema_version,
         "latest_decision": state.last_decision,
         "interventions": state.interventions,
     }
