@@ -1,5 +1,5 @@
-import { AlertTriangle, Ban, Quote, Target, TrendingUp } from "lucide-react";
-import type { PipelineRun } from "../../lib/pipelineTrace";
+import { AlertTriangle, Ban, ListTree, Quote, Sparkles, Target, TrendingUp } from "lucide-react";
+import type { PipelineRun, RecommendedIntervention } from "../../lib/pipelineTrace";
 
 const CATEGORY_STYLE: Record<string, { label: string; chip: string }> = {
   cost_friction: { label: "Cost friction", chip: "bg-rose-100 text-rose-700" },
@@ -231,6 +231,108 @@ export function RcaReport({ run }: { run: PipelineRun }) {
           </div>
         )}
       </section>
+
+      {run.interventionPlan && <InterventionPlanPanel plan={run.interventionPlan} />}
     </div>
+  );
+}
+
+function InterventionPlanPanel({ plan }: { plan: NonNullable<PipelineRun["interventionPlan"]> }) {
+  const maxScore = Math.max(...plan.top_interventions.map((item) => item.score), 0.0001);
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+        <ListTree className="h-4 w-4 text-slate-500" />
+        Phase 3 — ranked interventions
+      </h3>
+      <p className="mt-1 text-xs text-slate-500">
+        Scored deterministically from category match, the agent's own endorsement, expected
+        conversion gain, urgency and session memory — not re-picked by the LLM.
+      </p>
+
+      <ol className="mt-3 flex flex-col gap-3">
+        {plan.top_interventions.map((item, index) => (
+          <li key={item.lever_id} className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+                {index + 1}
+              </span>
+              <code className="text-sm font-semibold text-blue-900">{item.lever_id}</code>
+              {item.llm_endorsed && (
+                <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  <Sparkles className="h-3 w-3" />
+                  agent-endorsed
+                </span>
+              )}
+              <span className="ml-auto text-xs font-bold tabular-nums text-blue-700">
+                score {item.score.toFixed(2)}
+              </span>
+            </div>
+
+            <p className="mt-1.5 text-sm text-slate-800">{item.headline}</p>
+            <p className="mt-1 text-xs text-slate-600">{item.rationale}</p>
+
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white">
+              <div
+                className="h-full rounded-full bg-blue-500"
+                style={{ width: `${(item.score / maxScore) * 100}%` }}
+              />
+            </div>
+
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+              <span>cost: {item.business_cost}</span>
+              <span>expected gain: {(item.expected_conversion_gain * 100).toFixed(0)}%</span>
+            </div>
+
+            {item.explanation.length > 0 && (
+              <ExplanationTrail explanation={item.explanation} />
+            )}
+          </li>
+        ))}
+      </ol>
+
+      {plan.fallback_intervention && (
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Fallback (lower cost, if confidence weakens)
+          </h4>
+          <p className="mt-1 text-sm text-slate-700">
+            <code className="text-xs font-semibold text-slate-800">
+              {plan.fallback_intervention.lever_id}
+            </code>{" "}
+            — {plan.fallback_intervention.headline}
+          </p>
+        </div>
+      )}
+
+      {plan.excluded_lever_ids.length > 0 && (
+        <p className="mt-3 text-[11px] text-slate-400">
+          Excluded from ranking (flagged by the agent as wasteful for this shopper):{" "}
+          {plan.excluded_lever_ids.join(", ")}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function ExplanationTrail({ explanation }: { explanation: RecommendedIntervention["explanation"] }) {
+  return (
+    <details className="mt-2 text-xs text-slate-600">
+      <summary className="cursor-pointer select-none font-medium text-slate-500 hover:text-slate-700">
+        Why this ranked here
+      </summary>
+      <ul className="mt-1.5 flex flex-col gap-1 border-l-2 border-blue-100 pl-3">
+        {explanation.map((factor, i) => (
+          <li key={`${factor.factor}-${i}`}>
+            <span className="font-medium text-slate-700">{factor.observation}</span>{" "}
+            <span className="tabular-nums text-slate-400">
+              ({factor.contribution >= 0 ? "+" : ""}
+              {factor.contribution.toFixed(2)})
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

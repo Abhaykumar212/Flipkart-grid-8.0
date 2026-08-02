@@ -4,6 +4,7 @@ import { useCart } from "../context/CartContext";
 import { computeCartTotals } from "../lib/cartTotals";
 import { productById } from "../data/products";
 import { formatDeliveryDate } from "../lib/format";
+import { userHistory } from "../lib/userHistory";
 import { Button } from "../components/ui/Button";
 import { CartLineItem } from "../components/cart/CartLineItem";
 import { PriceSummary } from "../components/cart/PriceSummary";
@@ -56,6 +57,8 @@ export default function CheckoutPage() {
     const slowest = Math.max(...lines.map((l) => l.product.delivery.estimatedDays));
 
     setOrder({ id: generateOrderId(), deliveryDate: formatDeliveryDate(slowest) });
+
+    userHistory.recordPurchase(lines.map((line) => line.product.id));
 
     // TODO(agent): fire an "order_completed" SessionEvent here so the
     // cart-abandonment model can distinguish converted carts from abandoned ones.

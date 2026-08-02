@@ -55,3 +55,29 @@ __pycache__/
 *.py[cod]
 .venv
 venv/
+.venv311/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python virtual environments
+.venv/
+.venv*/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+build/
+
+# macOS
+.DS_Store

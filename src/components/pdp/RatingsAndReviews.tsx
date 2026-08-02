@@ -4,8 +4,13 @@ import type { RatingBreakdown, Review } from "../../types/product";
 import { RatingStars } from "../ui/RatingStars";
 import { formatIndianNumber } from "../../lib/format";
 import { useTracker } from "../../context/TrackerContext";
+import { pageContext } from "../../lib/pageContext";
+
+/** Continuous time the reviews section must stay in view before the companion offers to summarize. */
+const REVIEW_DWELL_THRESHOLD_MS = 15_000;
 
 interface RatingsAndReviewsProps {
+  productId: string;
   ratingDistribution: RatingBreakdown[];
   reviews: Review[];
 }
@@ -54,7 +59,7 @@ function ReviewCard({ review }: { review: Review }) {
   );
 }
 
-export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndReviewsProps) {
+export function RatingsAndReviews({ productId, ratingDistribution, reviews }: RatingsAndReviewsProps) {
   const sorted = [...ratingDistribution].sort((a, b) => b.stars - a.stars);
   const max = Math.max(...sorted.map((r) => r.count), 1);
   const sectionRef = useRef<HTMLElement>(null);
@@ -66,6 +71,8 @@ export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndRev
     const section = sectionRef.current;
     if (!section) return;
 
+    // One-shot: feeds the abandonment model's reviews-read signal the moment
+    // the section is first seen.
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && !recorded.current) {
@@ -79,6 +86,34 @@ export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndRev
     observer.observe(section);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+
+    // Continuous dwell: only counts uninterrupted time actually in view, so
+    // scrolling past and back resets it rather than accumulating.
+    let dwellTimer: number | null = null;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          dwellTimer = window.setTimeout(() => {
+            pageContext.markReviewDwell(productId);
+          }, REVIEW_DWELL_THRESHOLD_MS);
+        } else if (dwellTimer !== null) {
+          window.clearTimeout(dwellTimer);
+          dwellTimer = null;
+        }
+      },
+      { threshold: 0.5 },
+    );
+    observer.observe(section);
+    return () => {
+      observer.disconnect();
+      if (dwellTimer !== null) window.clearTimeout(dwellTimer);
+    };
+  }, [productId]);
 
   const visibleReviews = reviews.slice(0, visibleCount);
   const remaining = reviews.length - visibleReviews.length;

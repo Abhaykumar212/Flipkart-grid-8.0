@@ -34,6 +34,11 @@ _load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
 
+# Optional second key so the companion chat feature doesn't compete with the
+# root-cause agent for the same free-tier rate limit. Falls back to the shared
+# key if unset, so a single-key setup still works.
+COMPANION_GROQ_API_KEY = os.getenv("COMPANION_GROQ_API_KEY", "").strip() or GROQ_API_KEY
+
 # Benchmarked against the real RCA payload and schema before selection:
 #   gpt-oss-120b  strict json_schema, effort=low,  4000 tok -> OK, ~3.8s
 #   gpt-oss-120b  strict json_schema, effort=med,  6000 tok -> HTTP 413 (free-tier TPM)
@@ -61,6 +66,25 @@ RCA_TEMPERATURE = float(os.getenv("RCA_TEMPERATURE", "0.2"))
 RCA_TIMEOUT_SECONDS = float(os.getenv("RCA_TIMEOUT_SECONDS", "30"))
 
 
+# --- Companion chat ----------------------------------------------------------
+
+# Shares the RCA model by default — already the only tested model that behaves
+# predictably against this Groq account. Free-form replies don't need strict
+# json_schema, so a different model would work too if you want to split load.
+COMPANION_CHAT_MODEL = os.getenv("COMPANION_CHAT_MODEL", RCA_MODEL)
+COMPANION_CHAT_MAX_TOKENS = int(os.getenv("COMPANION_CHAT_MAX_TOKENS", "500"))
+# Lower than a typical chat temperature on purpose: this endpoint is regularly
+# asked to quote exact figures (rating counts, prices) verbatim from context,
+# and higher temperatures measurably increased the model paraphrasing those
+# numbers instead of copying them.
+COMPANION_CHAT_TEMPERATURE = float(os.getenv("COMPANION_CHAT_TEMPERATURE", "0.15"))
+COMPANION_CHAT_TIMEOUT_SECONDS = float(os.getenv("COMPANION_CHAT_TIMEOUT_SECONDS", "20"))
+
+# Deliberately small: chat shares the same Groq free-tier budget as the root
+# cause agent (see RCA_MAX_TOKENS below for why that ceiling is tight). Keeping
+# replies short means a chat session competes less aggressively with the
+# recommendation engine for the same tokens/minute allowance.
+
 # --- Trigger policy ---------------------------------------------------------
 
 # Matches the "high" tier in main._risk_tier. Chosen from the model's own
@@ -82,6 +106,10 @@ RCA_MAX_PER_SESSION = int(os.getenv("RCA_MAX_PER_SESSION", "10"))
 
 def groq_is_configured() -> bool:
     return bool(GROQ_API_KEY)
+
+
+def companion_groq_is_configured() -> bool:
+    return bool(COMPANION_GROQ_API_KEY)
 
 
 def redacted_key_hint() -> str:

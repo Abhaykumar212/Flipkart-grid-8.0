@@ -138,6 +138,13 @@ export interface ScenarioSessionState {
   idleBeforeCheckoutSeconds: number;
 }
 
+/** Mirrors backend/schemas.py ShopperProfile — real, if lightweight, history. */
+export interface ShopperProfilePayload {
+  wishlist_product_ids: string[];
+  recent_view_product_ids: string[];
+  past_purchase_product_ids: string[];
+}
+
 /** Cart state sent alongside the features so the agent can be concrete. */
 export interface CartContextPayload {
   lines: Array<{
@@ -169,6 +176,7 @@ export interface TrackerSnapshot {
 const API_BASE = "http://localhost:8000";
 const PREDICTION_URL = `${API_BASE}/api/predict-abandonment`;
 const ROOT_CAUSE_URL = `${API_BASE}/api/root-cause-analysis`;
+const INTERVENTION_FEEDBACK_URL = `${API_BASE}/api/intervention-feedback`;
 
 /** Stable per-browser-tab id so the backend can dedupe and budget per session. */
 function resolveSessionId(): string {
@@ -228,6 +236,24 @@ function isPdpRoute(pathname: string): boolean {
 /** Checkout is a 3-step funnel: address -> summary -> payment. */
 function checkoutStepFromRoute(pathname: string): number {
   return pathname.startsWith("/checkout") ? 1 : 0;
+}
+
+export type InterventionFeedbackAction = "accepted" | "dismissed" | "converted";
+
+/** Feedback Agent write path — the companion widget's accept/dismiss actions. */
+export async function sendInterventionFeedback(
+  leverId: string,
+  action: InterventionFeedbackAction,
+): Promise<void> {
+  try {
+    await fetch(INTERVENTION_FEEDBACK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: SESSION_ID, lever_id: leverId, action }),
+    });
+  } catch {
+    // Best-effort telemetry — a dropped feedback POST shouldn't disrupt shopping.
+  }
 }
 
 export class SessionTracker {
@@ -532,6 +558,7 @@ export class SessionTracker {
    */
   async requestRootCause(
     cartContext: CartContextPayload,
+    shopperProfile: ShopperProfilePayload,
     options: { force?: boolean; signal?: AbortSignal } = {},
   ): Promise<unknown> {
     const snapshot = this.getSnapshot();
@@ -541,6 +568,7 @@ export class SessionTracker {
       body: JSON.stringify({
         features: snapshot.features,
         cart_context: cartContext,
+        shopper_profile: shopperProfile,
         session_id: SESSION_ID,
         force: Boolean(options.force),
       }),

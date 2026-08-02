@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { CartProvider } from "./context/CartContext";
+import { WishlistProvider } from "./context/WishlistContext";
 import { TrackerProvider } from "./context/TrackerContext";
 import { Layout } from "./components/layout/Layout";
 import Home from "./routes/Home";
@@ -13,18 +14,20 @@ export default function App() {
   return (
     <BrowserRouter>
       <CartProvider>
-        <TrackerProvider>
-          <Routes>
-            <Route element={<Layout />}>
-              <Route index element={<Home />} />
-              <Route path="product/:slug" element={<ProductDetail />} />
-              <Route path="cart" element={<CartPage />} />
-              <Route path="checkout" element={<CheckoutPage />} />
-              <Route path="search" element={<SearchResultsPage />} />
-              <Route path="pipeline" element={<PipelineConsole />} />
-            </Route>
-          </Routes>
-        </TrackerProvider>
+        <WishlistProvider>
+          <TrackerProvider>
+            <Routes>
+              <Route element={<Layout />}>
+                <Route index element={<Home />} />
+                <Route path="product/:slug" element={<ProductDetail />} />
+                <Route path="cart" element={<CartPage />} />
+                <Route path="checkout" element={<CheckoutPage />} />
+                <Route path="search" element={<SearchResultsPage />} />
+                <Route path="pipeline" element={<PipelineConsole />} />
+              </Route>
+            </Routes>
+          </TrackerProvider>
+        </WishlistProvider>
       </CartProvider>
     </BrowserRouter>
   );
