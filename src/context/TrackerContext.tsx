@@ -13,14 +13,24 @@ import { useCart } from "./CartContext";
 import { productById } from "../data/products";
 import { computeCartTotals } from "../lib/cartTotals";
 import {
+  materialSignature,
   sessionTracker,
+  type CartContextPayload,
   type PredictionResponse,
   type TrackerSnapshot,
 } from "../lib/tracker";
+import { pipelineTrace, type RootCauseResponse } from "../lib/pipelineTrace";
 
 const EVIDENCE_WARMUP_MS = 10_000;
 const PREDICTION_DEBOUNCE_MS = 700;
 const LIVE_REFRESH_MS = 5_000;
+
+/**
+ * Client-side guard so we don't POST to the RCA endpoint on every 5s poll.
+ * The backend gate is authoritative (it also dedupes and budgets), but there is
+ * no point paying a round trip when the local probability is clearly below it.
+ */
+const RCA_TRIGGER_PROBABILITY = 0.8;
 
 interface TrackerContextValue {
   snapshot: TrackerSnapshot;
@@ -28,11 +38,16 @@ interface TrackerContextValue {
   loading: boolean;
   error: string | null;
   warmupRemainingSeconds: number;
+  /** Most recent completed root-cause analysis, if any. */
+  rootCause: RootCauseResponse | null;
+  rootCauseLoading: boolean;
   recordProductVisit: (productId: string) => void;
   recordReviewVisibility: () => void;
   recordSearch: (query: string) => void;
   recordPincodeCheck: (pincode: string) => void;
   requestPrediction: () => void;
+  /** Manual "Re-run analysis" — bypasses dedup/cooldown server-side. */
+  runRootCauseAnalysis: (options?: { force?: boolean; scenarioLabel?: string }) => Promise<void>;
 }
 
 const TrackerContext = createContext<TrackerContextValue | null>(null);
@@ -56,6 +71,10 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
   const requestSequence = useRef(0);
   const requestController = useRef<AbortController | null>(null);
   const debounceTimer = useRef<number | null>(null);
+  const [rootCause, setRootCause] = useState<RootCauseResponse | null>(null);
+  const [rootCauseLoading, setRootCauseLoading] = useState(false);
+  const rcaController = useRef<AbortController | null>(null);
+  const lastAnalysedSignature = useRef<string | null>(null);
 
   useEffect(() => sessionTracker.subscribe(() => setRevision((value) => value + 1)), []);
 
@@ -160,6 +179,133 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
     debounceTimer.current = window.setTimeout(runPrediction, PREDICTION_DEBOUNCE_MS);
   }, [runPrediction]);
 
+  // Callers such as the scenario loader mutate the cart and then invoke the
+  // analysis a moment later. Reading `items`/`totals` from a captured closure
+  // would hand the agent the *previous* cart (cart_age_seconds: 0, no lines),
+  // so the live values are mirrored into refs and read at call time.
+  const itemsRef = useRef(items);
+  const totalsRef = useRef(totals);
+  const routeRef = useRef(location.pathname);
+  itemsRef.current = items;
+  totalsRef.current = totals;
+  routeRef.current = location.pathname;
+
+  /** Snapshot the cart in the shape the agent needs to be concrete about it. */
+  const buildCartContext = useCallback((): CartContextPayload => {
+    const items = itemsRef.current;
+    const totals = totalsRef.current;
+    const startedAtMs = cartStartedAt(items);
+    return {
+      lines: items.flatMap((item) => {
+        const product = productById.get(item.productId);
+        if (!product) return [];
+        const history = product.signals?.priceHistory ?? [];
+        const previous = history.at(-2)?.price;
+        const latest = history.at(-1)?.price;
+        return [{
+          product_id: product.id,
+          title: product.title,
+          brand: product.brand,
+          category: product.category,
+          quantity: item.quantity,
+          selling_price: product.price.sellingPrice,
+          mrp: product.price.mrp,
+          discount_percent: product.price.mrp > 0
+            ? Math.round(((product.price.mrp - product.price.sellingPrice) / product.price.mrp) * 100)
+            : 0,
+          estimated_delivery_days: product.delivery.estimatedDays,
+          in_stock: product.stock.inStock,
+          price_dropped_recently:
+            previous !== undefined && latest !== undefined && latest < previous,
+        }];
+      }),
+      cart_total: totals.totalSellingPrice,
+      mrp_total: totals.totalMrp,
+      delivery_fee: totals.deliveryCharge,
+      currency: "INR",
+      cart_age_seconds: startedAtMs === null ? 0 : Math.max(0, (Date.now() - startedAtMs) / 1000),
+      current_route: routeRef.current,
+    };
+    // Reads only refs, so the identity is stable and never serves stale data.
+  }, []);
+
+  const runRootCauseAnalysis = useCallback(
+    async (options: { force?: boolean; scenarioLabel?: string } = {}) => {
+      const telemetryStart = performance.now();
+      // Claim the signature immediately, not on success. Otherwise the
+      // auto-trigger effect fires again on the same render and we pay for two
+      // identical analyses per scenario load.
+      lastAnalysedSignature.current = materialSignature(sessionTracker.getSnapshot().features);
+
+      const runId = pipelineTrace.startRun(options.force ? "manual" : "auto", options.scenarioLabel);
+      rcaController.current?.abort();
+      const controller = new AbortController();
+      rcaController.current = controller;
+      setRootCauseLoading(true);
+
+      try {
+        const cartContext = buildCartContext();
+        pipelineTrace.attachTelemetry(
+          runId,
+          {
+            features: sessionTracker.getSnapshot().features,
+            cart_lines: cartContext.lines.length,
+            cart_total: cartContext.cart_total,
+            route: cartContext.current_route,
+          },
+          performance.now() - telemetryStart,
+        );
+
+        const result = (await sessionTracker.requestRootCause(cartContext, {
+          force: options.force,
+          signal: controller.signal,
+        })) as RootCauseResponse;
+
+        pipelineTrace.completeRun(runId, result);
+        setRootCause(result);
+      } catch (requestError) {
+        if (controller.signal.aborted) {
+          // Superseded by a newer request — close the run out instead of
+          // leaving it spinning in the history forever.
+          pipelineTrace.abortRun(runId);
+          return;
+        }
+        pipelineTrace.failRun(
+          runId,
+          requestError instanceof Error ? requestError.message : "Root cause request failed",
+        );
+      } finally {
+        if (!controller.signal.aborted) setRootCauseLoading(false);
+      }
+    },
+    [buildCartContext],
+  );
+
+  // Auto-trigger: fire once when the session first crosses the high-risk
+  // threshold, and again only if the feature vector materially changes.
+  useEffect(() => {
+    const probability = prediction?.abandonment_probability ?? 0;
+    if (probability < RCA_TRIGGER_PROBABILITY) return;
+    if (warmupRemainingMs > 0) return;
+    if (rootCauseLoading) return;
+
+    // Key on material features only. Dwell-time features tick every second, so
+    // hashing the whole vector would re-fire the agent on every render.
+    const signature = materialSignature(snapshot.features);
+    if (signature === lastAnalysedSignature.current) return;
+
+    // Claim the signature before the request so concurrent renders don't
+    // double-fire while the first call is still in flight.
+    lastAnalysedSignature.current = signature;
+    void runRootCauseAnalysis();
+  }, [
+    prediction?.abandonment_probability,
+    warmupRemainingMs,
+    rootCauseLoading,
+    snapshot.features,
+    runRootCauseAnalysis,
+  ]);
+
   useEffect(() => {
     if (!snapshot.signals.cartActive) {
       runPrediction();
@@ -174,7 +320,10 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
     };
   }, [revision, snapshot.signals.cartActive, requestPrediction, runPrediction]);
 
-  useEffect(() => () => requestController.current?.abort(), []);
+  useEffect(() => () => {
+    requestController.current?.abort();
+    rcaController.current?.abort();
+  }, []);
 
   const recordProductVisit = useCallback(
     (productId: string) => sessionTracker.recordProductVisit(productId),
@@ -196,22 +345,28 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
     loading,
     error,
     warmupRemainingSeconds: Math.ceil(warmupRemainingMs / 1_000),
+    rootCause,
+    rootCauseLoading,
     recordProductVisit,
     recordReviewVisibility,
     recordSearch,
     recordPincodeCheck,
     requestPrediction,
+    runRootCauseAnalysis,
   }), [
     snapshot,
     prediction,
     loading,
     error,
     warmupRemainingMs,
+    rootCause,
+    rootCauseLoading,
     recordProductVisit,
     recordReviewVisibility,
     recordSearch,
     recordPincodeCheck,
     requestPrediction,
+    runRootCauseAnalysis,
   ]);
 
   return <TrackerContext.Provider value={value}>{children}</TrackerContext.Provider>;

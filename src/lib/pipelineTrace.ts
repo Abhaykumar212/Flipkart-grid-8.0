@@ -1,0 +1,232 @@
+/**
+ * Observable store of pipeline runs, for the /pipeline console.
+ *
+ * A "run" is one pass of the system: client telemetry -> feature engineering ->
+ * model -> SHAP -> risk gate -> root cause agent. The backend returns its own
+ * spans; the frontend prepends the client-side telemetry span and stores the
+ * merged timeline.
+ *
+ * Adding a future stage (e.g. the Phase 3 intervention agent) means adding one
+ * member to PipelineStage and having that agent emit spans — the console
+ * renders whatever it receives without modification.
+ */
+
+export type PipelineStage =
+  | "telemetry"
+  | "feature_engineering"
+  | "model_inference"
+  | "shap_attribution"
+  | "risk_gate"
+  | "root_cause_agent";
+
+export type SpanStatus = "ok" | "running" | "skipped" | "error" | "rate_limited";
+
+export interface TraceSpan {
+  id: string;
+  stage: PipelineStage | string;
+  label: string;
+  status: SpanStatus;
+  /** Epoch milliseconds. */
+  started_at: number;
+  duration_ms: number;
+  source: "frontend" | "backend";
+  detail: Record<string, unknown>;
+}
+
+export type RunStatus =
+  | "success"
+  | "gate_not_met"
+  | "rate_limited"
+  | "not_configured"
+  | "error"
+  | "running";
+
+/** Mirrors backend/schemas.py RootCauseAnalysis. */
+export interface RootCauseAnalysis {
+  primary_root_cause: {
+    category: string;
+    headline: string;
+    explanation: string;
+    supporting_evidence: Array<{
+      signal: string;
+      observed_value: string;
+      shap_contribution: number;
+      why_it_matters: string;
+    }>;
+  };
+  contributing_factors: Array<{ category: string; headline: string; signal: string }>;
+  shopper_narrative: string;
+  confidence: "high" | "medium" | "low";
+  confidence_reasoning: string;
+  recommended_levers: Array<{
+    lever_id: string;
+    rationale: string;
+    expected_effect: string;
+    priority: number;
+  }>;
+  levers_to_avoid: Array<{ lever_id: string; reason: string }>;
+}
+
+export interface GateDecision {
+  fired: boolean;
+  threshold: number;
+  reason: string;
+  checks: Record<string, unknown>;
+}
+
+export interface PipelineRun {
+  id: string;
+  startedAt: number;
+  status: RunStatus;
+  trigger: "auto" | "manual";
+  scenarioLabel?: string;
+  probability: number | null;
+  riskTier: string | null;
+  gate: GateDecision | null;
+  analysis: RootCauseAnalysis | null;
+  modelUsed: string | null;
+  llmLatencyMs: number;
+  message: string | null;
+  spans: TraceSpan[];
+}
+
+export interface RootCauseResponse {
+  pipeline_run_id: string;
+  status: Exclude<RunStatus, "running">;
+  prediction: {
+    abandonment_probability: number;
+    risk_tier: string;
+    confidence_score: number;
+    feature_impacts: Record<string, number>;
+    top_contributing_features: Array<{ feature: string; shap_value: number }>;
+  };
+  gate: GateDecision;
+  analysis: RootCauseAnalysis | null;
+  model_used: string | null;
+  latency_ms: number;
+  message: string | null;
+  trace: TraceSpan[];
+}
+
+/** Keep memory bounded during a long demo. */
+const MAX_RUNS = 25;
+
+class PipelineTraceStore {
+  private runs: PipelineRun[] = [];
+  private listeners = new Set<() => void>();
+  /** Cached immutable snapshot so useSyncExternalStore doesn't loop. */
+  private snapshot: PipelineRun[] = [];
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  getSnapshot = (): PipelineRun[] => this.snapshot;
+
+  private emit(): void {
+    this.snapshot = [...this.runs];
+    this.listeners.forEach((listener) => listener());
+  }
+
+  /** Open a run as soon as the request leaves the browser, so the UI can show it in flight. */
+  startRun(trigger: "auto" | "manual", scenarioLabel?: string): string {
+    const id = `local_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    const run: PipelineRun = {
+      id,
+      startedAt: Date.now(),
+      status: "running",
+      trigger,
+      scenarioLabel,
+      probability: null,
+      riskTier: null,
+      gate: null,
+      analysis: null,
+      modelUsed: null,
+      llmLatencyMs: 0,
+      message: null,
+      spans: [
+        {
+          id: `${id}_telemetry`,
+          stage: "telemetry",
+          label: "Collect session telemetry",
+          status: "ok",
+          started_at: Date.now(),
+          duration_ms: 0,
+          source: "frontend",
+          detail: {},
+        },
+      ],
+    };
+    this.runs = [run, ...this.runs].slice(0, MAX_RUNS);
+    this.emit();
+    return id;
+  }
+
+  /** Attach the client-side feature vector to the telemetry span. */
+  attachTelemetry(runId: string, detail: Record<string, unknown>, durationMs: number): void {
+    const run = this.runs.find((r) => r.id === runId);
+    if (!run) return;
+    const span = run.spans.find((s) => s.stage === "telemetry");
+    if (span) {
+      span.detail = detail;
+      span.duration_ms = durationMs;
+    }
+    this.emit();
+  }
+
+  /** Merge the backend's spans and result into an in-flight run. */
+  completeRun(runId: string, response: RootCauseResponse): void {
+    const index = this.runs.findIndex((r) => r.id === runId);
+    if (index === -1) return;
+    const run = this.runs[index];
+    this.runs[index] = {
+      ...run,
+      status: response.status,
+      probability: response.prediction?.abandonment_probability ?? null,
+      riskTier: response.prediction?.risk_tier ?? null,
+      gate: response.gate,
+      analysis: response.analysis,
+      modelUsed: response.model_used,
+      llmLatencyMs: response.latency_ms,
+      message: response.message,
+      // Client telemetry span first, then the backend timeline in order.
+      spans: [...run.spans, ...response.trace],
+    };
+    this.emit();
+  }
+
+  failRun(runId: string, message: string): void {
+    const index = this.runs.findIndex((r) => r.id === runId);
+    if (index === -1) return;
+    this.runs[index] = { ...this.runs[index], status: "error", message };
+    this.emit();
+  }
+
+  /** A run superseded by a newer request. Dropped rather than shown as failed. */
+  abortRun(runId: string): void {
+    this.runs = this.runs.filter((run) => run.id !== runId);
+    this.emit();
+  }
+
+  clear(): void {
+    this.runs = [];
+    this.emit();
+  }
+}
+
+export const pipelineTrace = new PipelineTraceStore();
+
+/** Total wall time of a run, taken from span durations. */
+export function runDurationMs(run: PipelineRun): number {
+  return run.spans.reduce((total, span) => total + span.duration_ms, 0);
+}
+
+export const STAGE_LABELS: Record<string, string> = {
+  telemetry: "Session telemetry",
+  feature_engineering: "Feature engineering",
+  model_inference: "XGBoost inference",
+  shap_attribution: "SHAP attribution",
+  risk_gate: "Risk gate",
+  root_cause_agent: "Root cause agent",
+};

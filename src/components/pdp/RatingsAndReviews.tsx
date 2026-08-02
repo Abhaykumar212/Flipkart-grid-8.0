@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BadgeCheck, ThumbsUp } from "lucide-react";
+import { BadgeCheck, ChevronDown, ThumbsUp } from "lucide-react";
 import type { RatingBreakdown, Review } from "../../types/product";
 import { RatingStars } from "../ui/RatingStars";
 import { formatIndianNumber } from "../../lib/format";
@@ -13,6 +13,7 @@ interface RatingsAndReviewsProps {
 
 type ReviewSort = "recent" | "helpful" | "highest" | "lowest";
 
+const PAGE_SIZE = 3;
 const reviewDateFormat = new Intl.DateTimeFormat("en-IN", {
   day: "numeric",
   month: "short",
@@ -33,6 +34,7 @@ export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndRev
   const [ratingFilter, setRatingFilter] = useState<number | null>(null);
   const [sort, setSort] = useState<ReviewSort>("recent");
   const [helpfulVotes, setHelpfulVotes] = useState<Record<string, number>>({});
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [writing, setWriting] = useState(false);
   const [reviewerName, setReviewerName] = useState("");
   const [reviewRating, setReviewRating] = useState(0);
@@ -53,15 +55,25 @@ export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndRev
     return () => observer.disconnect();
   }, [recordReviewVisibility]);
 
-  const visibleReviews = useMemo(() => {
-    const filtered = ratingFilter ? allReviews.filter((review) => review.rating === ratingFilter) : allReviews;
+  const sortedReviews = useMemo(() => {
+    const filtered = ratingFilter
+      ? allReviews.filter((review) => review.rating === ratingFilter)
+      : allReviews;
     return [...filtered].sort((a, b) => {
-      if (sort === "helpful") return (b.helpfulCount + (helpfulVotes[b.id] ?? 0)) - (a.helpfulCount + (helpfulVotes[a.id] ?? 0));
+      if (sort === "helpful") {
+        return (b.helpfulCount + (helpfulVotes[b.id] ?? 0))
+          - (a.helpfulCount + (helpfulVotes[a.id] ?? 0));
+      }
       if (sort === "highest") return b.rating - a.rating;
       if (sort === "lowest") return a.rating - b.rating;
       return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
   }, [allReviews, helpfulVotes, ratingFilter, sort]);
+
+  const visibleReviews = sortedReviews.slice(0, visibleCount);
+  const remaining = sortedReviews.length - visibleReviews.length;
+
+  const resetPagination = () => setVisibleCount(PAGE_SIZE);
 
   const submitReview = (event: React.FormEvent) => {
     event.preventDefault();
@@ -84,6 +96,12 @@ export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndRev
     setFormMessage("Thank you. Your review has been added to this demo session.");
     setWriting(false);
     setRatingFilter(null);
+    resetPagination();
+  };
+
+  const showMore = () => {
+    setVisibleCount((current) => Math.min(sortedReviews.length, current + PAGE_SIZE));
+    recordReviewVisibility();
   };
 
   return (
@@ -112,7 +130,7 @@ export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndRev
           <div className="mb-5 flex items-center gap-3"><strong className="text-3xl font-medium text-fk-ink">{average.toFixed(1)}</strong><span><RatingStars value={average} variant="stars" /><span className="mt-1 block text-fk-sm text-fk-muted">{formatIndianNumber(totalRatings)} ratings</span></span></div>
           <div className="flex flex-col gap-1">
             {sortedDistribution.map(({ stars, count }) => (
-              <button key={stars} type="button" onClick={() => setRatingFilter((current) => current === stars ? null : stars)} aria-pressed={ratingFilter === stars} className={`flex min-h-11 items-center gap-2 rounded-[2px] px-2 text-left ${ratingFilter === stars ? "bg-blue-50" : "hover:bg-fk-bg"}`}>
+              <button key={stars} type="button" onClick={() => { setRatingFilter((current) => current === stars ? null : stars); resetPagination(); }} aria-pressed={ratingFilter === stars} className={`flex min-h-11 items-center gap-2 rounded-[2px] px-2 text-left ${ratingFilter === stars ? "bg-blue-50" : "hover:bg-fk-bg"}`}>
                 <span className="w-10 shrink-0 text-fk-base text-fk-ink">{stars} ★</span>
                 <span className="h-2 flex-1 rounded-full bg-fk-bg"><span className="block h-2 rounded-full bg-fk-green" style={{ width: `${(count / max) * 100}%` }} /></span>
                 <span className="w-16 shrink-0 text-right text-fk-sm text-fk-muted">{formatIndianNumber(count)}</span>
@@ -124,18 +142,24 @@ export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndRev
         <div>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-fk-border pb-3">
             <p className="text-fk-base text-fk-muted">Showing {visibleReviews.length} {ratingFilter ? `${ratingFilter}-star ` : ""}reviews</p>
-            <select value={sort} onChange={(event) => setSort(event.target.value as ReviewSort)} className="h-11 border border-fk-border bg-white px-3 text-fk-base focus:border-fk-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-fk-blue" aria-label="Sort reviews"><option value="recent">Most Recent</option><option value="helpful">Most Helpful</option><option value="highest">Highest Rating</option><option value="lowest">Lowest Rating</option></select>
+            <select value={sort} onChange={(event) => { setSort(event.target.value as ReviewSort); resetPagination(); }} className="h-11 border border-fk-border bg-white px-3 text-fk-base focus:border-fk-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-fk-blue" aria-label="Sort reviews"><option value="recent">Most Recent</option><option value="helpful">Most Helpful</option><option value="highest">Highest Rating</option><option value="lowest">Lowest Rating</option></select>
           </div>
           <div className="flex flex-col divide-y divide-fk-border">
             {visibleReviews.map((review) => (
               <article key={review.id} className="py-4 first:pt-0">
                 <div className="flex items-center gap-2"><RatingStars value={review.rating} variant="pill" size="sm" /><h3 className="text-fk-md font-medium text-fk-ink">{review.title}</h3></div>
                 <p className="mt-1.5 text-fk-base leading-5 text-fk-ink">{review.text}</p>
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-fk-sm text-fk-muted"><span className="font-medium text-fk-ink">{review.reviewerName}</span><span className="inline-flex items-center gap-1 text-fk-green"><BadgeCheck className="h-3.5 w-3.5" />Certified Buyer</span><span>{reviewDateFormat.format(new Date(review.date))}</span><button onClick={() => setHelpfulVotes((current) => current[review.id] ? current : { ...current, [review.id]: 1 })} disabled={Boolean(helpfulVotes[review.id])} className="ml-auto flex min-h-11 items-center gap-1 px-2 hover:text-fk-blue disabled:text-fk-green" aria-label={`Mark review by ${review.reviewerName} helpful`}><ThumbsUp className="h-4 w-4" />Helpful ({formatIndianNumber(review.helpfulCount + (helpfulVotes[review.id] ?? 0))})</button></div>
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-fk-sm text-fk-muted"><span className="font-medium text-fk-ink">{review.reviewerName}</span><span className="inline-flex items-center gap-1 text-fk-green"><BadgeCheck className="h-3.5 w-3.5" />Certified Buyer</span><span>{reviewDateFormat.format(new Date(review.date))}</span><button type="button" onClick={() => setHelpfulVotes((current) => current[review.id] ? current : { ...current, [review.id]: 1 })} disabled={Boolean(helpfulVotes[review.id])} className="ml-auto flex min-h-11 items-center gap-1 px-2 hover:text-fk-blue disabled:text-fk-green" aria-label={`Mark review by ${review.reviewerName} helpful`}><ThumbsUp className="h-4 w-4" />Helpful ({formatIndianNumber(review.helpfulCount + (helpfulVotes[review.id] ?? 0))})</button></div>
               </article>
             ))}
-            {visibleReviews.length === 0 && <div className="py-8 text-center text-fk-base text-fk-muted">No reviews match this rating. <button onClick={() => setRatingFilter(null)} className="font-medium text-fk-blue">Show all reviews</button></div>}
+            {visibleReviews.length === 0 && <div className="py-8 text-center text-fk-base text-fk-muted">No reviews match this rating. <button type="button" onClick={() => { setRatingFilter(null); resetPagination(); }} className="font-medium text-fk-blue">Show all reviews</button></div>}
           </div>
+          {remaining > 0 && (
+            <button type="button" onClick={showMore} data-testid="show-more-reviews-button" className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-[2px] border border-fk-border py-2.5 text-fk-md font-medium text-fk-blue hover:bg-fk-bg">
+              Show More Reviews ({remaining} more)
+              <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+          )}
         </div>
       </div>
     </section>

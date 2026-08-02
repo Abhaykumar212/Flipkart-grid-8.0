@@ -8,8 +8,10 @@ export function CategoryNav() {
       <nav className="mx-auto flex max-w-fk items-center gap-1 overflow-x-auto overscroll-x-contain px-3 no-scrollbar sm:px-4" aria-label="Product categories">
         {navCategories.map((cat) => (
           <Link
-            key={cat.slug}
-            to={`/category/${cat.slug}`}
+            key={cat.label}
+            to={cat.categorySlug
+              ? `/category/${cat.categorySlug}`
+              : `/search?category=&label=${encodeURIComponent(cat.label)}`}
             className="flex min-h-12 shrink-0 items-center gap-1 px-3 text-fk-md font-medium text-fk-ink hover:text-fk-blue sm:px-4"
           >
             {cat.label}

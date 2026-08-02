@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { RotateCcw, ShieldCheck, Tag, Truck } from "lucide-react";
+import { RotateCcw, ShieldCheck, Truck } from "lucide-react";
 import { productBySlug, products } from "../data/products";
 import { formatDeliveryDate } from "../lib/format";
+import {
+  getSpecifications,
+  getDescription,
+  getSeller,
+  getRatingDistribution,
+  getReviews,
+} from "../lib/productDetails";
 import { Button } from "../components/ui/Button";
 import { RatingStars } from "../components/ui/RatingStars";
 import { PriceBlock } from "../components/ui/PriceBlock";
@@ -10,17 +17,12 @@ import { ImageGallery } from "../components/pdp/ImageGallery";
 import { SpecificationsTable } from "../components/pdp/SpecificationsTable";
 import { RatingsAndReviews } from "../components/pdp/RatingsAndReviews";
 import { ProductRail } from "../components/home/ProductRail";
+import { OffersList } from "../components/pdp/OffersList";
 import { useTracker } from "../context/TrackerContext";
-import {
-  completeDescription,
-  completeRatingDistribution,
-  completeReviews,
-  completeSpecifications,
-  productVariantOptions,
-} from "../lib/productPresentation";
+import { productVariantOptions } from "../lib/productPresentation";
 import { categoryBySlug } from "../data/categories";
 
-const FALLBACK_SELLER = { name: "RetailNet", rating: 4.0 };
+const FALLBACK_SELLER = { name: "RetailNet", rating: 4.2 };
 
 export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -48,13 +50,13 @@ export default function ProductDetail() {
     );
   }
 
-  const { price, rating, offers, delivery, highlights, seller, stock } = product;
-  const ratingDistribution = completeRatingDistribution(product);
-  const reviews = completeReviews(product);
-  const specifications = completeSpecifications(product);
-  const description = completeDescription(product);
+  const { price, rating, offers, delivery, highlights, stock, emi } = product;
+  const ratingDistribution = getRatingDistribution(product);
+  const reviews = getReviews(product);
+  const specifications = getSpecifications(product);
+  const description = getDescription(product);
   const totalRatings = ratingDistribution.reduce((sum, item) => sum + item.count, 0);
-  const resolvedSeller = seller ?? FALLBACK_SELLER;
+  const resolvedSeller = getSeller(product) ?? FALLBACK_SELLER;
   const category = categoryBySlug.get(product.category);
   const related = products
     .filter((candidate) => candidate.id !== product.id && candidate.category === product.category)
@@ -93,14 +95,9 @@ export default function ProductDetail() {
           <p className="mt-3 text-fk-sm font-medium text-fk-green">Special price</p>
           <PriceBlock mrp={price.mrp} sellingPrice={price.sellingPrice} size="lg" className="mt-1" />
 
-          {offers.length > 0 && (
-            <section className="mt-5" aria-labelledby="offers-title">
-              <h2 id="offers-title" className="text-fk-md font-medium text-fk-ink">Available offers</h2>
-              <ul className="mt-2 flex flex-col gap-2">
-                {offers.map((offer) => <li key={offer} className="flex items-start gap-2 text-fk-base text-fk-ink"><Tag className="mt-0.5 h-4 w-4 shrink-0 text-fk-green" strokeWidth={2} /><span>{offer} <a href="https://www.flipkart.com/pages/terms" target="_blank" rel="noreferrer" className="font-medium text-fk-blue">T&amp;C</a></span></li>)}
-              </ul>
-            </section>
-          )}
+          <div className="mt-4">
+            <OffersList offers={offers} emi={emi} />
+          </div>
 
           {variants.length > 0 && (
             <fieldset className="mt-5 border-t border-fk-border pt-4">

@@ -27,8 +27,10 @@ export interface CartState {
   promoCode: string | null;
 }
 
+// `addedAt` is overridden only by demo scenarios so dwell-time signals can
+// represent a realistic session while normal cart additions use the clock.
 export type CartAction =
-  | { type: "ADD_ITEM"; productId: string; quantity?: number; variant?: string }
+  | { type: "ADD_ITEM"; productId: string; quantity?: number; variant?: string; addedAt?: string }
   | { type: "REMOVE_ITEM"; productId: string; variant?: string }
   | { type: "UPDATE_QUANTITY"; productId: string; quantity: number; variant?: string }
   | { type: "APPLY_PROMO"; code: string }
@@ -66,7 +68,7 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
             productId: action.productId,
             quantity,
             variant: action.variant,
-            addedAt: new Date().toISOString(),
+            addedAt: action.addedAt ?? new Date().toISOString(),
           },
         ],
       };
@@ -143,7 +145,7 @@ interface CartContextValue {
   promoCode: string | null;
   /** Total quantity across all lines — what the navbar badge shows. */
   count: number;
-  addItem: (productId: string, quantity?: number, variant?: string) => void;
+  addItem: (productId: string, quantity?: number, variant?: string, addedAt?: string) => void;
   removeItem: (productId: string, variant?: string) => void;
   updateQuantity: (productId: string, quantity: number, variant?: string) => void;
   applyPromo: (code: string) => void;
@@ -169,8 +171,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       items: state.items,
       promoCode: state.promoCode,
       count: state.items.reduce((sum, i) => sum + i.quantity, 0),
-      addItem: (productId, quantity, variant) =>
-        dispatch({ type: "ADD_ITEM", productId, quantity, variant }),
+      addItem: (productId, quantity, variant, addedAt) =>
+        dispatch({ type: "ADD_ITEM", productId, quantity, variant, addedAt }),
       removeItem: (productId, variant) =>
         dispatch({ type: "REMOVE_ITEM", productId, variant }),
       updateQuantity: (productId, quantity, variant) =>

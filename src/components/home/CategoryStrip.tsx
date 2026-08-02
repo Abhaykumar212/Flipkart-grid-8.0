@@ -6,10 +6,14 @@ export function CategoryStrip() {
   return (
     <nav className="mb-3 bg-white px-3 py-3 shadow-fk-card sm:px-6" aria-label="Shop by category">
       <ul className="flex items-start justify-between gap-1 overflow-x-auto overscroll-x-contain no-scrollbar sm:gap-2">
-        {homeCategories.map(({ label, slug, icon: Icon, tint }) => (
+        {homeCategories.map(({ label, icon: Icon, tint, categorySlug }) => (
           <li key={label}>
             <Link
-              to={slug ? `/category/${slug}` : "/products"}
+              to={categorySlug
+                ? `/category/${categorySlug}`
+                : label === "All Products"
+                  ? "/products"
+                  : `/search?category=&label=${encodeURIComponent(label)}`}
               className="group flex w-[88px] shrink-0 flex-col items-center gap-1.5 py-1 sm:w-[104px]"
             >
               <span
@@ -19,7 +23,7 @@ export function CategoryStrip() {
               </span>
               <span className="flex max-w-full items-center gap-0.5 truncate text-center text-fk-md font-medium text-fk-ink group-hover:text-fk-blue">
                 {label}
-                {slug && <ChevronDown className="h-3 w-3 text-fk-muted" />}
+                {categorySlug && <ChevronDown className="h-3 w-3 text-fk-muted" />}
               </span>
             </Link>
           </li>

@@ -49,3 +49,16 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+# Python
+__pycache__/
+*.py[cod]
+.venv
+venv/
+.pytest_cache/
+.ruff_cache/
+data/*.db
+ml/data/
+ml/artifacts/**/*.joblib
+
+# Generated repository analysis
+graphify-out/

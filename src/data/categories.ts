@@ -2,8 +2,13 @@ import {
   Smartphone,
   Laptop,
   Shirt,
+  Home,
   WashingMachine,
+  Sparkles,
+  ShoppingBasket,
   Headphones,
+  Armchair,
+  Bike,
   LayoutGrid,
   type LucideIcon,
 } from "lucide-react";
@@ -19,10 +24,7 @@ export interface CatalogCategory {
   subcategories: string[];
 }
 
-/**
- * Store taxonomy for the 50-product demo catalog. Navigation components consume
- * this single collection so desktop, mobile, homepage, and footer stay aligned.
- */
+/** Store taxonomy for the 50-product catalog and its filter pages. */
 export const catalogCategories: CatalogCategory[] = [
   {
     slug: "mobiles",
@@ -73,23 +75,42 @@ export const catalogCategories: CatalogCategory[] = [
 
 export const categoryBySlug = new Map(catalogCategories.map((category) => [category.slug, category]));
 
-export const navCategories = catalogCategories.map((category) => ({
-  label: category.shortLabel,
-  slug: category.slug,
-  hasDropdown: category.subcategories.length > 1,
-}));
+/** Flipkart-style labels map to real inventory where the catalog has a match. */
+export interface NavCategory {
+  label: string;
+  hasDropdown: boolean;
+  categorySlug: CategorySlug | null;
+}
 
-export const homeCategories = [
-  {
-    label: "All Products",
-    slug: null,
-    icon: LayoutGrid,
-    tint: "bg-slate-100 text-slate-600",
-  },
-  ...catalogCategories.map(({ shortLabel: label, slug, icon, tint }) => ({
-    label,
-    slug,
-    icon,
-    tint,
-  })),
+export const navCategories: NavCategory[] = [
+  { label: "Grocery", hasDropdown: false, categorySlug: null },
+  { label: "Mobiles", hasDropdown: false, categorySlug: "mobiles" },
+  { label: "Fashion", hasDropdown: true, categorySlug: "fashion" },
+  { label: "Electronics", hasDropdown: true, categorySlug: "electronics" },
+  { label: "Home & Furniture", hasDropdown: true, categorySlug: null },
+  { label: "Appliances", hasDropdown: false, categorySlug: "appliances" },
+  { label: "Flight Bookings", hasDropdown: false, categorySlug: null },
+  { label: "Beauty, Toys & More", hasDropdown: true, categorySlug: null },
+  { label: "Two Wheelers", hasDropdown: true, categorySlug: null },
+];
+
+export interface HomeCategory {
+  label: string;
+  icon: LucideIcon;
+  tint: string;
+  categorySlug: CategorySlug | null;
+}
+
+export const homeCategories: HomeCategory[] = [
+  { label: "All Products", icon: LayoutGrid, tint: "bg-slate-100 text-slate-600", categorySlug: null },
+  { label: "Grocery", icon: ShoppingBasket, tint: "bg-green-50 text-green-600", categorySlug: null },
+  { label: "Mobiles", icon: Smartphone, tint: "bg-blue-50 text-blue-600", categorySlug: "mobiles" },
+  { label: "Fashion", icon: Shirt, tint: "bg-pink-50 text-pink-600", categorySlug: "fashion" },
+  { label: "Electronics", icon: Laptop, tint: "bg-indigo-50 text-indigo-600", categorySlug: "electronics" },
+  { label: "Home", icon: Home, tint: "bg-amber-50 text-amber-600", categorySlug: null },
+  { label: "Appliances", icon: WashingMachine, tint: "bg-cyan-50 text-cyan-600", categorySlug: "appliances" },
+  { label: "Beauty", icon: Sparkles, tint: "bg-rose-50 text-rose-600", categorySlug: null },
+  { label: "Audio", icon: Headphones, tint: "bg-violet-50 text-violet-600", categorySlug: "audio" },
+  { label: "Furniture", icon: Armchair, tint: "bg-orange-50 text-orange-600", categorySlug: null },
+  { label: "Two Wheelers", icon: Bike, tint: "bg-slate-100 text-slate-600", categorySlug: null },
 ];

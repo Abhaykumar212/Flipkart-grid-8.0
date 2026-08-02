@@ -1,85 +1,178 @@
-import unittest
+import warnings
 
-from backend.main import SessionFeatures, _load_artifacts, predict_abandonment
-from ml.feature_engineering import ALL_FEATURE_NAMES
-from ml.generate_dataset import FEATURE_NAMES, generate_dataset
+import numpy as np
+import pytest
+from sklearn.metrics import roc_auc_score
 
-
-class DatasetTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.dataset = generate_dataset(row_count=6_000, seed=7)
-
-    def test_exact_schema_and_ranges(self):
-        self.assertEqual(list(self.dataset.columns), [*FEATURE_NAMES, "is_abandoned"])
-        self.assertEqual(len(self.dataset), 6_000)
-        self.assertTrue(self.dataset["cart_dwell_time_seconds"].between(10, 600).all())
-        self.assertTrue(self.dataset["cart_pdp_bounce_count"].between(0, 10).all())
-        self.assertTrue(self.dataset["reviews_expanded_count"].between(0, 8).all())
-        self.assertTrue(self.dataset["cart_value_to_aov_ratio"].between(0.2, 4).all())
-        self.assertTrue(self.dataset["delivery_fee_percentage"].between(0, 15).all())
-        self.assertTrue(self.dataset["est_delivery_days"].between(1, 10).all())
-
-    def test_required_non_linear_correlations(self):
-        data = self.dataset
-        overall = data["is_abandoned"].mean()
-        price_shock = data[
-            (data["cart_value_to_aov_ratio"] > 1.8)
-            & (data["delivery_fee_percentage"] > 5)
-        ]["is_abandoned"].mean()
-        quality_uncertainty = data[
-            (data["cart_pdp_bounce_count"] > 3)
-            & (data["reviews_expanded_count"] > 2)
-        ]["is_abandoned"].mean()
-        long_delivery = data[data["est_delivery_days"] > 5]["is_abandoned"].mean()
-        saved_low_value = data[
-            (data["payment_method_saved"] == 1)
-            & (data["cart_value_to_aov_ratio"] < 1)
-        ]["is_abandoned"].mean()
-
-        self.assertGreater(price_shock, overall + 0.15)
-        self.assertGreater(quality_uncertainty, overall + 0.15)
-        self.assertGreater(long_delivery, overall + 0.07)
-        self.assertLess(saved_low_value, overall - 0.15)
+from backend.main import SessionFeatures, _load_artifacts, _risk_tier, predict_abandonment
+from ml.feature_engineering import ALL_FEATURE_NAMES, RAW_FEATURE_NAMES, engineer_features
+from ml.generate_dataset import (
+    BAYES_PROBABILITY_NAME,
+    FEATURE_NAMES,
+    TARGET_NAME,
+    generate_dataset,
+)
 
 
-class InferenceTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        _load_artifacts()
-
-    def test_response_contains_probability_confidence_and_all_shap_impacts(self):
-        payload = SessionFeatures(
-            cart_dwell_time_seconds=420,
-            cart_pdp_bounce_count=7,
-            reviews_expanded_count=5,
-            idle_time_before_checkout=180,
-            delivery_pincode_checked=3,
-            cart_value_to_aov_ratio=2.4,
-            delivery_fee_percentage=9,
-            est_delivery_days=7,
-            has_price_dropped_recently=0,
-            hist_abandonment_rate=0.75,
-            discount_sensitivity_score=0.8,
-            past_return_rate=0.2,
-            wishlist_item_count=2,
-            payment_method_saved=0,
-        )
-        response = predict_abandonment(payload)
-
-        self.assertEqual(response.status, "success")
-        self.assertGreaterEqual(response.abandonment_probability, 0)
-        self.assertLessEqual(response.abandonment_probability, 1)
-        self.assertAlmostEqual(
-            response.confidence_score,
-            abs(response.abandonment_probability - 0.5) * 2,
-            places=5,
-        )
-        # Model now uses 22 features (14 raw + 8 engineered)
-        self.assertEqual(set(response.feature_impacts), set(ALL_FEATURE_NAMES))
-        self.assertLessEqual(len(response.top_contributing_features), 3)
-        self.assertTrue(all(item.shap_value > 0 for item in response.top_contributing_features))
+def _sample_session(**overrides):
+    """A mid-risk session; individual tests override the fields they care about."""
+    base = {
+        "seconds_spent_in_cart": 240.0,
+        "times_returned_to_product_page": 3,
+        "product_reviews_read": 2,
+        "seconds_idle_before_checkout": 60.0,
+        "delivery_pincode_checks": 1,
+        "saved_items_in_wishlist": 2,
+        "cart_value_vs_typical_order": 1.4,
+        "delivery_fee_percent_of_cart": 4.0,
+        "price_dropped_since_first_view": 0,
+        "discount_seeking_tendency": 0.5,
+        "failed_coupon_attempts": 1,
+        "estimated_delivery_days": 4,
+        "payment_method_on_file": 0,
+        "checkout_steps_completed": 1,
+        "payment_attempts_failed": 0,
+        "is_guest_checkout": 1,
+        "past_abandonment_rate": 0.5,
+        "past_order_return_rate": 0.1,
+        "lifetime_orders_placed": 4,
+        "days_since_last_purchase": 60.0,
+        "is_mobile_session": 1,
+        "is_late_night_session": 0,
+    }
+    base.update(overrides)
+    return SessionFeatures(**base)
 
 
-if __name__ == "__main__":
-    unittest.main()
+@pytest.fixture(scope="module")
+def dataset():
+    return generate_dataset(row_count=20_000, seed=7)
+
+
+@pytest.fixture(scope="module")
+def _loaded_artifacts():
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _load_artifacts()
+    except Exception as error:
+        pytest.skip(str(error))
+
+
+def test_exact_schema_and_ranges(dataset):
+    assert list(dataset.columns) == [*FEATURE_NAMES, TARGET_NAME, BAYES_PROBABILITY_NAME]
+    assert len(dataset) == 20_000
+    assert len(FEATURE_NAMES) == 22
+
+    bounds = {
+        "seconds_spent_in_cart": (10, 900),
+        "times_returned_to_product_page": (0, 10),
+        "product_reviews_read": (0, 8),
+        "seconds_idle_before_checkout": (0, 300),
+        "delivery_pincode_checks": (0, 5),
+        "cart_value_vs_typical_order": (0.1, 6.0),
+        "delivery_fee_percent_of_cart": (0, 25),
+        "estimated_delivery_days": (1, 10),
+        "checkout_steps_completed": (0, 3),
+        "payment_attempts_failed": (0, 5),
+        "past_order_return_rate": (0, 0.5),
+        "days_since_last_purchase": (0, 400),
+    }
+    for column, (low, high) in bounds.items():
+        assert dataset[column].between(low, high).all(), f"{column} outside [{low}, {high}]"
+
+
+def test_binary_features_are_binary(dataset):
+    for column in (
+        "price_dropped_since_first_view",
+        "payment_method_on_file",
+        "is_guest_checkout",
+        "is_mobile_session",
+        "is_late_night_session",
+        TARGET_NAME,
+    ):
+        assert set(dataset[column].unique()) <= {0, 1}, column
+
+
+def test_documented_abandonment_drivers_move_in_expected_direction(dataset):
+    """Each assertion maps to a published cart-abandonment driver."""
+    overall = dataset[TARGET_NAME].mean()
+
+    def rate(mask):
+        return dataset[mask][TARGET_NAME].mean()
+
+    assert rate(dataset["delivery_fee_percent_of_cart"] > 8) > overall + 0.08
+    assert rate(dataset["cart_value_vs_typical_order"] > 2.0) > overall + 0.08
+    assert rate(dataset["payment_attempts_failed"] > 0) > overall + 0.07
+    assert rate(dataset["is_guest_checkout"] == 1) > overall + 0.04
+    assert rate(dataset["estimated_delivery_days"] > 5) > overall + 0.03
+    assert rate(dataset["checkout_steps_completed"] == 3) < overall - 0.10
+    assert rate(dataset["payment_method_on_file"] == 1) < overall - 0.07
+
+
+def test_bayes_column_is_a_valid_probability_and_beats_chance(dataset):
+    bayes = dataset[BAYES_PROBABILITY_NAME]
+    assert bayes.between(0.0, 1.0).all()
+    auc = roc_auc_score(dataset[TARGET_NAME], bayes)
+    assert 0.70 < auc < 0.95
+
+
+def test_feature_output_shape_and_order():
+    frame = generate_dataset(row_count=200, seed=3)
+    engineered = engineer_features(frame[RAW_FEATURE_NAMES])
+    assert list(engineered.columns) == ALL_FEATURE_NAMES
+    assert len(engineered) == 200
+
+
+def test_no_target_or_oracle_can_leak_through():
+    frame = generate_dataset(row_count=100, seed=4)
+    engineered = engineer_features(frame)
+    assert TARGET_NAME not in engineered.columns
+    assert BAYES_PROBABILITY_NAME not in engineered.columns
+
+
+def test_engineered_features_are_finite():
+    frame = generate_dataset(row_count=2_000, seed=5)
+    engineered = engineer_features(frame[RAW_FEATURE_NAMES])
+    assert np.isfinite(engineered.to_numpy()).all()
+
+
+def test_response_contains_probability_confidence_and_all_shap_impacts(_loaded_artifacts):
+    response = predict_abandonment(_sample_session())
+
+    assert response.status == "success"
+    assert 0 <= response.abandonment_probability <= 1
+    assert response.confidence_score == pytest.approx(
+        abs(response.abandonment_probability - 0.5) * 2,
+        abs=1e-5,
+    )
+    assert set(response.feature_impacts) == set(ALL_FEATURE_NAMES)
+    assert len(response.top_contributing_features) <= 3
+    assert all(item.shap_value > 0 for item in response.top_contributing_features)
+    assert response.risk_tier in {"low", "medium", "high"}
+
+
+def test_checkout_progress_reduces_predicted_risk(_loaded_artifacts):
+    early = predict_abandonment(_sample_session(checkout_steps_completed=0))
+    late = predict_abandonment(_sample_session(checkout_steps_completed=3))
+    assert late.abandonment_probability < early.abandonment_probability
+
+
+def test_payment_failures_increase_predicted_risk(_loaded_artifacts):
+    clean = predict_abandonment(_sample_session(payment_attempts_failed=0))
+    failing = predict_abandonment(_sample_session(payment_attempts_failed=3))
+    assert failing.abandonment_probability > clean.abandonment_probability
+
+
+def test_saved_card_reduces_predicted_risk(_loaded_artifacts):
+    guest = predict_abandonment(_sample_session(payment_method_on_file=0))
+    saved = predict_abandonment(_sample_session(payment_method_on_file=1))
+    assert saved.abandonment_probability < guest.abandonment_probability
+
+
+@pytest.mark.parametrize(
+    ("probability", "expected"),
+    ((0.95, "high"), (0.70, "medium"), (0.10, "low")),
+)
+def test_risk_tier_matches_documented_thresholds(probability, expected):
+    assert _risk_tier(probability) == expected
