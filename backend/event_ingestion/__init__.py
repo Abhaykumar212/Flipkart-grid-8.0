@@ -1,0 +1,1 @@
+"""Validated, idempotent event ingestion."""

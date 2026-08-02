@@ -12,7 +12,15 @@ class SessionStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def set(self, key: str, value: Any, ttl_seconds: float, *, sliding: bool = True) -> None:
+    def set(
+        self,
+        key: str,
+        value: Any,
+        ttl_seconds: float,
+        *,
+        sliding: bool = True,
+        hard_ttl_seconds: float | None = None,
+    ) -> None:
         raise NotImplementedError
 
     @abstractmethod
@@ -54,13 +62,27 @@ class InMemorySessionStore(SessionStore):
                 entry.expires_at = min(now + entry.ttl_seconds, entry.hard_expires_at)
             return deepcopy(entry.value)
 
-    def set(self, key: str, value: Any, ttl_seconds: float, *, sliding: bool = True) -> None:
+    def set(
+        self,
+        key: str,
+        value: Any,
+        ttl_seconds: float,
+        *,
+        sliding: bool = True,
+        hard_ttl_seconds: float | None = None,
+    ) -> None:
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be positive")
+        if hard_ttl_seconds is not None and hard_ttl_seconds <= 0:
+            raise ValueError("hard_ttl_seconds must be positive")
         now = monotonic()
         with self._lock:
             current = self._entries.get(key)
-            hard_expires_at = current.hard_expires_at if current else now + self._hard_cap_seconds
+            hard_expires_at = (
+                current.hard_expires_at
+                if current
+                else now + (hard_ttl_seconds or self._hard_cap_seconds)
+            )
             self._entries[key] = _Entry(
                 value=deepcopy(value),
                 expires_at=min(now + ttl_seconds, hard_expires_at),
@@ -89,7 +111,15 @@ class RedisSessionStore(SessionStore):
     def get(self, key: str) -> Any | None:
         raise NotImplementedError
 
-    def set(self, key: str, value: Any, ttl_seconds: float, *, sliding: bool = True) -> None:
+    def set(
+        self,
+        key: str,
+        value: Any,
+        ttl_seconds: float,
+        *,
+        sliding: bool = True,
+        hard_ttl_seconds: float | None = None,
+    ) -> None:
         raise NotImplementedError
 
     def delete(self, key: str) -> None:

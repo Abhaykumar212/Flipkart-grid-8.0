@@ -1,9 +1,20 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
+
+
+Identifier = Annotated[str, Field(min_length=1, max_length=128)]
+ShortText = Annotated[str, Field(min_length=1, max_length=200)]
 
 
 class EventType(StrEnum):
@@ -35,19 +46,23 @@ class MetadataModel(BaseModel):
 
 
 class SessionStartedMetadata(MetadataModel):
-    device_type: str
-    referral_source: str
+    device_type: Literal["MOBILE", "DESKTOP"]
+    referral_source: ShortText
     viewport_width: Annotated[int, Field(gt=0)]
 
 
 class SearchPerformedMetadata(MetadataModel):
-    query: str
+    query: Annotated[str, Field(min_length=1, max_length=500)]
     result_count: Annotated[int, Field(ge=0)]
-    sort_order: str
+    sort_order: ShortText
 
 
-class SourceMetadata(MetadataModel):
-    source: str
+class ProductSourceMetadata(MetadataModel):
+    source: Literal["SEARCH", "RAIL", "CATEGORY", "DIRECT"]
+
+
+class ReviewSourceMetadata(MetadataModel):
+    source: ShortText
 
 
 class ReviewDwellMetadata(MetadataModel):
@@ -55,17 +70,17 @@ class ReviewDwellMetadata(MetadataModel):
 
 
 class SimilarProductMetadata(MetadataModel):
-    origin_product_id: str
+    origin_product_id: Identifier
 
 
 class ProductComparedMetadata(MetadataModel):
-    compared_with: list[str]
+    compared_with: Annotated[list[Identifier], Field(min_length=1, max_length=20)]
 
 
 class ItemAddedMetadata(MetadataModel):
     quantity: Annotated[int, Field(gt=0)]
     unit_price: Annotated[float, Field(gt=0)]
-    variant: str | None = None
+    variant: Annotated[str, Field(min_length=1, max_length=128)] | None = None
 
 
 class ItemRemovedMetadata(MetadataModel):
@@ -91,58 +106,52 @@ class DeliveryCheckedMetadata(MetadataModel):
 
 
 class CouponSearchedMetadata(MetadataModel):
-    code: str | None = None
+    code: Annotated[str, Field(min_length=1, max_length=64)] | None = None
     applied: bool
 
 
 class CheckoutStepMetadata(MetadataModel):
     step: Annotated[int, Field(ge=1, le=3)]
-    step_name: str
+    step_name: ShortText
 
 
 class PaymentFailedMetadata(MetadataModel):
-    method: str
-    reason_code: str
+    method: ShortText
+    reason_code: ShortText
     attempt_no: Annotated[int, Field(gt=0)]
 
 
 class PaymentMethodChangedMetadata(MetadataModel):
-    from_method: str
-    to_method: str
+    from_method: ShortText
+    to_method: ShortText
 
 
 class InterventionShownMetadata(MetadataModel):
-    decision_id: str
-    intervention_id: str
-    surface: str
+    decision_id: Identifier
+    intervention_id: Identifier
+    surface: ShortText
 
 
 class InterventionOutcomeMetadata(MetadataModel):
-    decision_id: str
-    intervention_id: str
+    decision_id: Identifier
+    intervention_id: Identifier
 
 
 class OrderCompletedMetadata(MetadataModel):
-    order_id: str
+    order_id: Identifier
     order_value: Annotated[float, Field(gt=0)]
-    payment_method: str
+    payment_method: ShortText
 
 
 class SessionEndedMetadata(MetadataModel):
-    reason: str
-
-    @field_validator("reason")
-    @classmethod
-    def validate_reason(cls, value: str) -> str:
-        if value not in {"EXPLICIT", "TIMEOUT", "UNLOAD"}:
-            raise ValueError("reason must be EXPLICIT, TIMEOUT, or UNLOAD")
-        return value
+    reason: Literal["EXPLICIT", "TIMEOUT", "UNLOAD"]
 
 
 Metadata = (
     SessionStartedMetadata
     | SearchPerformedMetadata
-    | SourceMetadata
+    | ProductSourceMetadata
+    | ReviewSourceMetadata
     | ReviewDwellMetadata
     | SimilarProductMetadata
     | ProductComparedMetadata
@@ -164,8 +173,8 @@ Metadata = (
 _METADATA_BY_TYPE: dict[EventType, type[MetadataModel]] = {
     EventType.SESSION_STARTED: SessionStartedMetadata,
     EventType.SEARCH_PERFORMED: SearchPerformedMetadata,
-    EventType.PRODUCT_VIEWED: SourceMetadata,
-    EventType.REVIEW_OPENED: SourceMetadata,
+    EventType.PRODUCT_VIEWED: ProductSourceMetadata,
+    EventType.REVIEW_OPENED: ReviewSourceMetadata,
     EventType.REVIEW_DWELL_RECORDED: ReviewDwellMetadata,
     EventType.SIMILAR_PRODUCT_VIEWED: SimilarProductMetadata,
     EventType.PRODUCT_COMPARED: ProductComparedMetadata,
@@ -202,9 +211,9 @@ class EventEnvelope(BaseModel):
 
     event_id: UUID
     event_type: EventType
-    session_id: str
-    user_id: str | None = None
-    product_id: str | None = None
+    session_id: Identifier
+    user_id: Identifier | None = None
+    product_id: Identifier | None = None
     sequence_no: Annotated[int, Field(gt=0)]
     client_timestamp: datetime
     metadata: Metadata
@@ -214,12 +223,35 @@ class EventEnvelope(BaseModel):
     def validate_metadata_for_event(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
-        event_type = EventType(data.get("event_type"))
+        raw_event_type = data.get("event_type")
+        try:
+            event_type = EventType(raw_event_type)
+        except (TypeError, ValueError) as error:
+            value_error = ValueError(f"Unknown event_type: {raw_event_type!r}")
+            raise ValidationError.from_exception_data(cls.__name__, [{
+                "type": "value_error",
+                "loc": ("event_type",),
+                "input": raw_event_type,
+                "ctx": {"error": value_error},
+            }]) from error
         metadata_model = _METADATA_BY_TYPE[event_type]
         data = dict(data)
-        data["metadata"] = metadata_model.model_validate(data.get("metadata", {}))
+        try:
+            data["metadata"] = metadata_model.model_validate(data.get("metadata", {}))
+        except ValidationError as error:
+            errors = [
+                {**item, "loc": ("metadata", *item["loc"])}
+                for item in error.errors()
+            ]
+            raise ValidationError.from_exception_data(cls.__name__, errors) from error
         if event_type in PRODUCT_EVENT_TYPES and not data.get("product_id"):
-            raise ValueError(f"product_id is required for {event_type.value}")
+            value_error = ValueError(f"product_id is required for {event_type.value}")
+            raise ValidationError.from_exception_data(cls.__name__, [{
+                "type": "value_error",
+                "loc": ("product_id",),
+                "input": data.get("product_id"),
+                "ctx": {"error": value_error},
+            }])
         return data
 
     @field_validator("event_id")
@@ -227,4 +259,11 @@ class EventEnvelope(BaseModel):
     def require_uuid4(cls, value: UUID) -> UUID:
         if value.version != 4:
             raise ValueError("event_id must be a UUIDv4")
+        return value
+
+    @field_validator("client_timestamp")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("client_timestamp must include a timezone")
         return value

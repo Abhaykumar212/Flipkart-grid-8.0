@@ -36,14 +36,17 @@ jobs:
       - name: Migrate database
         run: alembic upgrade head
 
-      - name: Test Phase 1 backend
+      - name: Test Phase 2 backend
         run: >-
           pytest tests/unit tests/integration
           --cov=backend.domain
           --cov=backend.storage
           --cov=backend.recommendation
+          --cov=backend.event_ingestion
+          --cov=backend.session_state
+          --cov=backend.observability
           --cov=scripts
-          --cov-fail-under=70
+          --cov-fail-under=80
           -q
 
       - name: Test frontend

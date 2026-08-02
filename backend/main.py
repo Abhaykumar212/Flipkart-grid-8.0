@@ -13,7 +13,10 @@ import joblib
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +47,9 @@ from .schemas import (  # noqa: E402
 )
 from .trace import Stage, Status, TraceRecorder  # noqa: E402
 from .products.router import router as products_router  # noqa: E402
+from .event_ingestion.router import router as events_router  # noqa: E402
+from .session_state.router import router as sessions_router  # noqa: E402
+from .observability.logging import configure_logging  # noqa: E402
 
 LOGGER = logging.getLogger(__name__)
 
@@ -157,6 +163,7 @@ def _load_artifacts() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     global ARTIFACT_LOAD_ERROR
+    configure_logging(config.LOG_LEVEL)
     try:
         _load_artifacts()
         ARTIFACT_LOAD_ERROR = None
@@ -180,6 +187,38 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 app.include_router(products_router)
+app.include_router(events_router)
+app.include_router(sessions_router)
+
+
+@app.exception_handler(HTTPException)
+async def http_problem_detail(_, error: HTTPException) -> JSONResponse:
+    return JSONResponse(
+        status_code=error.status_code,
+        media_type="application/problem+json",
+        headers=error.headers,
+        content={
+            "type": "about:blank",
+            "title": "Request failed",
+            "status": error.status_code,
+            "detail": error.detail,
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_problem_detail(_, error: RequestValidationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        media_type="application/problem+json",
+        content=jsonable_encoder({
+            "type": "about:blank",
+            "title": "Validation error",
+            "status": 422,
+            "detail": "Request validation failed",
+            "errors": error.errors(),
+        }),
+    )
 
 
 @app.get("/health")
