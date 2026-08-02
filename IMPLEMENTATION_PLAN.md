@@ -102,6 +102,8 @@ Status legend: **F** = Frozen by the architecture spec (must not be changed) · 
 | DEC-040 | `/health` (liveness) and `/ready` (model + DB loaded) are separate. | N | The current `/health` reports `"online"` even with no model loaded — actively misleading. | Kubernetes-shaped and honest. |
 | DEC-041 | Phase 0 CI runs only checks supported by the Phase 0 tree; Alembic and coverage-gated `tests/{unit,integration}` checks activate in Phase 1. `ruff==0.15.11` is a declared dev dependency. | N | The original Phase 0 CI instruction referenced migrations and test directories that Phase 1 creates, and invoked Ruff without installing it. A baseline workflow must be green on the baseline tree. | Phase 0 runs Ruff, Oxlint, TypeScript, pytest, and Vitest; Phase 1 expands the workflow when those assets exist. |
 | DEC-042 | Legacy artifact-dependent inference tests skip when ignored or incompatible joblib artifacts are absent; all non-artifact contracts still run. | N | Phase 0 explicitly untracks regenerable joblib binaries, so a clean checkout cannot load them. Regenerating the obsolete model in baseline CI conflicts with the phased model replacement. | Phase 8 replaces the skip with model fixtures and load-time artifact contract tests. |
+| DEC-043 | The schema contains **18 application tables**, not 17. | N | §7 explicitly defines 18 distinct required tables; the repeated “17” count was an arithmetic error. Omitting any one would violate the schema and audit requirements. | Table-count references and the Phase 1 commit boundary are corrected to 18; Alembic’s own `alembic_version` table is not included in that count. |
+| DEC-044 | Migration 0003 also creates `experiments` and `model_registry`; migration 0005 creates `experiment_assignments`. | N | `decision_traces.experiment_id` and `model_predictions.(model_name,model_version)` require their referenced tables to exist before portable FK creation. The original filename split had forward references that fail on Postgres. | All five revisions remain reversible; the dependency-respecting split is SQLite/Postgres portable. |
 
 ---
 
@@ -182,7 +184,7 @@ flowchart TB
 
     subgraph ST["Storage"]
         ONLINE[(SessionStore<br/>in-process TTL)]
-        HIST[(SQLite / Postgres<br/>17 tables)]
+        HIST[(SQLite / Postgres<br/>18 tables)]
         ART[(ml/artifacts<br/>model registry)]
     end
 
@@ -449,9 +451,9 @@ Flipkart-grid-8.0/
 │   └── versions/
 │       ├── 0001_core_entities.py       # users, products, reviews, sessions, carts, cart_items
 │       ├── 0002_events.py              # events + indexes
-│       ├── 0003_decisions.py           # snapshots, predictions, traces, catalogue
+│       ├── 0003_decisions.py           # catalogue, experiments, registry, snapshots, predictions, traces
 │       ├── 0004_outcomes.py            # impressions, outcomes, orders
-│       └── 0005_experiments.py         # experiments, assignments, model_registry
+│       └── 0005_experiments.py         # experiment assignments
 │
 ├── backend/                            # modular monolith (spec §4.2)
 │   ├── main.py                         # app factory, lifespan, routers, CORS
@@ -460,7 +462,7 @@ Flipkart-grid-8.0/
 │   │
 │   ├── storage/
 │   │   ├── db.py                       # engine from DATABASE_URL (DEC-018)
-│   │   ├── models.py                   # 17 SQLAlchemy tables
+│   │   ├── models.py                   # 18 SQLAlchemy tables
 │   │   ├── repositories.py             # query helpers
 │   │   └── session_store.py            # SessionStore ABC + InMemory + Redis stub
 │   │
@@ -1927,11 +1929,11 @@ git add -A ; git commit
 
 **Objective.** A real database with the full schema, seeded from the existing 50-product catalog.
 
-**Visible outcome.** `alembic upgrade head` creates 17 tables; `python -m scripts.seed_catalog` fills products, reviews, and the intervention catalogue; `GET /api/v1/products` returns them.
+**Visible outcome.** `alembic upgrade head` creates 18 application tables; `python -m scripts.seed_catalog` fills products, reviews, and the intervention catalogue; `GET /api/v1/products` returns them.
 
 **Prerequisites.** Phase 0.
 
-**Files.** Create `backend/storage/{db,models,repositories,session_store}.py`, `backend/domain/{events,causes,interventions,enums}.py`, `backend/recommendation/catalogue.py`, `alembic.ini`, `alembic/env.py`, `alembic/versions/000{1..5}_*.py`, `scripts/{export_catalog.py,seed_catalog.py}`, `backend/config.py` (rewrite). Modify `backend/main.py`, `.env.example`.
+**Files.** Create `backend/storage/{db,models,repositories,session_store}.py`, `backend/domain/{events,causes,interventions,enums}.py`, `backend/recommendation/catalogue.py`, `alembic.ini`, `alembic/env.py`, `alembic/versions/000{1..5}_*.py`, `scripts/{export_catalog.py,export_catalog.ts,seed_catalog.py}`, `backend/config.py` (rewrite). Modify `backend/main.py`, `.env.example`.
 
 **Tasks.**
 1. `backend/domain/enums.py` — `RiskBand`, `Decision`, `PolicyStatus`, `CostLevel`, `Channel`.
@@ -1939,15 +1941,15 @@ git add -A ; git commit
 3. `backend/domain/interventions.py` + `backend/recommendation/catalogue.py` — all 12 entries from §12.1 with full metadata.
 4. `backend/domain/events.py` — the 21 event types + envelope model + per-type metadata models (§8.2).
 5. `backend/storage/db.py` — engine from `DATABASE_URL` (DEC-018), `SessionLocal`, `Base`. SQLite gets `check_same_thread=False` and `PRAGMA foreign_keys=ON`.
-6. `backend/storage/models.py` — all 17 tables exactly as §7.
+6. `backend/storage/models.py` — all 18 tables exactly as §7 (DEC-043).
 7. `backend/storage/session_store.py` — `SessionStore` ABC + `InMemorySessionStore` (TTL dict) + a `RedisSessionStore` stub raising `NotImplementedError`.
 8. Alembic init; five migrations split as in §6.
-9. `scripts/export_catalog.py` — a small Node/tsx script emitting `fixtures/catalog.json` from `src/data/products.ts`. Reviews come from `products[].reviews` where present, backfilled by `src/lib/productDetails.ts`'s deterministic generator so all 50 products have ≥6 reviews.
+9. `scripts/export_catalog.ts` — a small Node/tsx script emitting `fixtures/catalog.json` from `src/data/products.ts`; `scripts/export_catalog.py` is the cross-platform Python entry point. Reviews come from `products[].reviews` where present, backfilled by `src/lib/productDetails.ts`'s deterministic generator so all 50 products have ≥6 reviews.
 10. `scripts/seed_catalog.py` — idempotent upsert of products, reviews, catalogue.
 11. `backend/config.py` — every threshold from §20.1, read from env with the documented defaults. **No magic numbers anywhere else in the codebase.**
 12. `backend/main.py` — mount a `/api/v1/products` router; keep the existing endpoints working.
 
-**Schema changes.** All 17 tables (§7). Migrations `0001`–`0005`.
+**Schema changes.** All 18 tables (§7). Migrations `0001`–`0005`.
 
 **Tests.** `tests/integration/test_migrations.py` (up/down clean, FKs enforced, one-`ACTIVE`-per-type index holds); `tests/integration/test_seed.py` (50 products, ≥300 reviews, 12 catalogue rows, re-running seed changes nothing); `tests/unit/test_domain.py` (21 events, 11 causes, ≥1 intervention per cause).
 
@@ -1961,11 +1963,11 @@ curl http://localhost:8000/api/v1/products?category=mobiles
 pytest tests/integration tests/unit -q
 ```
 
-**Manual inspection.** Open `data/grid8.db` in a SQLite viewer: 17 tables, 50 products, 12 catalogue rows with correct `cost_level`/`intrusiveness`. `GET /api/v1/products/apple-iphone-16-ultramarine-128gb` returns a full product.
+**Manual inspection.** Open `data/grid8.db` in a SQLite viewer: 18 application tables, 50 products, 12 catalogue rows with correct `cost_level`/`intrusiveness`. `GET /api/v1/products/apple-iphone-16-ultramarine-128gb` returns a full product.
 
 **Acceptance criteria.**
 - [ ] `alembic upgrade head` then `alembic downgrade base` both succeed.
-- [ ] 17 tables exist with the PKs, FKs, unique constraints, and indexes from §7.
+- [ ] 18 application tables exist with the PKs, FKs, unique constraints, and indexes from §7.
 - [ ] Seed is idempotent (row counts identical after a second run).
 - [ ] All 12 catalogue entries match §12.1 exactly.
 - [ ] Every cause in the taxonomy has ≥1 intervention that supports it.
@@ -1973,7 +1975,7 @@ pytest tests/integration tests/unit -q
 
 **Failure cases.** Insert a `cart_item` with an unknown `product_id` → FK error. Insert a second `ACTIVE` risk model → unique-index error. Insert an event with an invalid `event_type` → CHECK error.
 
-**Commit.** `feat(db): 17-table schema, migrations, domain model, catalog seed`
+**Commit.** `feat(db): 18-table schema, migrations, domain model, catalog seed`
 
 **Deferred.** Events are not yet ingested; nothing writes to the new tables except the seed.
 

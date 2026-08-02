@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -42,11 +43,15 @@ from .schemas import (  # noqa: E402
     TraceSpan,
 )
 from .trace import Stage, Status, TraceRecorder  # noqa: E402
+from .products.router import router as products_router  # noqa: E402
+
+LOGGER = logging.getLogger(__name__)
 
 MODEL: Any = None
 CALIBRATOR: Any = None
 EXPLAINER: Any = None
 FEATURE_NAMES: list = []
+ARTIFACT_LOAD_ERROR: str | None = None
 
 
 class SessionFeatures(BaseModel):
@@ -151,7 +156,13 @@ def _load_artifacts() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    _load_artifacts()
+    global ARTIFACT_LOAD_ERROR
+    try:
+        _load_artifacts()
+        ARTIFACT_LOAD_ERROR = None
+    except Exception as error:
+        ARTIFACT_LOAD_ERROR = str(error)
+        LOGGER.warning("Legacy ML artifacts unavailable; inference endpoints will return 503: %s", error)
     yield
 
 
@@ -163,11 +174,12 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=list(config.CORS_ORIGINS),
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
+app.include_router(products_router)
 
 
 @app.get("/health")

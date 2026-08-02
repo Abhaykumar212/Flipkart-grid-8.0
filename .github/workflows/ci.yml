@@ -26,15 +26,25 @@ jobs:
           npm ci
 
       - name: Check Python
-        run: ruff check backend ml
+        run: ruff check backend ml scripts tests
 
       - name: Check frontend
         run: |
           npm run lint
           npx tsc -b --noEmit
 
-      - name: Test Python
-        run: pytest -q
+      - name: Migrate database
+        run: alembic upgrade head
+
+      - name: Test Phase 1 backend
+        run: >-
+          pytest tests/unit tests/integration
+          --cov=backend.domain
+          --cov=backend.storage
+          --cov=backend.recommendation
+          --cov=scripts
+          --cov-fail-under=70
+          -q
 
       - name: Test frontend
         run: npx vitest run

@@ -6,6 +6,8 @@ node_modules
 
 # Testing & Coverage
 /coverage
+.coverage
+htmlcov/
 
 # Production & Build outputs
 dist
