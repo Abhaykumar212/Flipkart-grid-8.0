@@ -17,7 +17,8 @@ export type PipelineStage =
   | "model_inference"
   | "shap_attribution"
   | "risk_gate"
-  | "root_cause_agent";
+  | "root_cause_agent"
+  | "intervention_ranking";
 
 export type SpanStatus = "ok" | "running" | "skipped" | "error" | "rate_limited";
 
@@ -74,6 +75,33 @@ export interface GateDecision {
   checks: Record<string, unknown>;
 }
 
+/** Mirrors backend/schemas.py ExplanationFactor. */
+export interface ExplanationFactor {
+  factor: string;
+  observation: string;
+  contribution: number;
+}
+
+/** Mirrors backend/schemas.py RecommendedIntervention. */
+export interface RecommendedIntervention {
+  lever_id: string;
+  headline: string;
+  rationale: string;
+  score: number;
+  confidence: "high" | "medium" | "low";
+  expected_conversion_gain: number;
+  business_cost: "low" | "medium" | "high";
+  llm_endorsed: boolean;
+  explanation: ExplanationFactor[];
+}
+
+/** Mirrors backend/schemas.py InterventionPlan — the Phase 3 handoff. */
+export interface InterventionPlan {
+  top_interventions: RecommendedIntervention[];
+  fallback_intervention: RecommendedIntervention | null;
+  excluded_lever_ids: string[];
+}
+
 export interface PipelineRun {
   id: string;
   startedAt: number;
@@ -84,6 +112,7 @@ export interface PipelineRun {
   riskTier: string | null;
   gate: GateDecision | null;
   analysis: RootCauseAnalysis | null;
+  interventionPlan: InterventionPlan | null;
   modelUsed: string | null;
   llmLatencyMs: number;
   message: string | null;
@@ -102,6 +131,7 @@ export interface RootCauseResponse {
   };
   gate: GateDecision;
   analysis: RootCauseAnalysis | null;
+  intervention_plan: InterventionPlan | null;
   model_used: string | null;
   latency_ms: number;
   message: string | null;
@@ -142,6 +172,7 @@ class PipelineTraceStore {
       riskTier: null,
       gate: null,
       analysis: null,
+      interventionPlan: null,
       modelUsed: null,
       llmLatencyMs: 0,
       message: null,
@@ -187,6 +218,7 @@ class PipelineTraceStore {
       riskTier: response.prediction?.risk_tier ?? null,
       gate: response.gate,
       analysis: response.analysis,
+      interventionPlan: response.intervention_plan,
       modelUsed: response.model_used,
       llmLatencyMs: response.latency_ms,
       message: response.message,
@@ -229,4 +261,5 @@ export const STAGE_LABELS: Record<string, string> = {
   shap_attribution: "SHAP attribution",
   risk_gate: "Risk gate",
   root_cause_agent: "Root cause agent",
+  intervention_ranking: "Intervention ranking",
 };

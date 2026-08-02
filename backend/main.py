@@ -34,11 +34,15 @@ from ml.feature_engineering import (  # noqa: E402
 )
 
 from . import config  # noqa: E402
-from .agents import gate, root_cause  # noqa: E402
+from .agents import companion_chat, gate, intervention, root_cause  # noqa: E402
+from .agents.memory import memory_store  # noqa: E402
 from .schemas import (  # noqa: E402
     CartContext,
+    CompanionChatRequest,
+    CompanionChatResponse,
     GateDecision,
     RootCauseResponse,
+    ShopperProfile,
     TraceSpan,
 )
 from .trace import Stage, Status, TraceRecorder  # noqa: E402
@@ -100,10 +104,21 @@ class RootCauseRequest(BaseModel):
 
     features: SessionFeatures
     cart_context: CartContext = Field(default_factory=CartContext)
+    shopper_profile: ShopperProfile = Field(default_factory=ShopperProfile)
     # Stable per-browser-session id, used for dedup and budget accounting.
     session_id: str = "anonymous"
     # Manual "Re-run analysis" bypasses dedup/cooldown but not the session cap.
     force: bool = False
+
+
+class InterventionFeedback(BaseModel):
+    """Shopper response to a surfaced intervention, from the companion widget."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    lever_id: str
+    action: Literal["accepted", "dismissed", "converted"]
 
 
 class FeatureContribution(BaseModel):
@@ -361,7 +376,7 @@ def root_cause_analysis(payload: RootCauseRequest) -> RootCauseResponse:
         checks=decision.checks,
     )
 
-    def envelope(status: str, analysis=None, meta=None, message=None) -> RootCauseResponse:
+    def envelope(status: str, analysis=None, plan=None, meta=None, message=None) -> RootCauseResponse:
         meta = meta or {}
         return RootCauseResponse(
             pipeline_run_id=recorder.run_id,
@@ -369,6 +384,7 @@ def root_cause_analysis(payload: RootCauseRequest) -> RootCauseResponse:
             prediction=prediction.model_dump(),
             gate=gate_model,
             analysis=analysis,
+            intervention_plan=plan,
             model_used=meta.get("model_used"),
             latency_ms=meta.get("latency_ms", 0.0),
             message=message,
@@ -405,4 +421,62 @@ def root_cause_analysis(payload: RootCauseRequest) -> RootCauseResponse:
         return envelope(status, meta=meta, message=meta.get("error", "Analysis failed"))
 
     gate.gate_store.record_run(payload.session_id, signature)
-    return envelope("success", analysis=analysis, meta=meta)
+
+    with recorder.span(Stage.INTERVENTION_RANKING, "Rank interventions") as span:
+        plan = intervention.build_intervention_plan(
+            analysis=analysis,
+            probability=prediction.abandonment_probability,
+            shopper_profile=payload.shopper_profile,
+            session_id=payload.session_id,
+            memory=memory_store,
+        )
+        span["detail"] = {
+            "top_lever_ids": [item.lever_id for item in plan.top_interventions],
+            "top_scores": [item.score for item in plan.top_interventions],
+            "fallback_lever_id": plan.fallback_intervention.lever_id if plan.fallback_intervention else None,
+            "excluded_lever_ids": plan.excluded_lever_ids,
+        }
+
+    return envelope("success", analysis=analysis, plan=plan, meta=meta)
+
+
+@app.post("/api/intervention-feedback")
+def intervention_feedback(payload: InterventionFeedback) -> dict:
+    """Feedback Agent write path — records the shopper's response so the
+    Memory Agent can penalise repeats this session, and so the log accumulates
+    the (state, action, reward) trail a future RL policy would train on.
+    """
+    memory_store.record(payload.session_id, payload.lever_id, payload.action)
+    return {"status": "recorded"}
+
+
+@app.post("/api/companion-chat", response_model=CompanionChatResponse)
+def companion_chat_endpoint(payload: CompanionChatRequest) -> CompanionChatResponse:
+    """Reactive companion Q&A — product- and review-grounded, context-stuffed.
+
+    Shares the Groq free-tier budget with root-cause analysis, so it degrades
+    the same way: a clean `rate_limited` status rather than a crash.
+    """
+    if not config.companion_groq_is_configured():
+        return CompanionChatResponse(
+            status="not_configured",
+            message="No Groq key configured for chat; set COMPANION_GROQ_API_KEY or GROQ_API_KEY in .env.",
+        )
+
+    reply, meta = companion_chat.chat(
+        payload.product_context, payload.messages, payload.comparison_products, payload.search_history
+    )
+
+    if reply is None:
+        status = "rate_limited" if meta.get("rate_limited") else "error"
+        return CompanionChatResponse(
+            status=status,
+            message=meta.get("error", "Chat request failed"),
+        )
+
+    return CompanionChatResponse(
+        status="success",
+        reply=reply,
+        model_used=meta.get("model_used"),
+        latency_ms=meta.get("latency_ms", 0.0),
+    )

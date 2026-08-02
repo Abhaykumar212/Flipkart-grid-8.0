@@ -10,13 +10,16 @@ import {
 } from "react";
 import { useLocation } from "react-router-dom";
 import { useCart } from "./CartContext";
+import { useWishlist } from "./WishlistContext";
 import { productById } from "../data/products";
 import { computeCartTotals } from "../lib/cartTotals";
+import { userHistory } from "../lib/userHistory";
 import {
   materialSignature,
   sessionTracker,
   type CartContextPayload,
   type PredictionResponse,
+  type ShopperProfilePayload,
   type TrackerSnapshot,
 } from "../lib/tracker";
 import { pipelineTrace, type RootCauseResponse } from "../lib/pipelineTrace";
@@ -61,6 +64,7 @@ function cartStartedAt(items: ReturnType<typeof useCart>["items"]): number | nul
 
 export function TrackerProvider({ children }: { children: ReactNode }) {
   const { items } = useCart();
+  const { productIds: wishlistProductIds } = useWishlist();
   const location = useLocation();
   const totals = computeCartTotals(items);
   const [revision, setRevision] = useState(0);
@@ -183,9 +187,21 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
   const itemsRef = useRef(items);
   const totalsRef = useRef(totals);
   const routeRef = useRef(location.pathname);
+  const wishlistRef = useRef(wishlistProductIds);
   itemsRef.current = items;
   totalsRef.current = totals;
   routeRef.current = location.pathname;
+  wishlistRef.current = wishlistProductIds;
+
+  /** Real (if lightweight) shopper history — wishlist, views, past purchases. */
+  const buildShopperProfile = useCallback((): ShopperProfilePayload => {
+    const history = userHistory.getSnapshot();
+    return {
+      wishlist_product_ids: wishlistRef.current,
+      recent_view_product_ids: history.recentViewProductIds,
+      past_purchase_product_ids: history.pastPurchaseProductIds,
+    };
+  }, []);
 
   /** Snapshot the cart in the shape the agent needs to be concrete about it. */
   const buildCartContext = useCallback((): CartContextPayload => {
@@ -253,7 +269,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
           performance.now() - telemetryStart,
         );
 
-        const result = (await sessionTracker.requestRootCause(cartContext, {
+        const result = (await sessionTracker.requestRootCause(cartContext, buildShopperProfile(), {
           force: options.force,
           signal: controller.signal,
         })) as RootCauseResponse;
@@ -275,7 +291,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
         if (!controller.signal.aborted) setRootCauseLoading(false);
       }
     },
-    [buildCartContext],
+    [buildCartContext, buildShopperProfile],
   );
 
   // Auto-trigger: fire once when the session first crosses the high-risk

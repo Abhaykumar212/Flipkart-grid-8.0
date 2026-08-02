@@ -14,6 +14,7 @@ import {
 import { Logo } from "./Logo";
 import { useCart } from "../../context/CartContext";
 import { useTracker } from "../../context/TrackerContext";
+import { pageContext } from "../../lib/pageContext";
 
 const accountMenu = [
   { label: "My Profile", icon: User },
@@ -68,6 +69,7 @@ export function Navbar() {
     const trimmed = query.trim();
     if (trimmed) {
       recordSearch(trimmed);
+      pageContext.recordSearch(trimmed);
       navigate(`/search?q=${encodeURIComponent(trimmed)}`);
     }
   };

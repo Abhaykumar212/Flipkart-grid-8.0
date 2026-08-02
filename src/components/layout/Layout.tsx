@@ -3,6 +3,7 @@ import { Navbar } from "./Navbar";
 import { CategoryNav } from "./CategoryNav";
 import { Footer } from "./Footer";
 import { AgentInspector } from "../ui/AgentInspector";
+import { CompanionWidget } from "../companion/CompanionWidget";
 
 export function Layout() {
   return (
@@ -14,6 +15,7 @@ export function Layout() {
       </main>
       <Footer />
       <AgentInspector />
+      <CompanionWidget />
     </div>
   );
 }

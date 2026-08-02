@@ -27,6 +27,7 @@ class Stage:
     SHAP_ATTRIBUTION = "shap_attribution"
     RISK_GATE = "risk_gate"
     ROOT_CAUSE_AGENT = "root_cause_agent"
+    INTERVENTION_RANKING = "intervention_ranking"
 
 
 class Status:

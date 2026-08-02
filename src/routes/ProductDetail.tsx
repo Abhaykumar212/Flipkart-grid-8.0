@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Heart } from "lucide-react";
 import { productBySlug } from "../data/products";
 import { formatDeliveryDate } from "../lib/format";
 import {
@@ -17,16 +18,32 @@ import { SpecificationsTable } from "../components/pdp/SpecificationsTable";
 import { RatingsAndReviews } from "../components/pdp/RatingsAndReviews";
 import { OffersList } from "../components/pdp/OffersList";
 import { useTracker } from "../context/TrackerContext";
+import { useWishlist } from "../context/WishlistContext";
+import { userHistory } from "../lib/userHistory";
+import { pageContext } from "../lib/pageContext";
 
 export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
   const product = slug ? productBySlug.get(slug) : undefined;
   const navigate = useNavigate();
   const { recordPincodeCheck, recordProductVisit } = useTracker();
+  const { has, toggle } = useWishlist();
   const [pincode, setPincode] = useState("");
 
   useEffect(() => {
-    if (product) recordProductVisit(product.id);
+    if (product) {
+      recordProductVisit(product.id);
+      userHistory.recordView(product.id);
+      pageContext.setCurrentProduct(product.id);
+      pageContext.recordVisit({
+        productId: product.id,
+        title: product.title,
+        brand: product.brand,
+        category: product.category,
+        price: product.price.sellingPrice,
+      });
+    }
+    return () => pageContext.setCurrentProduct(null);
   }, [product?.id]);
 
   if (!product) {
@@ -62,7 +79,22 @@ export default function ProductDetail() {
         />
 
         <div className="rounded-[2px] bg-white p-6">
-          <h1 className="line-clamp-2 text-fk-xl font-medium text-fk-ink">{product.title}</h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="line-clamp-2 text-fk-xl font-medium text-fk-ink">{product.title}</h1>
+            <button
+              type="button"
+              onClick={() => toggle(product.id)}
+              aria-label={has(product.id) ? "Remove from wishlist" : "Add to wishlist"}
+              aria-pressed={has(product.id)}
+              className="flex shrink-0 items-center gap-1.5 rounded-[2px] border border-fk-border px-3 py-1.5 text-fk-sm font-medium text-fk-ink hover:border-fk-flame"
+            >
+              <Heart
+                className={`h-4 w-4 ${has(product.id) ? "fill-fk-flame text-fk-flame" : "text-fk-muted"}`}
+                strokeWidth={2}
+              />
+              {has(product.id) ? "Wishlisted" : "Wishlist"}
+            </button>
+          </div>
 
           <div className="mt-2 flex items-center gap-3">
             <RatingStars variant="stars" value={rating.value} count={totalRatings} />
@@ -129,7 +161,7 @@ export default function ProductDetail() {
         <p className="text-fk-base text-fk-ink">{description}</p>
       </section>
 
-      <RatingsAndReviews ratingDistribution={ratingDistribution} reviews={reviews} />
+      <RatingsAndReviews productId={product.id} ratingDistribution={ratingDistribution} reviews={reviews} />
     </div>
   );
 }

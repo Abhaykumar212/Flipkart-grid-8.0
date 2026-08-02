@@ -89,6 +89,140 @@ class RootCauseAnalysis(BaseModel):
     levers_to_avoid: List[LeverToAvoid] = Field(default_factory=list)
 
 
+# --- Phase 3: shopper profile + intervention plan --------------------------
+
+
+class ShopperProfile(BaseModel):
+    """Real (if lightweight) shopper history, replacing scalar placeholders.
+
+    Backed by browser localStorage on the frontend, not an account service —
+    still no auth exists — but these are genuine per-browser event lists
+    instead of a single averaged counter.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    wishlist_product_ids: List[str] = Field(default_factory=list)
+    recent_view_product_ids: List[str] = Field(default_factory=list)
+    past_purchase_product_ids: List[str] = Field(default_factory=list)
+
+
+class ExplanationFactor(BaseModel):
+    factor: str
+    observation: str
+    contribution: float
+
+
+class RecommendedIntervention(BaseModel):
+    lever_id: Literal[tuple(LEVER_IDS)]  # type: ignore[valid-type]
+    headline: str
+    rationale: str
+    score: float
+    confidence: Literal["high", "medium", "low"]
+    expected_conversion_gain: float
+    business_cost: Literal["low", "medium", "high"]
+    llm_endorsed: bool
+    explanation: List[ExplanationFactor] = Field(default_factory=list)
+
+
+class InterventionPlan(BaseModel):
+    """The Phase 3 handoff: what to actually show the shopper."""
+
+    top_interventions: List[RecommendedIntervention] = Field(default_factory=list)
+    fallback_intervention: Optional[RecommendedIntervention] = None
+    excluded_lever_ids: List[str] = Field(default_factory=list)
+
+
+# --- Companion chat: product-grounded Q&A -----------------------------------
+
+
+class ProductReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rating: float = Field(ge=0, le=5)
+    title: str = ""
+    text: str = ""
+
+
+class ProductSpecItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    value: str
+
+
+class RatingDistributionEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stars: int = Field(ge=1, le=5)
+    count: int = Field(ge=0)
+
+
+class ProductContext(BaseModel):
+    """Everything the companion needs to answer product questions, sent by the
+    client on each turn since the backend has no access to the frontend's mock
+    catalog. Context-stuffed rather than retrieved — the per-product corpus
+    (a handful of reviews, a short spec sheet) is small enough that handing the
+    LLM all of it directly is simpler and more accurate than a retrieval step
+    would be, with no embeddings or vector store needed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    brand: str = ""
+    category: str = ""
+    mrp: float = Field(ge=0, default=0)
+    selling_price: float = Field(ge=0, default=0)
+    description: str = ""
+    highlights: List[str] = Field(default_factory=list)
+    specifications: List[ProductSpecItem] = Field(default_factory=list)
+    delivery_free: bool = True
+    estimated_delivery_days: int = Field(ge=0, le=60, default=3)
+    emi_monthly: Optional[float] = None
+    emi_months: Optional[int] = None
+    offers: List[str] = Field(default_factory=list)
+    seller_name: str = ""
+    seller_rating: float = Field(ge=0, le=5, default=0)
+    rating_value: float = Field(ge=0, le=5, default=0)
+    rating_count: int = Field(ge=0, default=0)
+    rating_distribution: List[RatingDistributionEntry] = Field(default_factory=list)
+    in_stock: bool = True
+    quantity_left: int = Field(ge=0, default=0)
+    reviews: List[ProductReview] = Field(default_factory=list)
+
+
+class ChatMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class CompanionChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str = "anonymous"
+    product_context: Optional[ProductContext] = None
+    # Populated only when the shopper has visited several similar products this
+    # session and the companion is running an actual side-by-side comparison —
+    # see pageContext.ts's findComparisonCandidates on the frontend for the
+    # active-memory detection that triggers this.
+    comparison_products: List[ProductContext] = Field(default_factory=list, max_length=4)
+    # Real search queries this session (most-recent first), not a count — the
+    # companion's active memory of what the shopper has actually been looking for.
+    search_history: List[str] = Field(default_factory=list, max_length=15)
+    messages: List[ChatMessage] = Field(min_length=1, max_length=20)
+
+
+class CompanionChatResponse(BaseModel):
+    status: Literal["success", "rate_limited", "not_configured", "error"]
+    reply: Optional[str] = None
+    model_used: Optional[str] = None
+    latency_ms: float = 0.0
+    message: Optional[str] = None
+
+
 # --- Gate + envelope -------------------------------------------------------
 
 
@@ -122,6 +256,7 @@ class RootCauseResponse(BaseModel):
     prediction: Dict[str, Any]
     gate: GateDecision
     analysis: Optional[RootCauseAnalysis] = None
+    intervention_plan: Optional[InterventionPlan] = None
     model_used: Optional[str] = None
     latency_ms: float = 0.0
     message: Optional[str] = None
