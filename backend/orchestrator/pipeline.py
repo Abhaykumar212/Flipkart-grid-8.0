@@ -23,7 +23,7 @@ from backend.recommendation.candidates import generate_candidates
 from backend.recommendation.ranker import ScoredIntervention, score_all
 from backend.risk_model.predict import predict as predict_risk
 from backend.risk_model.contracts import RiskPrediction
-from backend.root_cause import stub as root_cause_model
+from backend.root_cause.predict import predict as predict_root_causes
 from backend.root_cause.contracts import CauseResult
 from backend.session_state.cache import cache_session_state
 from backend.session_state.rebuild import rebuild_from_events
@@ -149,7 +149,7 @@ def run_decision(
     elif risk.probability < config.RISK_INTERVENTION_THRESHOLD:
         causes = CauseResult((), "cause-stub-v1", False, 0.0, 0.0)
     else:
-        causes = root_cause_model.predict(features)
+        causes = predict_root_causes(features)
     timings["root_cause"] = causes.latency_ms
 
     policy_started = perf_counter()

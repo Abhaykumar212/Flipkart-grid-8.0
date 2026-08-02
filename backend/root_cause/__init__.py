@@ -1,5 +1,5 @@
-"""Root-cause model contract and deterministic Phase 5 implementation."""
+"""Multi-label root-cause inference package."""
 
-from .stub import predict
+from .predict import predict
 
 __all__ = ("predict",)

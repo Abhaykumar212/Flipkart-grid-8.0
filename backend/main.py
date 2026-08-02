@@ -53,6 +53,7 @@ from .orchestrator.router import router as decisions_router  # noqa: E402
 from .dashboard_api.router import router as dashboard_router  # noqa: E402
 from .observability.logging import configure_logging  # noqa: E402
 from .risk_model import loader as risk_loader  # noqa: E402
+from .root_cause import loader as root_cause_loader  # noqa: E402
 from .storage.db import SessionLocal  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
@@ -182,6 +183,13 @@ async def lifespan(_: FastAPI):
     except Exception as error:
         risk_loader.unload(str(error))
         LOGGER.warning("Risk model unavailable; decisions will abstain: %s", error)
+    try:
+        root_cause_loader.load()
+    except root_cause_loader.FeatureSchemaMismatch:
+        raise
+    except Exception as error:
+        root_cause_loader.unload(str(error))
+        LOGGER.warning("Root-cause model unavailable; causes will be UNKNOWN: %s", error)
     yield
 
 
@@ -256,7 +264,9 @@ def ready() -> dict:
         raise HTTPException(status_code=503, detail=f"database unavailable: {error}") from error
     if not risk_loader.is_ready():
         raise HTTPException(status_code=503, detail=risk_loader.load_error() or "risk model unavailable")
-    return {"status": "ready", "risk_model": True}
+    if not root_cause_loader.is_ready():
+        raise HTTPException(status_code=503, detail=root_cause_loader.load_error() or "root-cause model unavailable")
+    return {"status": "ready", "risk_model": True, "root_cause_model": True}
 
 
 @app.get("/metrics")

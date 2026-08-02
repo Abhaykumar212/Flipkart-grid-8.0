@@ -1,0 +1,27 @@
+{
+  "causes": [
+    "PRICE_SENSITIVITY",
+    "PRODUCT_QUALITY_UNCERTAINTY",
+    "CHOICE_OVERLOAD",
+    "DELIVERY_CONCERN",
+    "AFFORDABILITY_OR_EMI_NEED",
+    "CHECKOUT_OR_PAYMENT_FAILURE",
+    "PRODUCT_AVAILABILITY_CONCERN",
+    "LOW_PURCHASE_INTENT",
+    "TRUST_OR_RETURN_POLICY_CONCERN",
+    "SESSION_INTERRUPTION_OR_DISTRACTION"
+  ],
+  "thresholds": [
+    0.3,
+    0.3,
+    0.3,
+    0.3,
+    0.3,
+    0.3,
+    0.6000000000000003,
+    0.3,
+    0.6500000000000004,
+    0.3
+  ],
+  "unknown_threshold": 0.35
+}

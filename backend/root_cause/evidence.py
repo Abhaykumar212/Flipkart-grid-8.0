@@ -1,18 +1,8 @@
 from backend.domain.causes import EVIDENCE_FAMILIES, RootCause
 
 
-def evidence_for(cause: RootCause, features: dict[str, float]) -> tuple[str, ...]:
-    """Attach only present behavioral evidence from the frozen cause family."""
+def evidence_for(cause: RootCause, shap_values: dict[str, float]) -> tuple[str, ...]:
+    """Return positive per-cause SHAP evidence inside the frozen cause family."""
 
-    keys = []
-    for name in EVIDENCE_FAMILIES[cause]:
-        value = features.get(name, 0.0)
-        if name == "p_avg_rating":
-            present = value < 4.2
-        elif name == "u_avg_order_value":
-            present = features.get("c_value_to_aov_ratio", 0.0) > 1
-        else:
-            present = abs(value) > 0
-        if present:
-            keys.append(name)
-    return tuple(keys)
+    candidates = [(name, shap_values.get(name, 0.0)) for name in EVIDENCE_FAMILIES[cause]]
+    return tuple(name for name, _ in sorted((item for item in candidates if item[1] > 0.02), key=lambda item: (-item[1], item[0]))[:5])
