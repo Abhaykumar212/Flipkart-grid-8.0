@@ -40,7 +40,7 @@ jobs:
       - name: Seed catalog
         run: python -m scripts.seed_catalog
 
-      - name: Test backend through Phase 4
+      - name: Test backend runtime
         run: >-
           pytest tests/unit tests/integration
           --cov=backend.domain
@@ -53,6 +53,9 @@ jobs:
           --cov=scripts
           --cov-fail-under=80
           -q
+
+      - name: Test simulator and training-data contracts
+        run: pytest tests/model -q
 
       - name: Test frontend
         run: npx vitest run

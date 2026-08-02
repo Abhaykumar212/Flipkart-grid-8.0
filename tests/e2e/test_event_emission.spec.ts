@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("add-to-cart persists an ITEM_ADDED_TO_CART event", async ({ page, request }) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   const addButton = page.getByRole("button", { name: /^add to cart$/i }).first();
   await expect(addButton).toBeVisible();
   await addButton.click();
@@ -25,7 +25,7 @@ test("ten rapid cart additions preserve order and batch efficiently", async ({ p
     const body = outgoing.postDataJSON() as { events?: Array<{ event_type: string; sequence_no: number }> };
     if (body.events) eventBatches.push(body.events);
   });
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   const addButton = page.locator("button[data-card-action]").first();
   for (let index = 0; index < 10; index += 1) await addButton.click();
   await expect(page.getByTestId("cart-badge")).toHaveText("10");
@@ -48,7 +48,7 @@ test("ten rapid cart additions preserve order and batch efficiently", async ({ p
 
 test("the storefront remains usable and buffers events while the API is down", async ({ page }) => {
   await page.route("http://localhost:8000/api/**", (route) => route.abort("failed"));
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: /^add to cart$/i }).first().click();
 
   await expect(page.getByTestId("cart-badge")).toHaveText("1");
@@ -63,7 +63,7 @@ test("the storefront remains usable and buffers events while the API is down", a
 });
 
 test("closing the tab beacons SESSION_ENDED", async ({ page, request }) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   const sessionId = await page.evaluate(() => sessionStorage.getItem("fk-session-id-v1"));
   await expect.poll(async () => (
     await request.get(`http://localhost:8000/api/v1/sessions/${sessionId}`)
@@ -80,7 +80,7 @@ test("closing the tab beacons SESSION_ENDED", async ({ page, request }) => {
 });
 
 test("a storefront journey updates the server-owned session counters", async ({ page, request }) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   const search = page.getByRole("searchbox", { name: /search for products/i });
   await search.fill("Apple iPhone 16");
   await search.press("Enter");

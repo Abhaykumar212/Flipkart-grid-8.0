@@ -289,7 +289,6 @@ export class EventClient {
   private scheduleFlush(delay: number): void {
     if (typeof window === "undefined" || this.paused) return;
     if (this.timer !== null) {
-      if (delay > 0) return;
       window.clearTimeout(this.timer);
     }
     this.timer = window.setTimeout(() => {

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("backend decision renders a dismissible grounded cart intervention", async ({ page, request }) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: /^add to cart$/i }).first().click();
   const sessionId = await page.evaluate(() => sessionStorage.getItem("fk-session-id-v1"));
   expect(sessionId).toBeTruthy();

@@ -108,6 +108,10 @@ Status legend: **F** = Frozen by the architecture spec (must not be changed) · 
 | DEC-046 | Phase 4 derives first-view price from the catalogue's earliest `price_history` observation and treats any prior completed order as `pay_method_on_file=1`. | N | The frozen Phase 2 `PRODUCT_VIEWED` envelope records source but no observed price, and the schema has no saved-payment column. These are the only replayable, SQLite/Postgres-portable signals already present; expanding the event or database contract would invalidate completed phases. | `c_max_price_drop_pct` and `c_price_increased_since_view` remain deterministic across serving/simulation; payment-on-file is a conservative historical proxy until a dedicated wallet domain exists. |
 | DEC-047 | Phase 5 uses a proposed discount of 7.5% (capped by the catalogue maximum), and the §12.6 worked totals are corrected arithmetically without changing the frozen utility formula. | N | The catalogue defined only a maximum discount, so `margin_risk` had no concrete input; the published worked-example totals did not equal the eight displayed weighted terms. | `DEFAULT_DISCOUNT_PCT=7.5` is explicit and configurable. Ranker tests assert that every breakdown sums to its score within 0.001; the formula, weights, and discount gates remain unchanged. |
 | DEC-048 | Dashboard recovery uses native `EventSource` reconnect plus two consistency paths: a 100-event in-process replay window and a REST refetch on every successful stream connection. | N | An in-memory replay buffer cannot survive a backend process restart, while the persisted decision trace can; reconnect must recover durable truth without pretending process memory is durable. | `Last-Event-ID` fills transient gaps within a process, and the reconnect refetch restores active sessions and traces after a restart without reloading the page. |
+| DEC-049 | `ORDER_COMPLETED` is terminal; converted simulator sessions do not append `SESSION_ENDED`. | N | The §10.3 pseudocode appended `SESSION_ENDED` after every outcome, contradicting frozen realism check 8 (“no event after `ORDER_COMPLETED`”). The explicit validation rule wins. | Abandoned sessions still terminate with `SESSION_ENDED`; converted streams terminate with `ORDER_COMPLETED`. |
+| DEC-050 | Pin `pyarrow==23.0.1`; Phase 7 emits six Parquet datasets plus one JSON manifest. | N | Pandas cannot read or write Parquet on a clean clone without an engine, and the §10.5 export table contains six `.parquet` files plus `dataset_manifest.json`, not seven Parquet files. | `requirements.txt` now makes the declared artifacts reproducible; Phase 7 wording is corrected to seven total artifacts. |
+| DEC-051 | Supersede DEC-038's event-count estimate with ~680k events while preserving 12,000 users / 40,000 sessions. | N | The implemented causal streams realize the required median length (16), ~110k decision points (103,029), all ten realism checks, and full-scale generation in 279 s. Padding streams to reach the old ~1.4M estimate would add non-causal noise. | Scale and support remain unchanged; the measured seed-42 volume is 681,047 events and the exact count may vary with seed. |
+| DEC-052 | Browser event batching uses a trailing-edge 500 ms debounce, with an immediate flush at 10 events. | N | The Phase 3 leading-edge timer could split a ten-click burst into five requests on a loaded browser, violating its frozen one-or-two-batch failure case even though order remained correct. | Every new event resets the delay; the size cap still bounds memory and latency by flushing immediately at 10. |
 
 ---
 
@@ -375,6 +379,7 @@ Budgets are asserted in `tests/e2e/test_latency.py`; exceeding them fails CI.
 | Concern | Choice | Why |
 |---|---|---|
 | Arrays / frames | **numpy 2.4.6**, **pandas 3.0.5** | Installed. Note the current `requirements.txt` forbids both (DEC-030). |
+| Parquet | **pyarrow 23.0.1** | Deterministic storage for the six simulator/training datasets (DEC-050). |
 | Baselines & calibration | **scikit-learn 1.9.0** | `LogisticRegression`, `RandomForestClassifier`, `IsotonicRegression`, `CalibratedClassifierCV`, metrics. |
 | Primary model | **xgboost 3.3.0** | Spec §4.5 freezes gradient boosting. |
 | Attribution | **shap 0.52.0** | `TreeExplainer` for `top_factors`. |
@@ -405,6 +410,7 @@ python-dotenv==1.2.2
 # ML
 numpy==2.4.6
 pandas==3.0.5
+pyarrow==23.0.1
 scikit-learn==1.9.0
 xgboost==3.3.0
 shap==0.52.0
@@ -953,7 +959,7 @@ def simulate_session(rng, user, persona, catalog, clock) -> SessionRecord:
             emit("ORDER_COMPLETED", order_id=..., order_value=cart.value, payment_method=...)
             state = "END"
 
-    emit("SESSION_ENDED", reason="EXPLICIT" if converted else "TIMEOUT")
+    if not converted: emit("SESSION_ENDED", reason="TIMEOUT")  # DEC-049
     return SessionRecord(events, ground_truth=GroundTruth(persona, causes, ...))
 ```
 
@@ -982,7 +988,7 @@ estimated_margin = gross_margin − discount_cost − intervention_fixed_cost
 
 **Seed.** One master seed spawns independent `numpy.random.Generator` streams per user via `SeedSequence.spawn` — so `--users 100` produces a prefix-identical subset of `--users 12000`. Fully reproducible.
 
-**Size.** 12,000 users · 40,000 sessions · ~1.4 M events · ~110,000 decision-point rows. `--scale small` (1,200 / 4,000) for CI, runs in <30 s.
+**Size.** 12,000 users · 40,000 sessions · ~680,000 events · ~105,000 decision-point rows (DEC-051). `--scale small` (1,200 / 4,000) for CI, runs in <30 s.
 
 **Exports** (`ml/data/`, gitignored):
 | File | Contents |
@@ -2230,7 +2236,7 @@ pytest tests -q ; npx vitest run ; npx playwright test
 
 **Objective.** Generate causally-structured training data. **This phase has no runtime dependency and can run in parallel with 5–6.**
 
-**Visible outcome.** `python -m ml.simulator.generate` writes 7 parquet files and passes all 10 realism checks.
+**Visible outcome.** `python -m ml.simulator.generate` writes six Parquet files plus `dataset_manifest.json` and passes all 10 realism checks (DEC-050).
 
 **Prerequisites.** Phase 4 (needs `compute_features`).
 
@@ -2260,13 +2266,13 @@ pytest tests/model -q
 **Manual inspection.** Load `decision_points.parquet`; confirm ~110k rows (full scale), abandonment ≈ 0.68, and that `QUALITY_CONSCIOUS` sessions have visibly higher `s_review_open_count`. Print the cause co-occurrence matrix — no pair above |r| 0.95.
 
 **Acceptance criteria.**
-- [ ] All 10 realism checks pass.
-- [ ] Same seed → byte-identical parquet.
-- [ ] Every cause has ≥2,000 positive sessions at full scale.
-- [ ] No `persona`, `cause_strength`, or `y_*` column in the feature matrix.
-- [ ] Train/val/test user sets are disjoint.
-- [ ] `test_no_skew` passes.
-- [ ] Full-scale generation completes in < 10 min.
+- [x] All 10 realism checks pass.
+- [x] Same seed → byte-identical parquet.
+- [x] Every cause has ≥2,000 positive sessions at full scale (minimum 2,261 at seed 42).
+- [x] No `persona`, `cause_strength`, or `y_*` column in the feature matrix.
+- [x] Train/val/test user sets are disjoint.
+- [x] `test_no_skew` passes.
+- [x] Full-scale generation completes in < 10 min (279.41 s at seed 42).
 
 **Failure cases.** Forcing a persona's abandonment to 0.95 fails check 2. Adding `persona` to features fails the leakage assertion.
 
