@@ -8,7 +8,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from backend import config
-from backend.domain.enums import CostLevel, Decision
+from backend.domain.enums import CostLevel, Decision, RiskBand
 from backend.domain.interventions import InterventionDefinition, InterventionId
 from backend.explainability.structured import build_explanation, intervention_payload
 from backend.feature_engine.compute import compute_features
@@ -87,12 +87,40 @@ def _suppressed(
 def _select(
     ranked: tuple[ScoredIntervention, ...],
     causes: CauseResult,
+    risk: RiskPrediction | None = None,
 ) -> tuple[Decision, ScoredIntervention | None]:
+    risk = risk or RiskPrediction(
+        config.RISK_HIGH_THRESHOLD,
+        0.0,
+        RiskBand.HIGH,
+        "selection-test",
+        (),
+        0.0,
+    )
+    if risk.probability < config.RISK_INTERVENTION_THRESHOLD:
+        return Decision.NO_ACTION, None
     top = ranked[0] if ranked else None
     if top is None or top.candidate.intervention_id == InterventionId.NO_ACTION:
         return (Decision.ABSTAIN if causes.abstained else Decision.NO_ACTION), top
     if top.confidence < config.MIN_RECOMMENDATION_CONFIDENCE:
         return (Decision.ABSTAIN if causes.abstained else Decision.NO_ACTION), None
+
+    # Medium-risk sessions only receive a subtle inline action, even when the
+    # cause is strong. This is the fifth row of the frozen confidence table.
+    if risk.probability < config.RISK_HIGH_THRESHOLD:
+        subtle = next(
+            (
+                item
+                for item in ranked
+                if item.score >= 0
+                and item.candidate.intervention_id != InterventionId.NO_ACTION
+                and item.candidate.cost_level in (CostLevel.ZERO, CostLevel.LOW)
+                and item.candidate.intrusiveness <= 1
+            ),
+            None,
+        )
+        return (Decision.INTERVENE, subtle) if subtle else (Decision.NO_ACTION, None)
+
     if (
         top.confidence < config.PERSONALIZED_CONFIDENCE
         and top.candidate.cost_level not in (CostLevel.ZERO, CostLevel.LOW)
@@ -173,7 +201,7 @@ def run_decision(
         current_route=state.current_route,
     )
     timings["policy_and_rank"] = round((perf_counter() - policy_started) * 1_000, 3)
-    decision, selected = _select(ranked, causes)
+    decision, selected = _select(ranked, causes, risk)
 
     decision_id = f"D-{uuid4().hex}"
     explanation_started = perf_counter()

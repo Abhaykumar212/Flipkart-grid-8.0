@@ -30,6 +30,7 @@ export default function DecisionTrace() {
   if (loading && !data) return <div className="h-96 animate-pulse rounded-xl bg-slate-900" />;
   if (error || !data) return <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-5 text-rose-200">{error ?? "Decision not found"}</div>;
   const winner = data.utility_scores.find((item) => item.intervention === data.final.selected_intervention) ?? data.utility_scores[0];
+  const runnerUp = data.utility_scores.find((item) => item.intervention !== winner?.intervention);
   return (
     <div>
       <header className="mb-7">
@@ -47,7 +48,7 @@ export default function DecisionTrace() {
 
       <div className="grid gap-5 xl:grid-cols-2"><RiskGauge probability={data.risk.probability} band={data.risk.band} /><CauseBarChart causes={data.root_causes} /></div>
       <div className="mt-5"><CandidateTable candidates={data.candidates} /></div>
-      <div className="mt-5 grid gap-5 xl:grid-cols-2"><PolicyReasonList candidates={data.candidates} />{winner ? <UtilityBreakdownChart intervention={winner.intervention} score={winner.score} breakdown={winner.score_breakdown} /> : <section className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-sm text-slate-500">No approved candidate required utility scoring.</section>}</div>
+      <div className="mt-5 grid gap-5 xl:grid-cols-2"><PolicyReasonList candidates={data.candidates} />{winner ? <UtilityBreakdownChart intervention={winner.intervention} score={winner.score} breakdown={winner.score_breakdown} runnerUp={runnerUp} /> : <section className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-sm text-slate-500">No approved candidate required utility scoring.</section>}</div>
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.2fr_.8fr]"><ExplanationTrail trace={data} /><LatencyBreakdown latency={data.latency_ms} /></div>
       <div className="mt-5 text-slate-900"><TraceWaterfall run={pipelineRun(data)} /></div>
     </div>

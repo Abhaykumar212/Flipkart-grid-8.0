@@ -94,7 +94,7 @@ def test_all_six_frozen_confidence_rows_have_safe_behavior():
 
     high_confidence = _causes(0.8)
     decision, selected = _select(
-        (_scored(InterventionId.REVIEW_SUMMARY, 0.82),), high_confidence
+        (_scored(InterventionId.REVIEW_SUMMARY, 0.82),), high_confidence, _risk(0.8)
     )
     assert decision == Decision.INTERVENE and selected is not None
 
@@ -102,20 +102,20 @@ def test_all_six_frozen_confidence_rows_have_safe_behavior():
     decision, selected = _select((
         _scored(InterventionId.LIMITED_TIME_DISCOUNT, 0.65, 0.6),
         _scored(InterventionId.PRICE_DROP_ALERT, 0.62, 0.4),
-    ), high_confidence)
+    ), high_confidence, _risk(0.8))
     assert decision == Decision.INTERVENE
     assert selected is not None and selected.candidate.cost_level.value == "LOW"
 
     unknown = CauseResult.unknown(0.3)
     decision, selected = _select(
-        (_scored(InterventionId.WISHLIST_REMINDER, 0.3),), unknown
+        (_scored(InterventionId.WISHLIST_REMINDER, 0.3),), unknown, _risk(0.8)
     )
     assert decision == Decision.ABSTAIN and selected is None
 
     # Medium-risk/high-confidence uses the subtle inline LOW-cost result.
     inline = _scored(InterventionId.REVIEW_SUMMARY, 0.8)
     assert inline.channel == Channel.INLINE_CARD
-    decision, selected = _select((inline,), high_confidence)
+    decision, selected = _select((inline,), high_confidence, _risk(0.6))
     assert decision == Decision.INTERVENE and selected == inline
 
     # The sixth row (low-confidence discount) is rejected by rule 11.

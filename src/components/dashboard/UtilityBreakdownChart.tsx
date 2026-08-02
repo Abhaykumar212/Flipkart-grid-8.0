@@ -1,4 +1,4 @@
-export function UtilityBreakdownChart({ intervention, score, breakdown }: { intervention: string; score: number; breakdown: Record<string, number> }) {
+export function UtilityBreakdownChart({ intervention, score, breakdown, runnerUp }: { intervention: string; score: number; breakdown: Record<string, number>; runnerUp?: { intervention: string; score: number } }) {
   const terms = Object.entries(breakdown);
   const max = Math.max(...terms.map(([, value]) => Math.abs(value)), 0.01);
   return (
@@ -22,7 +22,10 @@ export function UtilityBreakdownChart({ intervention, score, breakdown }: { inte
           );
         })}
       </div>
-      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] text-slate-500">Signed terms sum to {Object.values(breakdown).reduce((total, value) => total + value, 0).toFixed(3)}.</p>
+      <div className="mt-4 flex flex-wrap justify-between gap-2 border-t border-slate-800 pt-3 text-[11px] text-slate-500">
+        <p>Signed terms sum to {Object.values(breakdown).reduce((total, value) => total + value, 0).toFixed(3)}.</p>
+        {runnerUp && <p>Runner-up: <span className="font-mono text-slate-300">{runnerUp.intervention} {runnerUp.score.toFixed(3)}</span></p>}
+      </div>
     </section>
   );
 }

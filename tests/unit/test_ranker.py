@@ -1,4 +1,7 @@
 from dataclasses import replace
+from time import perf_counter
+
+import pytest
 
 from backend.domain.causes import RootCause
 from backend.domain.enums import RiskBand
@@ -6,6 +9,7 @@ from backend.domain.interventions import InterventionId
 from backend.feature_engine.schema import FEATURE_SCHEMA_V1
 from backend.recommendation.catalogue import CATALOGUE_BY_ID
 from backend.recommendation.ranker import score_all
+from backend.recommendation.utility import score_candidate
 from backend.policy_engine.engine import evaluate_all, finalize_discount_protection
 from backend.domain.enums import PolicyStatus
 from backend.session_state.state import SessionState
@@ -85,3 +89,32 @@ def test_discount_is_downgraded_when_low_cost_action_is_within_point_one():
     assert discount.status == PolicyStatus.DOWNGRADE
     assert discount.replacement is not None
     assert discount.replacement.intervention_id == InterventionId.PRICE_DROP_ALERT
+
+
+@pytest.mark.parametrize(("intervention", "risk_probability", "cause", "cause_probability", "expected"), [
+    (InterventionId.REVIEW_SUMMARY, 0.82, RootCause.PRODUCT_QUALITY_UNCERTAINTY, 0.71, 0.426),
+    (InterventionId.DELIVERY_REASSURANCE, 0.76, RootCause.DELIVERY_CONCERN, 0.68, 0.410),
+    (InterventionId.PRICE_DROP_ALERT, 0.79, RootCause.PRICE_SENSITIVITY, 0.64, 0.393),
+    (InterventionId.LIMITED_TIME_DISCOUNT, 0.79, RootCause.PRICE_SENSITIVITY, 0.64, 0.128),
+    (InterventionId.ALTERNATE_PAYMENT_METHOD, 0.88, RootCause.CHECKOUT_OR_PAYMENT_FAILURE, 0.79, 0.468),
+])
+def test_frozen_numeric_worked_examples(
+    intervention, risk_probability, cause, cause_probability, expected
+):
+    features = _features()
+    features["c_value"] = 4_200
+    causes = CauseResult((CausePrediction(
+        cause,
+        cause_probability,
+        ("one", "two", "three"),
+    ),), "cause-test", False, cause_probability, 0)
+    result = score_candidate(
+        CATALOGUE_BY_ID[intervention], features, risk_probability, causes
+    )
+    assert result.score == pytest.approx(expected, abs=0.01)
+
+
+def test_ranking_is_under_five_milliseconds():
+    started = perf_counter()
+    score_all(tuple(CATALOGUE_BY_ID.values()), _features(), _risk(), _causes())
+    assert (perf_counter() - started) * 1_000 < 5

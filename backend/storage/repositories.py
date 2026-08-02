@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.domain.enums import CostLevel
+from backend.feedback.affinity import affinity_for_family
 from backend.feature_engine.schema import ProductFacts, UserHistory
 
 from .models import (
@@ -63,11 +64,6 @@ def _order_category_counts(
             if category:
                 counts[str(category)] += max(1, int(item.get("quantity", 1)))
     return counts
-
-
-def _beta_ctr(rows: list[tuple[str, bool]], cost_level: CostLevel) -> float:
-    observations = [clicked for cost, clicked in rows if cost == cost_level.value]
-    return (sum(observations) + 1) / (len(observations) + 2)
 
 
 def user_history(
@@ -191,8 +187,8 @@ def user_history(
         days_since_last_purchase=days_since_last_purchase,
         avg_session_to_purchase_s=average_purchase_seconds,
         return_rate=(float(user.return_rate) if user.return_rate is not None else 0.08),
-        affinity_informational=_beta_ctr(affinity_rows, CostLevel.LOW),
-        affinity_incentive=_beta_ctr(affinity_rows, CostLevel.HIGH),
+        affinity_informational=affinity_for_family(affinity_rows, CostLevel.LOW),
+        affinity_incentive=affinity_for_family(affinity_rows, CostLevel.HIGH),
         payment_method_on_file=bool(orders),
         products=products,
     )
