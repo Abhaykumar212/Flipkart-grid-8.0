@@ -14,34 +14,51 @@ import WishlistPage from "./routes/WishlistPage";
 import NotFoundPage from "./routes/NotFoundPage";
 import SearchResultsPage from "./routes/SearchResultsPage";
 import PipelineConsole from "./routes/PipelineConsole";
+import DashboardLayout from "./routes/dashboard/DashboardLayout";
+import LiveSessions from "./routes/dashboard/LiveSessions";
+import SessionDetail from "./routes/dashboard/SessionDetail";
+import DecisionTrace from "./routes/dashboard/DecisionTrace";
+
+function StorefrontRoutes() {
+  return (
+    <SessionProvider>
+      <CartProvider>
+        <WishlistProvider>
+          <TrackerProvider>
+            <InterventionProvider>
+              <Routes>
+                <Route element={<Layout />}>
+                  <Route index element={<Home />} />
+                  <Route path="products" element={<CatalogPage />} />
+                  <Route path="category/:category" element={<CatalogPage />} />
+                  <Route path="product/:slug" element={<ProductDetail />} />
+                  <Route path="wishlist" element={<WishlistPage />} />
+                  <Route path="cart" element={<CartPage />} />
+                  <Route path="checkout" element={<CheckoutPage />} />
+                  <Route path="search" element={<SearchResultsPage />} />
+                  <Route path="pipeline" element={<PipelineConsole />} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Route>
+              </Routes>
+            </InterventionProvider>
+          </TrackerProvider>
+        </WishlistProvider>
+      </CartProvider>
+    </SessionProvider>
+  );
+}
 
 export default function App() {
   return (
     <BrowserRouter>
-      <SessionProvider>
-        <CartProvider>
-          <WishlistProvider>
-            <TrackerProvider>
-              <InterventionProvider>
-                <Routes>
-                  <Route element={<Layout />}>
-                    <Route index element={<Home />} />
-                    <Route path="products" element={<CatalogPage />} />
-                    <Route path="category/:category" element={<CatalogPage />} />
-                    <Route path="product/:slug" element={<ProductDetail />} />
-                    <Route path="wishlist" element={<WishlistPage />} />
-                    <Route path="cart" element={<CartPage />} />
-                    <Route path="checkout" element={<CheckoutPage />} />
-                    <Route path="search" element={<SearchResultsPage />} />
-                    <Route path="pipeline" element={<PipelineConsole />} />
-                    <Route path="*" element={<NotFoundPage />} />
-                  </Route>
-                </Routes>
-              </InterventionProvider>
-            </TrackerProvider>
-          </WishlistProvider>
-        </CartProvider>
-      </SessionProvider>
+      <Routes>
+        <Route path="dashboard" element={<DashboardLayout />}>
+          <Route index element={<LiveSessions />} />
+          <Route path="sessions/:sessionId" element={<SessionDetail />} />
+          <Route path="decisions/:decisionId" element={<DecisionTrace />} />
+        </Route>
+        <Route path="*" element={<StorefrontRoutes />} />
+      </Routes>
     </BrowserRouter>
   );
 }

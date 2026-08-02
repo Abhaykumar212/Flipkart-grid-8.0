@@ -9,6 +9,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from backend import config
+from backend.dashboard_api.stream import broadcaster
 from backend.domain.events import EventEnvelope, EventType
 from backend.observability.logging import log_event
 from backend.session_state.cache import cache_session_state
@@ -173,5 +174,21 @@ def ingest_events(
         accepted=accepted,
         duplicates=duplicates,
         latency_ms=latency_ms,
+    )
+    broadcaster.publish(
+        "event_ingested",
+        {
+            "trace_id": trace_id,
+            "session_id": (
+                events[0].session_id
+                if len({event.session_id for event in events}) == 1
+                else None
+            ),
+            "session_ids": sorted({event.session_id for event in events}),
+            "event_types": [event.event_type.value for event in events],
+            "accepted": accepted,
+            "duplicates": duplicates,
+            "latency_ms": latency_ms,
+        },
     )
     return IngestionResult(accepted, duplicates, trace_id, latency_ms)

@@ -50,6 +50,7 @@ from .products.router import router as products_router  # noqa: E402
 from .event_ingestion.router import router as events_router  # noqa: E402
 from .session_state.router import router as sessions_router  # noqa: E402
 from .orchestrator.router import router as decisions_router  # noqa: E402
+from .dashboard_api.router import router as dashboard_router  # noqa: E402
 from .observability.logging import configure_logging  # noqa: E402
 
 LOGGER = logging.getLogger(__name__)
@@ -191,6 +192,7 @@ app.include_router(products_router)
 app.include_router(events_router)
 app.include_router(sessions_router)
 app.include_router(decisions_router)
+app.include_router(dashboard_router)
 
 
 @app.exception_handler(HTTPException)

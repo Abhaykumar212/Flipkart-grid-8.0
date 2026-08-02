@@ -107,6 +107,7 @@ Status legend: **F** = Frozen by the architecture spec (must not be changed) · 
 | DEC-045 | Phase 3 emits the 17 event types backed by genuine storefront interactions; `PRODUCT_COMPARED` and the three `INTERVENTION_*` events activate with Phase 5's intervention components. | N | The frozen call-site table assigns `PRODUCT_COMPARED` to `ComparisonDrawer.tsx`, but that component is not created until Phase 5. Fabricating a comparison event from an unrelated click would corrupt behavioral evidence. | The complete 21-type contract remains validated in Phase 2; Phase 5 adds the four honest UI call sites without changing the envelope. |
 | DEC-046 | Phase 4 derives first-view price from the catalogue's earliest `price_history` observation and treats any prior completed order as `pay_method_on_file=1`. | N | The frozen Phase 2 `PRODUCT_VIEWED` envelope records source but no observed price, and the schema has no saved-payment column. These are the only replayable, SQLite/Postgres-portable signals already present; expanding the event or database contract would invalidate completed phases. | `c_max_price_drop_pct` and `c_price_increased_since_view` remain deterministic across serving/simulation; payment-on-file is a conservative historical proxy until a dedicated wallet domain exists. |
 | DEC-047 | Phase 5 uses a proposed discount of 7.5% (capped by the catalogue maximum), and the §12.6 worked totals are corrected arithmetically without changing the frozen utility formula. | N | The catalogue defined only a maximum discount, so `margin_risk` had no concrete input; the published worked-example totals did not equal the eight displayed weighted terms. | `DEFAULT_DISCOUNT_PCT=7.5` is explicit and configurable. Ranker tests assert that every breakdown sums to its score within 0.001; the formula, weights, and discount gates remain unchanged. |
+| DEC-048 | Dashboard recovery uses native `EventSource` reconnect plus two consistency paths: a 100-event in-process replay window and a REST refetch on every successful stream connection. | N | An in-memory replay buffer cannot survive a backend process restart, while the persisted decision trace can; reconnect must recover durable truth without pretending process memory is durable. | `Last-Event-ID` fills transient gaps within a process, and the reconnect refetch restores active sessions and traces after a restart without reloading the page. |
 
 ---
 
@@ -2211,11 +2212,11 @@ pytest tests -q ; npx vitest run ; npx playwright test
 **Manual inspection.** Two browser windows: storefront left, dashboard right. Act in the storefront; the dashboard updates within a second. Open the decision — see probability, causes, every candidate, every rejection reason, the utility decomposition, and the explanation.
 
 **Acceptance criteria.**
-- [ ] Dashboard update latency < 1 s.
-- [ ] All of spec §5.14 views 1–11 present.
-- [ ] SSE reconnects automatically after a backend restart.
-- [ ] The trace answers all seven questions in spec §11 — **especially "why was a discount not offered?"**
-- [ ] Storefront routes are visually unaffected.
+- [x] Dashboard update latency < 1 s.
+- [x] All of spec §5.14 views 1–11 present.
+- [x] SSE reconnects automatically after a backend restart.
+- [x] The trace answers all seven questions in spec §11 — **especially "why was a discount not offered?"**
+- [x] Storefront routes are visually unaffected.
 
 **Failure cases.** Backend restart → `EventSource` reconnects, no page reload. 5 concurrent clients → all receive events.
 

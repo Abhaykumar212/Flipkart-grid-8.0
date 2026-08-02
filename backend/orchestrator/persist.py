@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from backend.feature_engine.schema import FEATURE_SCHEMA_VERSION
+from backend.dashboard_api.stream import broadcaster
 from backend.feature_engine.snapshot import write_feature_snapshot
 from backend.storage.models import DecisionTrace, ModelPrediction, ModelRegistry
 
@@ -144,6 +145,22 @@ def persist_decision(factory: sessionmaker, run: DecisionRun) -> None:
         try:
             with factory() as db, db.begin():
                 _write(db, run)
+            recommended = run.response.get("recommended_intervention")
+            broadcaster.publish(
+                "decision_made",
+                {
+                    "decision_id": run.response.get("decision_id"),
+                    "session_id": run.state.session_id,
+                    "decision": run.response.get("decision"),
+                    "intervention": (
+                        recommended.get("type") if isinstance(recommended, dict) else None
+                    ),
+                    "probability": run.response.get("abandonment_probability"),
+                    "confidence": run.response.get("confidence_score"),
+                    "latency_ms": run.response.get("latency_ms"),
+                    "trace_id": run.trace_id,
+                },
+            )
             return
         except Exception:
             LOGGER.exception(
