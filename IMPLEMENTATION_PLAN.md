@@ -104,6 +104,7 @@ Status legend: **F** = Frozen by the architecture spec (must not be changed) · 
 | DEC-042 | Legacy artifact-dependent inference tests skip when ignored or incompatible joblib artifacts are absent; all non-artifact contracts still run. | N | Phase 0 explicitly untracks regenerable joblib binaries, so a clean checkout cannot load them. Regenerating the obsolete model in baseline CI conflicts with the phased model replacement. | Phase 8 replaces the skip with model fixtures and load-time artifact contract tests. |
 | DEC-043 | The schema contains **18 application tables**, not 17. | N | §7 explicitly defines 18 distinct required tables; the repeated “17” count was an arithmetic error. Omitting any one would violate the schema and audit requirements. | Table-count references and the Phase 1 commit boundary are corrected to 18; Alembic’s own `alembic_version` table is not included in that count. |
 | DEC-044 | Migration 0003 also creates `experiments` and `model_registry`; migration 0005 creates `experiment_assignments`. | N | `decision_traces.experiment_id` and `model_predictions.(model_name,model_version)` require their referenced tables to exist before portable FK creation. The original filename split had forward references that fail on Postgres. | All five revisions remain reversible; the dependency-respecting split is SQLite/Postgres portable. |
+| DEC-045 | Phase 3 emits the 17 event types backed by genuine storefront interactions; `PRODUCT_COMPARED` and the three `INTERVENTION_*` events activate with Phase 5's intervention components. | N | The frozen call-site table assigns `PRODUCT_COMPARED` to `ComparisonDrawer.tsx`, but that component is not created until Phase 5. Fabricating a comparison event from an unrelated click would corrupt behavioral evidence. | The complete 21-type contract remains validated in Phase 2; Phase 5 adds the four honest UI call sites without changing the envelope. |
 
 ---
 
@@ -2066,7 +2067,7 @@ npx playwright test tests/e2e/test_event_emission.spec.ts
 **Manual inspection.** With the network tab open: browse a PDP, scroll to reviews, add to cart, open cart, start checkout. Confirm batched `POST /api/v1/events` calls, then query `events` — the sequence matches what you did, `sequence_no` is gapless.
 
 **Acceptance criteria.**
-- [ ] All 21 event types are emitted from at least one call site (or documented as backend-only: `INTERVENTION_*` await Phase 5).
+- [ ] All 17 event types backed by current storefront interactions are emitted; `PRODUCT_COMPARED` and `INTERVENTION_*` await their Phase 5 components (DEC-045).
 - [ ] `sequence_no` is gapless and monotonic per session.
 - [ ] Killing the backend leaves the storefront fully usable; events buffer and flush on restart.
 - [ ] `SESSION_ENDED` fires on tab close (verify via `sendBeacon` in devtools).
@@ -2077,7 +2078,7 @@ npx playwright test tests/e2e/test_event_emission.spec.ts
 
 **Commit.** `feat(frontend): replace tracker with event emitter, wire all call sites`
 
-**Deferred.** No decisions yet; `AgentInspector` shows raw counters only.
+**Deferred.** No decisions yet; `AgentInspector` shows raw counters only. `PRODUCT_COMPARED` and `INTERVENTION_*` call sites arrive with the Phase 5 intervention surfaces (DEC-045).
 
 ---
 

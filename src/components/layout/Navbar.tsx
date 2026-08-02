@@ -15,7 +15,7 @@ import {
 import { Logo } from "./Logo";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
-import { useTracker } from "../../context/TrackerContext";
+import { useSession } from "../../context/SessionContext";
 import { products } from "../../data/products";
 import { formatINR } from "../../lib/format";
 
@@ -58,7 +58,7 @@ export function Navbar() {
   const navigate = useNavigate();
   const { count } = useCart();
   const { count: wishlistCount } = useWishlist();
-  const { recordSearch } = useTracker();
+  const { emit } = useSession();
   const [query, setQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
 
@@ -70,10 +70,23 @@ export function Navbar() {
       .slice(0, 6);
   }, [query]);
 
+  const recordSearch = (value: string) => {
+    const normalized = value.trim();
+    if (!normalized) return false;
+    const resultCount = products.filter((product) => (
+      `${product.title} ${product.brand} ${product.subCategory}`
+        .toLowerCase()
+        .includes(normalized.toLowerCase())
+    )).length;
+    emit("SEARCH_PERFORMED", {
+      metadata: { query: normalized, result_count: resultCount, sort_order: "RELEVANCE" },
+    });
+    return true;
+  };
+
   const runSearch = (value: string) => {
     const normalized = value.trim();
-    if (!normalized) return;
-    recordSearch(normalized);
+    if (!recordSearch(normalized)) return;
     setSearchFocused(false);
     navigate(`/products?q=${encodeURIComponent(normalized)}`);
   };
@@ -106,7 +119,7 @@ export function Navbar() {
           {searchFocused && suggestions.length > 0 && (
             <div id="search-suggestions" role="listbox" className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-[2px] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
               {suggestions.map((product) => (
-                <Link key={product.id} to={`/product/${product.slug}`} role="option" aria-selected="false" onClick={() => { recordSearch(query.trim()); setSearchFocused(false); }} className="flex min-h-14 items-center gap-3 border-b border-fk-border px-3 py-2 last:border-0 hover:bg-fk-bg">
+                <Link key={product.id} to={`/product/${product.slug}`} role="option" aria-selected="false" onClick={() => { recordSearch(query); setSearchFocused(false); }} className="flex min-h-14 items-center gap-3 border-b border-fk-border px-3 py-2 last:border-0 hover:bg-fk-bg">
                   <img src={product.images[0]} alt="" loading="lazy" width="40" height="40" className="h-10 w-10 object-contain" />
                   <span className="min-w-0 flex-1 truncate text-fk-base text-fk-ink">{product.title}</span>
                   <span className="shrink-0 text-fk-base font-medium text-fk-ink">{formatINR(product.price.sellingPrice)}</span>

@@ -1,4 +1,23 @@
-import type { ShopperHistory, ScenarioSessionState } from "../lib/tracker";
+interface ShopperHistory {
+  averageOrderValue: number;
+  historicalAbandonmentRate: number;
+  pastReturnRate: number;
+  wishlistItemCount: number;
+  paymentMethodSaved: boolean;
+  lifetimeOrdersPlaced: number;
+  daysSinceLastPurchase: number;
+  isGuestCheckout: boolean;
+}
+
+interface ScenarioSessionState {
+  cartPdpBounceCount: number;
+  reviewsExpandedCount: number;
+  pincodeCheckCount: number;
+  failedCouponAttempts: number;
+  checkoutStepsCompleted: number;
+  paymentAttemptsFailed: number;
+  idleBeforeCheckoutSeconds: number;
+}
 
 /**
  * Deterministic demo scenarios.

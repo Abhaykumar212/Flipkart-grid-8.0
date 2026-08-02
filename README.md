@@ -30,7 +30,9 @@ ml/
 backend/
   main.py
 Flipkart-grid-8.0/src/
-  lib/tracker.ts
+  lib/api.ts
+  lib/events.ts
+  context/SessionContext.tsx
   context/TrackerContext.tsx
 ```
 

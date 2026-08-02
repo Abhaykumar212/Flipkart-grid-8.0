@@ -3,10 +3,11 @@ import { BadgeCheck, ChevronDown, ThumbsUp } from "lucide-react";
 import type { RatingBreakdown, Review } from "../../types/product";
 import { RatingStars } from "../ui/RatingStars";
 import { formatIndianNumber } from "../../lib/format";
-import { useTracker } from "../../context/TrackerContext";
+import { useSession } from "../../context/SessionContext";
 import { Button } from "../ui/Button";
 
 interface RatingsAndReviewsProps {
+  productId: string;
   ratingDistribution: RatingBreakdown[];
   reviews: Review[];
 }
@@ -20,7 +21,7 @@ const reviewDateFormat = new Intl.DateTimeFormat("en-IN", {
   year: "numeric",
 });
 
-export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndReviewsProps) {
+export function RatingsAndReviews({ productId, ratingDistribution, reviews }: RatingsAndReviewsProps) {
   const sortedDistribution = [...ratingDistribution].sort((a, b) => b.stars - a.stars);
   const totalRatings = sortedDistribution.reduce((sum, item) => sum + item.count, 0);
   const average = totalRatings > 0
@@ -29,7 +30,8 @@ export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndRev
   const max = Math.max(...sortedDistribution.map((item) => item.count), 1);
   const sectionRef = useRef<HTMLElement>(null);
   const recorded = useRef(false);
-  const { recordReviewVisibility } = useTracker();
+  const dwellStartedAt = useRef<number | null>(null);
+  const { emit } = useSession();
   const [allReviews, setAllReviews] = useState(reviews);
   const [ratingFilter, setRatingFilter] = useState<number | null>(null);
   const [sort, setSort] = useState<ReviewSort>("recent");
@@ -44,16 +46,31 @@ export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndRev
   useEffect(() => {
     const section = sectionRef.current;
     if (!section) return;
+    recorded.current = false;
+    dwellStartedAt.current = null;
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting && !recorded.current) {
         recorded.current = true;
-        recordReviewVisibility();
+        dwellStartedAt.current = performance.now();
+        emit("REVIEW_OPENED", {
+          productId,
+          metadata: { source: "PRODUCT_PAGE" },
+        });
         observer.disconnect();
       }
     }, { threshold: 0.35 });
     observer.observe(section);
-    return () => observer.disconnect();
-  }, [recordReviewVisibility]);
+    return () => {
+      observer.disconnect();
+      if (dwellStartedAt.current !== null) {
+        emit("REVIEW_DWELL_RECORDED", {
+          productId,
+          metadata: { dwell_ms: Math.max(0, Math.round(performance.now() - dwellStartedAt.current)) },
+        });
+        dwellStartedAt.current = null;
+      }
+    };
+  }, [emit, productId]);
 
   const sortedReviews = useMemo(() => {
     const filtered = ratingFilter
@@ -101,7 +118,10 @@ export function RatingsAndReviews({ ratingDistribution, reviews }: RatingsAndRev
 
   const showMore = () => {
     setVisibleCount((current) => Math.min(sortedReviews.length, current + PAGE_SIZE));
-    recordReviewVisibility();
+    emit("REVIEW_OPENED", {
+      productId,
+      metadata: { source: "SHOW_MORE" },
+    });
   };
 
   return (

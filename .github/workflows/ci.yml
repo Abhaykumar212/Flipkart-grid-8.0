@@ -32,9 +32,13 @@ jobs:
         run: |
           npm run lint
           npx tsc -b --noEmit
+          npm run build
 
       - name: Migrate database
         run: alembic upgrade head
+
+      - name: Seed catalog
+        run: python -m scripts.seed_catalog
 
       - name: Test Phase 2 backend
         run: >-
@@ -51,3 +55,9 @@ jobs:
 
       - name: Test frontend
         run: npx vitest run
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Test browser event emission
+        run: npx playwright test tests/e2e/test_event_emission.spec.ts

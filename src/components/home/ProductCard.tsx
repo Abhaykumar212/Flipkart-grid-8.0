@@ -15,9 +15,10 @@ interface ProductCardProps {
   product: Product;
   /** Rail cards are fixed-width; grid cards stretch. */
   fixedWidth?: boolean;
+  onProductOpen?: (product: Product) => void;
 }
 
-export function ProductCard({ product, fixedWidth = true }: ProductCardProps) {
+export function ProductCard({ product, fixedWidth = true, onProductOpen }: ProductCardProps) {
   const [src, setSrc] = useState(product.images[0] ?? FALLBACK);
   const [added, setAdded] = useState(false);
   const resetTimer = useRef<number | null>(null);
@@ -53,7 +54,7 @@ export function ProductCard({ product, fixedWidth = true }: ProductCardProps) {
         <Heart aria-hidden="true" className={`h-5 w-5 ${wishlisted ? "fill-current" : ""}`} strokeWidth={2} />
       </button>
 
-      <Link to={`/product/${product.slug}`} className="mb-2.5 flex h-[164px] shrink-0 items-center justify-center px-2" aria-label={`View ${product.title}`}>
+      <Link to={`/product/${product.slug}`} onClick={() => onProductOpen?.(product)} className="mb-2.5 flex h-[164px] shrink-0 items-center justify-center px-2" aria-label={`View ${product.title}`}>
         <img src={src} alt={product.title} loading="lazy" width="164" height="164" onError={() => setSrc(FALLBACK)} className="max-h-full max-w-full object-contain transition-transform duration-200 group-hover:scale-105" />
       </Link>
 
@@ -61,7 +62,7 @@ export function ProductCard({ product, fixedWidth = true }: ProductCardProps) {
         <div className="h-4 shrink-0 leading-4">
           {badges.sponsored ? <SponsoredBadge /> : <span aria-hidden="true">&nbsp;</span>}
         </div>
-        <Link to={`/product/${product.slug}`} className="block h-9 shrink-0 min-w-0">
+        <Link to={`/product/${product.slug}`} onClick={() => onProductOpen?.(product)} className="block h-9 shrink-0 min-w-0">
           <h3 className="line-clamp-2 h-9 text-fk-base text-fk-ink hover:text-fk-blue">{product.title}</h3>
         </Link>
         <div className="mt-1.5 flex h-6 shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
@@ -74,7 +75,7 @@ export function ProductCard({ product, fixedWidth = true }: ProductCardProps) {
         </p>
         <div className="mt-auto pt-3">
           {requiresOptions ? (
-            <Link data-card-action to={`/product/${product.slug}`} className="inline-flex min-h-11 w-full items-center justify-center rounded-[2px] border border-fk-blue px-3 text-fk-sm font-medium uppercase text-fk-blue hover:bg-blue-50">Choose Options</Link>
+            <Link data-card-action to={`/product/${product.slug}`} onClick={() => onProductOpen?.(product)} className="inline-flex min-h-11 w-full items-center justify-center rounded-[2px] border border-fk-blue px-3 text-fk-sm font-medium uppercase text-fk-blue hover:bg-blue-50">Choose Options</Link>
           ) : (
             <button data-card-action type="button" disabled={!stock.inStock} onClick={addToCart} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[2px] bg-fk-orange px-3 text-fk-sm font-medium uppercase text-white hover:brightness-95 disabled:cursor-not-allowed disabled:bg-fk-border" aria-live="polite">
               <ShoppingCart aria-hidden="true" className="h-4 w-4" />

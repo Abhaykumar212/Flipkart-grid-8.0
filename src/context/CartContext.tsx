@@ -6,6 +6,8 @@ import {
   useReducer,
   type ReactNode,
 } from "react";
+import { productById } from "../data/products";
+import { useSession } from "./SessionContext";
 
 const STORAGE_KEY = "fk-cart-v1";
 
@@ -157,6 +159,7 @@ const CartContext = createContext<CartContextValue | null>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(cartReducer, undefined, readStoredCart);
+  const { emit } = useSession();
 
   useEffect(() => {
     try {
@@ -171,17 +174,60 @@ export function CartProvider({ children }: { children: ReactNode }) {
       items: state.items,
       promoCode: state.promoCode,
       count: state.items.reduce((sum, i) => sum + i.quantity, 0),
-      addItem: (productId, quantity, variant, addedAt) =>
-        dispatch({ type: "ADD_ITEM", productId, quantity, variant, addedAt }),
-      removeItem: (productId, variant) =>
-        dispatch({ type: "REMOVE_ITEM", productId, variant }),
-      updateQuantity: (productId, quantity, variant) =>
-        dispatch({ type: "UPDATE_QUANTITY", productId, quantity, variant }),
+      addItem: (productId, quantity = 1, variant, addedAt) => {
+        const product = productById.get(productId);
+        if (product) {
+          emit("ITEM_ADDED_TO_CART", {
+            productId,
+            metadata: {
+              quantity,
+              unit_price: product.price.sellingPrice,
+              variant: variant ?? null,
+            },
+          });
+        }
+        dispatch({ type: "ADD_ITEM", productId, quantity, variant, addedAt });
+      },
+      removeItem: (productId, variant) => {
+        const existing = state.items.find(
+          (item) => item.productId === productId && item.variant === variant,
+        );
+        if (existing) {
+          emit("ITEM_REMOVED_FROM_CART", {
+            productId,
+            metadata: { quantity: existing.quantity },
+          });
+        }
+        dispatch({ type: "REMOVE_ITEM", productId, variant });
+      },
+      updateQuantity: (productId, quantity, variant) => {
+        const existing = state.items.find(
+          (item) => item.productId === productId && item.variant === variant,
+        );
+        const difference = existing ? quantity - existing.quantity : 0;
+        const product = productById.get(productId);
+        if (difference > 0 && product) {
+          emit("ITEM_ADDED_TO_CART", {
+            productId,
+            metadata: {
+              quantity: difference,
+              unit_price: product.price.sellingPrice,
+              variant: variant ?? null,
+            },
+          });
+        } else if (difference < 0) {
+          emit("ITEM_REMOVED_FROM_CART", {
+            productId,
+            metadata: { quantity: Math.abs(difference) },
+          });
+        }
+        dispatch({ type: "UPDATE_QUANTITY", productId, quantity, variant });
+      },
       applyPromo: (code) => dispatch({ type: "APPLY_PROMO", code }),
       removePromo: () => dispatch({ type: "REMOVE_PROMO" }),
       clearCart: () => dispatch({ type: "CLEAR_CART" }),
     }),
-    [state],
+    [emit, state],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

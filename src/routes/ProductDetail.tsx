@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { RotateCcw, ShieldCheck, Truck } from "lucide-react";
 import { productBySlug, products } from "../data/products";
@@ -18,7 +18,7 @@ import { SpecificationsTable } from "../components/pdp/SpecificationsTable";
 import { RatingsAndReviews } from "../components/pdp/RatingsAndReviews";
 import { ProductRail } from "../components/home/ProductRail";
 import { OffersList } from "../components/pdp/OffersList";
-import { useTracker } from "../context/TrackerContext";
+import { useSession } from "../context/SessionContext";
 import { productVariantOptions } from "../lib/productPresentation";
 import { categoryBySlug } from "../data/categories";
 
@@ -28,16 +28,23 @@ export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
   const product = slug ? productBySlug.get(slug) : undefined;
   const navigate = useNavigate();
-  const { recordPincodeCheck, recordProductVisit } = useTracker();
+  const { emit } = useSession();
+  const viewedProduct = useRef<string | null>(null);
   const [pincode, setPincode] = useState("");
   const [pincodeMessage, setPincodeMessage] = useState("");
   const [selectedVariant, setSelectedVariant] = useState("");
 
   useEffect(() => {
-    if (product) recordProductVisit(product.id);
+    if (product && viewedProduct.current !== product.id) {
+      viewedProduct.current = product.id;
+      emit("PRODUCT_VIEWED", {
+        productId: product.id,
+        metadata: { source: "DIRECT" },
+      });
+    }
     setSelectedVariant("");
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [product, recordProductVisit]);
+  }, [emit, product]);
 
   const variants = useMemo(() => product ? productVariantOptions(product) : [], [product]);
 
@@ -111,7 +118,7 @@ export default function ProductDetail() {
 
           <section className="mt-5 border-t border-fk-border pt-4" aria-labelledby="delivery-title">
             <h2 id="delivery-title" className="text-fk-md font-medium text-fk-ink">Delivery</h2>
-            <form onSubmit={(event) => { event.preventDefault(); const normalized = pincode.trim(); if (/^\d{6}$/.test(normalized)) { recordPincodeCheck(normalized); setPincodeMessage(`Delivery available by ${formatDeliveryDate(delivery.estimatedDays)}`); } else setPincodeMessage("Enter a valid 6-digit pincode"); }} className="mt-2 flex max-w-sm items-center gap-2">
+            <form onSubmit={(event) => { event.preventDefault(); const normalized = pincode.trim(); if (/^\d{6}$/.test(normalized)) { emit("DELIVERY_CHECKED", { productId: product.id, metadata: { pincode: normalized, estimated_days: delivery.estimatedDays, available: stock.inStock } }); setPincodeMessage(`Delivery available by ${formatDeliveryDate(delivery.estimatedDays)}`); } else setPincodeMessage("Enter a valid 6-digit pincode"); }} className="mt-2 flex max-w-sm items-center gap-2">
               <input type="text" inputMode="numeric" name="pincode" autoComplete="postal-code" maxLength={6} placeholder="Enter delivery pincode" aria-label="Enter delivery pincode" value={pincode} onChange={(event) => setPincode(event.target.value.replace(/\D/g, ""))} className="h-11 min-w-0 flex-1 rounded-[2px] border border-fk-border px-3 text-base focus:border-fk-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-fk-blue" />
               <Button type="submit" variant="outline" className="min-h-11" size="sm">Check</Button>
             </form>
@@ -132,8 +139,8 @@ export default function ProductDetail() {
 
       <SpecificationsTable sections={specifications} />
       <section className="rounded-[2px] bg-white p-4 sm:p-6"><h2 className="mb-2 text-fk-xl font-medium text-fk-ink">Product Description</h2><p className="max-w-4xl text-fk-base leading-6 text-fk-ink">{description}</p></section>
-      <div id="ratings"><RatingsAndReviews ratingDistribution={ratingDistribution} reviews={reviews} /></div>
-      {related.length > 0 && <ProductRail title="Similar Products" subtitle={`More in ${product.subCategory}`} products={related} viewAllHref={`/category/${product.category}`} />}
+      <div id="ratings"><RatingsAndReviews productId={product.id} ratingDistribution={ratingDistribution} reviews={reviews} /></div>
+      {related.length > 0 && <ProductRail title="Similar Products" subtitle={`More in ${product.subCategory}`} products={related} viewAllHref={`/category/${product.category}`} originProductId={product.id} />}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { BadgePercent, ShieldCheck, ShoppingCart, X } from "lucide-react";
 import { useCart } from "../context/CartContext";
@@ -13,10 +13,13 @@ import { Button } from "../components/ui/Button";
 import { CartLineItem } from "../components/cart/CartLineItem";
 import { PriceSummary } from "../components/cart/PriceSummary";
 import { ProductRail } from "../components/home/ProductRail";
+import { useSession } from "../context/SessionContext";
 
 export default function CartPage() {
   const { items, promoCode, applyPromo, removePromo } = useCart();
   const navigate = useNavigate();
+  const { emit } = useSession();
+  const cartViewRecorded = useRef(false);
   const [code, setCode] = useState("");
   const [promoMessage, setPromoMessage] = useState("");
 
@@ -28,17 +31,28 @@ export default function CartPage() {
   const inCart = new Set(items.map((item) => item.productId));
   const recommendations = products.filter((product) => !inCart.has(product.id)).slice(0, 12);
 
+  useEffect(() => {
+    if (cartViewRecorded.current) return;
+    cartViewRecorded.current = true;
+    emit("CART_VIEWED", {
+      metadata: { cart_value: totals.totalSellingPrice, item_count: totals.itemCount },
+    });
+  }, [emit, totals.itemCount, totals.totalSellingPrice]);
+
   const submitPromo = (event: React.FormEvent) => {
     event.preventDefault();
     const normalized = code.trim().toUpperCase();
     if (!(normalized in PROMO_CODES)) {
+      emit("COUPON_SEARCHED", { metadata: { code: normalized || null, applied: false } });
       setPromoMessage("That coupon code is not valid.");
       return;
     }
     if (normalized === "FLIPKART200" && totals.totalSellingPrice < 2000) {
+      emit("COUPON_SEARCHED", { metadata: { code: normalized, applied: false } });
       setPromoMessage("FLIPKART200 requires a minimum cart value of ₹2,000.");
       return;
     }
+    emit("COUPON_SEARCHED", { metadata: { code: normalized, applied: true } });
     applyPromo(normalized);
     setCode("");
     setPromoMessage("Coupon applied successfully.");

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { LockKeyhole } from "lucide-react";
 import { useCart } from "../context/CartContext";
@@ -14,6 +14,9 @@ import { AddressForm, EMPTY_ADDRESS, type Address } from "../components/checkout
 import { PaymentOptions } from "../components/checkout/PaymentOptions";
 import { OrderConfirmation } from "../components/checkout/OrderConfirmation";
 import type { PaymentMethod, PlacedOrder, ShippingMethod } from "../types/checkout";
+import { useSession } from "../context/SessionContext";
+
+const CHECKOUT_STEP_NAMES = ["", "ADDRESS", "SUMMARY", "PAYMENT"] as const;
 
 function generateOrderId(): string {
   let digits = "";
@@ -23,6 +26,7 @@ function generateOrderId(): string {
 
 export default function CheckoutPage() {
   const { items, promoCode, clearCart } = useCart();
+  const { emit } = useSession();
   const [step, setStep] = useState(1);
   const [address, setAddress] = useState<Address>(EMPTY_ADDRESS);
   const [shipping, setShipping] = useState<ShippingMethod>(shippingMethods[0]);
@@ -30,15 +34,33 @@ export default function CheckoutPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [order, setOrder] = useState<PlacedOrder | null>(null);
-
-  if (!order && items.length === 0) return <Navigate to="/cart" replace />;
-  if (order) return <OrderConfirmation order={order} />;
+  const checkoutStarted = useRef(false);
+  const lastRecordedStep = useRef(0);
 
   const lines = items.flatMap((item) => {
     const product = productById.get(item.productId);
     return product ? [{ product, quantity: item.quantity, variant: item.variant }] : [];
   });
   const totals = computeCartTotals(items, promoCode, shipping.fee);
+
+  useEffect(() => {
+    if (items.length === 0 || checkoutStarted.current) return;
+    checkoutStarted.current = true;
+    emit("CHECKOUT_STARTED", {
+      metadata: { cart_value: totals.totalSellingPrice, item_count: totals.itemCount },
+    });
+  }, [emit, items.length, totals.itemCount, totals.totalSellingPrice]);
+
+  useEffect(() => {
+    if (items.length === 0 || lastRecordedStep.current === step) return;
+    lastRecordedStep.current = step;
+    emit("CHECKOUT_STEP_VIEWED", {
+      metadata: {
+        step: step as 1 | 2 | 3,
+        step_name: CHECKOUT_STEP_NAMES[step],
+      },
+    });
+  }, [emit, items.length, step]);
 
   const placeOrder = () => {
     if (!payment || !acceptedTerms || processing) return;
@@ -61,6 +83,9 @@ export default function CheckoutPage() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }, 650);
   };
+
+  if (!order && items.length === 0) return <Navigate to="/cart" replace />;
+  if (order) return <OrderConfirmation order={order} />;
 
   return (
     <div className="flex flex-col gap-3 pb-[calc(82px+env(safe-area-inset-bottom))] lg:pb-0">

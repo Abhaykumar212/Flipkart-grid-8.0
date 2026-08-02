@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CircleCheck, Copy, Mail, PackageCheck, Printer, Truck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "../ui/Button";
@@ -6,13 +6,28 @@ import { productById } from "../../data/products";
 import { paymentMethodLabel } from "../../data/checkout";
 import { formatINR } from "../../lib/format";
 import type { PlacedOrder } from "../../types/checkout";
+import { useSession } from "../../context/SessionContext";
 
 export function OrderConfirmation({ order }: { order: PlacedOrder }) {
+  const { emit } = useSession();
+  const recordedOrder = useRef<string | null>(null);
   const [copied, setCopied] = useState(false);
   const lines = order.items.flatMap((item) => {
     const product = productById.get(item.productId);
     return product ? [{ ...item, product }] : [];
   });
+
+  useEffect(() => {
+    if (recordedOrder.current === order.id) return;
+    recordedOrder.current = order.id;
+    emit("ORDER_COMPLETED", {
+      metadata: {
+        order_id: order.id,
+        order_value: order.totals.totalAmount,
+        payment_method: order.paymentMethod.toUpperCase(),
+      },
+    });
+  }, [emit, order]);
 
   const copyOrderId = async () => {
     await navigator.clipboard.writeText(order.id);

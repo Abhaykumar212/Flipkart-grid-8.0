@@ -3,16 +3,19 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { Product } from "../../types/product";
 import { ProductCard } from "./ProductCard";
+import { useSession } from "../../context/SessionContext";
 
 interface ProductRailProps {
   title: string;
   subtitle?: string;
   products: Product[];
   viewAllHref?: string;
+  originProductId?: string;
 }
 
-export function ProductRail({ title, subtitle, products, viewAllHref = "/products" }: ProductRailProps) {
+export function ProductRail({ title, subtitle, products, viewAllHref = "/products", originProductId }: ProductRailProps) {
   const scroller = useRef<HTMLDivElement>(null);
+  const { emit } = useSession();
 
   const scrollBy = (dir: 1 | -1) => {
     scroller.current?.scrollBy({ left: dir * 600, behavior: "smooth" });
@@ -39,7 +42,16 @@ export function ProductRail({ title, subtitle, products, viewAllHref = "/product
           tabIndex={0}
         >
           {products.map((p) => (
-            <ProductCard key={p.id} product={p} />
+            <ProductCard
+              key={p.id}
+              product={p}
+              onProductOpen={originProductId ? (product) => {
+                emit("SIMILAR_PRODUCT_VIEWED", {
+                  productId: product.id,
+                  metadata: { origin_product_id: originProductId },
+                });
+              } : undefined}
+            />
           ))}
         </div>
 

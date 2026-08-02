@@ -1,22 +1,29 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CartProvider } from "../../context/CartContext";
 import { WishlistProvider } from "../../context/WishlistContext";
 import { products } from "../../data/products";
 import { ProductCard } from "./ProductCard";
+import { SessionProvider } from "../../context/SessionContext";
 
 describe("ProductCard", () => {
   it("renders a catalog product with its product link", () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(
+      JSON.stringify({ session_id: "test" }),
+      { status: 201, headers: { "Content-Type": "application/json" } },
+    ));
     const product = products[0];
 
     render(
       <MemoryRouter>
-        <CartProvider>
-          <WishlistProvider>
-            <ProductCard product={product} />
-          </WishlistProvider>
-        </CartProvider>
+        <SessionProvider>
+          <CartProvider>
+            <WishlistProvider>
+              <ProductCard product={product} />
+            </WishlistProvider>
+          </CartProvider>
+        </SessionProvider>
       </MemoryRouter>,
     );
 
