@@ -18,7 +18,8 @@ export type PipelineStage =
   | "shap_attribution"
   | "risk_gate"
   | "root_cause_agent"
-  | "intervention_ranking";
+  | "intervention_ranking"
+  | "delivery_decision";
 
 export type SpanStatus = "ok" | "running" | "skipped" | "error" | "rate_limited";
 
@@ -102,6 +103,40 @@ export interface InterventionPlan {
   excluded_lever_ids: string[];
 }
 
+/**
+ * Every reason `selectSurface` (src/lib/interventionPolicy.ts) can hold back an
+ * intervention, plus `gate_held` for the case where the RCA gate never even
+ * ran the diagnosis. Kept here rather than in interventionPolicy.ts so both
+ * that module and the ledger store can depend on it without a cycle.
+ */
+export type NoInterventionReason =
+  | "gate_held"
+  | "low_confidence"
+  | "margin_approval_required"
+  | "fatigue_cap"
+  | "cooldown"
+  | "no_lever_above_threshold";
+
+/**
+ * The delivery layer's outcome for one pipeline run — "nothing shown" is
+ * recorded exactly like "something shown", never left as an absence. Attached
+ * after the fact via `attachDecision` once the client-side policy has run, so
+ * it renders as a span in the waterfall and a panel in the RCA report just
+ * like any backend-produced stage.
+ */
+export interface DeliveryDecision {
+  outcome: "delivered" | "held";
+  /** Demo-facing summary line, e.g. "Decision: no intervention — user likely to convert unaided (p=0.019)". */
+  headline: string;
+  /** Supporting detail — the specific check or gate reason behind the headline. */
+  detail: string;
+  reason?: NoInterventionReason;
+  rootCause: string | null;
+  leverId?: string;
+  intensity?: number;
+  surface?: string;
+}
+
 export interface PipelineRun {
   id: string;
   startedAt: number;
@@ -113,6 +148,7 @@ export interface PipelineRun {
   gate: GateDecision | null;
   analysis: RootCauseAnalysis | null;
   interventionPlan: InterventionPlan | null;
+  deliveryDecision: DeliveryDecision | null;
   modelUsed: string | null;
   llmLatencyMs: number;
   message: string | null;
@@ -173,6 +209,7 @@ class PipelineTraceStore {
       gate: null,
       analysis: null,
       interventionPlan: null,
+      deliveryDecision: null,
       modelUsed: null,
       llmLatencyMs: 0,
       message: null,
@@ -228,6 +265,33 @@ class PipelineTraceStore {
     this.emit();
   }
 
+  /**
+   * Attach the delivery layer's outcome once the client-side policy has run.
+   * Appends a `delivery_decision` span so it renders in the waterfall exactly
+   * like a backend-produced stage, alongside the structured `deliveryDecision`
+   * field the RCA report and ledger read directly.
+   */
+  attachDecision(runId: string, decision: DeliveryDecision): void {
+    const index = this.runs.findIndex((r) => r.id === runId);
+    if (index === -1) return;
+    const run = this.runs[index];
+    const span: TraceSpan = {
+      id: `${runId}_delivery_decision`,
+      stage: "delivery_decision",
+      label: decision.headline,
+      status: "ok",
+      started_at: Date.now(),
+      duration_ms: 0,
+      source: "frontend",
+      detail: { ...decision },
+    };
+    const spans = run.spans.some((s) => s.stage === "delivery_decision")
+      ? run.spans.map((s) => (s.stage === "delivery_decision" ? span : s))
+      : [...run.spans, span];
+    this.runs[index] = { ...run, deliveryDecision: decision, spans };
+    this.emit();
+  }
+
   failRun(runId: string, message: string): void {
     const index = this.runs.findIndex((r) => r.id === runId);
     if (index === -1) return;
@@ -262,4 +326,5 @@ export const STAGE_LABELS: Record<string, string> = {
   risk_gate: "Risk gate",
   root_cause_agent: "Root cause agent",
   intervention_ranking: "Intervention ranking",
+  delivery_decision: "Delivery decision",
 };

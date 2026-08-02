@@ -44,12 +44,28 @@ COMPANION_GROQ_API_KEY = os.getenv("COMPANION_GROQ_API_KEY", "").strip() or GROQ
 #   gpt-oss-120b  strict json_schema, effort=med,  6000 tok -> HTTP 413 (free-tier TPM)
 #   gpt-oss-20b   strict json_schema, effort=low,  4000 tok -> schema failure
 #   llama-3.3-70b json_schema UNSUPPORTED (json_object only, invents its shape)
-RCA_MODEL = os.getenv("RCA_MODEL", "openai/gpt-oss-120b")
+GROQ_RCA_MODEL = os.getenv("RCA_MODEL", "openai/gpt-oss-120b")
 
 # Deliberately empty by default. gpt-oss-20b cannot reliably satisfy this
 # schema, so falling back to it would convert a clean "rate limited" signal into
 # a confusing schema error. Set explicitly only if you have a model that can.
 RCA_FALLBACK_MODEL = os.getenv("RCA_FALLBACK_MODEL", "").strip()
+
+# --- Gemini (alternate LLM provider) -----------------------------------------
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+COMPANION_GEMINI_API_KEY = os.getenv("COMPANION_GEMINI_API_KEY", "").strip() or GEMINI_API_KEY
+GEMINI_RCA_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+# Which provider answers RCA + companion chat calls. Both providers implement
+# the same (parsed, usage) contract in root_cause.py/companion_chat.py, so this
+# is the only switch needed. Defaults to Gemini once a key is present — added
+# specifically because Groq's free tier rate-limits hard under demo load.
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini" if GEMINI_API_KEY else "groq").strip().lower()
+
+# The model id and fallback surfaced to the frontend / used by analyse() are
+# provider-dependent; everything downstream just reads RCA_MODEL.
+RCA_MODEL = GEMINI_RCA_MODEL if LLM_PROVIDER == "gemini" else GROQ_RCA_MODEL
 
 # gpt-oss models are reasoning models: reasoning tokens are drawn from the same
 # budget as the answer. Too low and the budget is exhausted mid-object, and Groq
@@ -117,3 +133,27 @@ def redacted_key_hint() -> str:
     if not GROQ_API_KEY:
         return "not-set"
     return f"{GROQ_API_KEY[:4]}…{GROQ_API_KEY[-4:]} (len {len(GROQ_API_KEY)})"
+
+
+# --- Provider-agnostic accessors ---------------------------------------------
+# What main.py and the agents actually check — routes to whichever provider
+# LLM_PROVIDER selects, so the request handlers don't need to know Groq exists.
+
+
+def llm_is_configured() -> bool:
+    if LLM_PROVIDER == "gemini":
+        return bool(GEMINI_API_KEY)
+    return groq_is_configured()
+
+
+def companion_llm_is_configured() -> bool:
+    if LLM_PROVIDER == "gemini":
+        return bool(COMPANION_GEMINI_API_KEY)
+    return companion_groq_is_configured()
+
+
+def missing_key_hint() -> str:
+    """Which env var to set, for the "not configured" message shown in the UI."""
+    if LLM_PROVIDER == "gemini":
+        return "GEMINI_API_KEY"
+    return "GROQ_API_KEY"

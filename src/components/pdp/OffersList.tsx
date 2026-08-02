@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Landmark, Wallet, Repeat, Gift, Tag, ChevronDown, type LucideIcon } from "lucide-react";
 import type { Emi } from "../../types/product";
 import { formatINR } from "../../lib/format";
+import { InlineHighlight } from "../intervention/InlineHighlight";
+import { useInlineTarget } from "../intervention/useInlineTarget";
 
 type OfferType = "bank" | "emi" | "exchange" | "combo" | "special";
 
@@ -86,6 +88,8 @@ interface OffersListProps {
 export function OffersList({ offers, emi }: OffersListProps) {
   const rows = buildOfferRows(offers, emi);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const emiInline = useInlineTarget("pdp-emi-row");
+  let emiRowClaimed = false;
 
   return (
     <div>
@@ -95,25 +99,42 @@ export function OffersList({ offers, emi }: OffersListProps) {
           const meta = OFFER_META[row.type];
           const Icon = meta.icon;
           const isOpen = openIndex === i;
+          // Only the first EMI row (there's usually exactly one) claims the
+          // target key — the ref goes on the <li> so `<ul>` stays valid; the
+          // highlight itself wraps just the inner row content.
+          const isEmiRow = row.type === "emi" && !emiRowClaimed;
+          if (isEmiRow) emiRowClaimed = true;
+
+          const rowContent = (
+            <div className="flex items-start gap-2 text-fk-base text-fk-ink">
+              <Icon className="mt-0.5 h-4 w-4 shrink-0 text-fk-green" strokeWidth={2} />
+              <span className="flex-1">
+                <span className="font-medium">{meta.label}</span> {row.text}{" "}
+                <button
+                  onClick={() => setOpenIndex(isOpen ? null : i)}
+                  className="inline-flex items-center gap-0.5 font-medium text-fk-blue"
+                >
+                  T&amp;C
+                  <ChevronDown
+                    className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                    strokeWidth={2.5}
+                  />
+                </button>
+              </span>
+            </div>
+          );
 
           return (
-            <li key={i} className="py-2.5 first:pt-0">
-              <div className="flex items-start gap-2 text-fk-base text-fk-ink">
-                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-fk-green" strokeWidth={2} />
-                <span className="flex-1">
-                  <span className="font-medium">{meta.label}</span> {row.text}{" "}
-                  <button
-                    onClick={() => setOpenIndex(isOpen ? null : i)}
-                    className="inline-flex items-center gap-0.5 font-medium text-fk-blue"
-                  >
-                    T&amp;C
-                    <ChevronDown
-                      className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                      strokeWidth={2.5}
-                    />
-                  </button>
-                </span>
-              </div>
+            <li
+              key={i}
+              ref={isEmiRow ? emiInline.anchorRef : undefined}
+              className="py-2.5 first:pt-0"
+            >
+              {isEmiRow && emiInline.isActive && emiInline.content ? (
+                <InlineHighlight {...emiInline.content}>{rowContent}</InlineHighlight>
+              ) : (
+                rowContent
+              )}
               {isOpen && (
                 <p className="mt-1.5 pl-6 text-fk-sm text-fk-muted">{meta.terms}</p>
               )}

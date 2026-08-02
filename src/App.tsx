@@ -9,6 +9,7 @@ import CartPage from "./routes/CartPage";
 import CheckoutPage from "./routes/CheckoutPage";
 import SearchResultsPage from "./routes/SearchResultsPage";
 import PipelineConsole from "./routes/PipelineConsole";
+import InterventionLab from "./routes/InterventionLab";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
                 <Route path="checkout" element={<CheckoutPage />} />
                 <Route path="search" element={<SearchResultsPage />} />
                 <Route path="pipeline" element={<PipelineConsole />} />
+                <Route path="intervention-lab" element={<InterventionLab />} />
               </Route>
             </Routes>
           </TrackerProvider>

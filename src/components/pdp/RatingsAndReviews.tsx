@@ -5,6 +5,8 @@ import { RatingStars } from "../ui/RatingStars";
 import { formatIndianNumber } from "../../lib/format";
 import { useTracker } from "../../context/TrackerContext";
 import { pageContext } from "../../lib/pageContext";
+import { InlineHighlight } from "../intervention/InlineHighlight";
+import { useInlineTarget } from "../intervention/useInlineTarget";
 
 /** Continuous time the reviews section must stay in view before the companion offers to summarize. */
 const REVIEW_DWELL_THRESHOLD_MS = 15_000;
@@ -66,6 +68,9 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
   const recorded = useRef(false);
   const { recordReviewVisibility } = useTracker();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  // A second, dedicated ref — `sectionRef` above is already committed to the
+  // dwell-tracking IntersectionObservers.
+  const headerInline = useInlineTarget("reviews-header");
 
   useEffect(() => {
     const section = sectionRef.current;
@@ -131,7 +136,18 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
       className="rounded-[2px] bg-white p-6"
       data-testid="reviews-section"
     >
-      <h2 className="mb-4 text-fk-xl font-medium text-fk-ink">Ratings &amp; Reviews</h2>
+      {(() => {
+        const heading = (
+          <h2 ref={headerInline.anchorRef} className="mb-4 text-fk-xl font-medium text-fk-ink">
+            Ratings &amp; Reviews
+          </h2>
+        );
+        return headerInline.isActive && headerInline.content ? (
+          <InlineHighlight {...headerInline.content}>{heading}</InlineHighlight>
+        ) : (
+          heading
+        );
+      })()}
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[280px_1fr]">
         <div className="flex flex-col gap-2">

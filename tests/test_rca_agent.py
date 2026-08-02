@@ -180,9 +180,14 @@ class EvidenceAndPromptTests(unittest.TestCase):
         self.impacts = {
             "cart_value_vs_typical_order": 0.99,
             "delivery_fee_percent_of_cart": 0.62,
-            "checkout_steps_completed": 0.55,
-            "payment_method_on_file": -0.40,
+            # Funnel-progress features: excluded from evidence by design (see
+            # DIAGNOSTIC_FEATURE_NAMES), even though they dwarf everything
+            # else here in magnitude. Several tests below assert they never
+            # surface in build_evidence's output.
+            "checkout_steps_completed": 5.0,
+            "payment_method_on_file": -4.5,
             "estimated_delivery_days": 0.31,
+            "price_dropped_since_first_view": -0.20,
         }
         self.cart = CartContext(
             lines=[
@@ -220,6 +225,21 @@ class EvidenceAndPromptTests(unittest.TestCase):
         self.assertEqual(top["signal"], "cart_value_vs_typical_order")
         self.assertIn("4.90x", top["observed_value"])
         self.assertNotEqual(top["label"], top["signal"], "label should be human readable")
+
+    def test_evidence_excludes_funnel_progress_even_when_dominant(self):
+        """checkout_steps_completed/payment_method_on_file dwarf everything
+        else in self.impacts, but they measure how far along the funnel a
+        shopper got, not why — they must never surface as diagnosis evidence.
+        """
+        evidence = root_cause.build_evidence(self.features, self.impacts)
+        signals = {item["signal"] for item in evidence}
+        self.assertNotIn("checkout_steps_completed", signals)
+        self.assertNotIn("payment_method_on_file", signals)
+
+    def test_diagnostic_feature_names_exclude_funnel_progress(self):
+        self.assertNotIn("checkout_steps_completed", root_cause.DIAGNOSTIC_FEATURE_NAMES)
+        self.assertNotIn("checkout_progress_ratio", root_cause.DIAGNOSTIC_FEATURE_NAMES)
+        self.assertNotIn("payment_method_on_file", root_cause.DIAGNOSTIC_FEATURE_NAMES)
 
     def test_prompt_contains_the_grounding_the_agent_needs(self):
         evidence = root_cause.build_evidence(self.features, self.impacts)

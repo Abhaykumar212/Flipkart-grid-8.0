@@ -275,7 +275,11 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
         })) as RootCauseResponse;
 
         pipelineTrace.completeRun(runId, result);
-        setRootCause(result);
+        // Rewritten to the frontend-local run id: the backend's own uuid is
+        // only ever used for this dedup key (never sent back to the server),
+        // and InterventionContext needs it to attach a delivery decision to
+        // the matching entry in pipelineTrace, which is keyed by the local id.
+        setRootCause({ ...result, pipeline_run_id: runId });
       } catch (requestError) {
         if (controller.signal.aborted) {
           // Superseded by a newer request — close the run out instead of

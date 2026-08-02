@@ -161,6 +161,54 @@ def build_messages(
     return messages
 
 
+def _messages_to_gemini(messages: List[Dict[str, str]]) -> Tuple[Optional[str], List[Dict[str, Any]]]:
+    """Splits the Groq-shaped message list into (system_instruction, Gemini history).
+
+    Gemini has no "system" role in the turn list — it takes a separate
+    `system_instruction` — and uses "model" where Groq/OpenAI use "assistant".
+    """
+    system_instruction = None
+    history: List[Dict[str, Any]] = []
+    for message in messages:
+        if message["role"] == "system":
+            system_instruction = message["content"]
+            continue
+        role = "model" if message["role"] == "assistant" else "user"
+        history.append({"role": role, "parts": [message["content"]]})
+    return system_instruction, history
+
+
+def call_gemini_chat(messages: List[Dict[str, str]], model: str) -> Tuple[str, Dict[str, Any]]:
+    """Plain (non-structured) Gemini chat completion. Returns (reply_text, usage)."""
+    import google.generativeai as genai
+    from google.api_core import exceptions as google_exceptions
+
+    genai.configure(api_key=config.COMPANION_GEMINI_API_KEY)
+    system_instruction, history = _messages_to_gemini(messages)
+    gen_model = genai.GenerativeModel(model_name=model, system_instruction=system_instruction)
+
+    try:
+        response = gen_model.generate_content(
+            history,
+            generation_config=genai.GenerationConfig(
+                temperature=config.COMPANION_CHAT_TEMPERATURE,
+                max_output_tokens=config.COMPANION_CHAT_MAX_TOKENS,
+            ),
+            request_options={"timeout": config.COMPANION_CHAT_TIMEOUT_SECONDS},
+        )
+    except google_exceptions.ResourceExhausted as error:
+        raise RateLimitedError(str(error)) from error
+    except google_exceptions.GoogleAPIError as error:
+        raise RuntimeError(f"Gemini error: {error}") from error
+
+    usage_meta = getattr(response, "usage_metadata", None)
+    usage = {
+        "prompt_tokens": getattr(usage_meta, "prompt_token_count", None),
+        "completion_tokens": getattr(usage_meta, "candidates_token_count", None),
+    }
+    return response.text, usage
+
+
 def call_groq(messages: List[Dict[str, str]], model: str) -> Tuple[str, Dict[str, Any]]:
     """POST a plain chat completion to Groq. Returns (reply_text, usage)."""
     body = {
@@ -206,9 +254,16 @@ def chat(
     meta: Dict[str, Any] = {"model_used": None, "latency_ms": 0.0}
     started = time.time()
 
+    # COMPANION_CHAT_MODEL already defaults to config.RCA_MODEL, which is itself
+    # provider-aware, so this is the right model id for whichever provider is active.
+    model = config.COMPANION_CHAT_MODEL
+
     try:
-        reply, usage = call_groq(messages, config.COMPANION_CHAT_MODEL)
-        meta["model_used"] = config.COMPANION_CHAT_MODEL
+        if config.LLM_PROVIDER == "gemini":
+            reply, usage = call_gemini_chat(messages, model)
+        else:
+            reply, usage = call_groq(messages, model)
+        meta["model_used"] = model
         meta["latency_ms"] = round((time.time() - started) * 1000, 2)
         meta["prompt_tokens"] = usage.get("prompt_tokens")
         meta["completion_tokens"] = usage.get("completion_tokens")

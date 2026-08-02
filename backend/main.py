@@ -326,7 +326,8 @@ def pipeline_config() -> dict:
         "rca_model": config.RCA_MODEL,
         "rca_fallback_model": config.RCA_FALLBACK_MODEL,
         "reasoning_effort": config.RCA_REASONING_EFFORT,
-        "groq_configured": config.groq_is_configured(),
+        "llm_provider": config.LLM_PROVIDER,
+        "llm_configured": config.llm_is_configured(),
         "risk_tiers": {"high": 0.80, "medium": 0.60},
     }
 
@@ -394,16 +395,17 @@ def root_cause_analysis(payload: RootCauseRequest) -> RootCauseResponse:
     if not decision.fired:
         return envelope("gate_not_met", message=decision.reason)
 
-    if not config.groq_is_configured():
+    if not config.llm_is_configured():
+        hint = config.missing_key_hint()
         recorder.add(
             Stage.ROOT_CAUSE_AGENT,
-            "Skipped — GROQ_API_KEY not configured",
+            f"Skipped — {hint} not configured",
             status=Status.SKIPPED,
-            detail={"hint": "Set GROQ_API_KEY in .env (see .env.example)"},
+            detail={"hint": f"Set {hint} in .env (see .env.example)"},
         )
         return envelope(
             "not_configured",
-            message="GROQ_API_KEY is not set; copy .env.example to .env and add a key.",
+            message=f"{hint} is not set; copy .env.example to .env and add a key.",
         )
 
     analysis, meta = root_cause.analyse(
@@ -457,10 +459,11 @@ def companion_chat_endpoint(payload: CompanionChatRequest) -> CompanionChatRespo
     Shares the Groq free-tier budget with root-cause analysis, so it degrades
     the same way: a clean `rate_limited` status rather than a crash.
     """
-    if not config.companion_groq_is_configured():
+    if not config.companion_llm_is_configured():
+        hint = config.missing_key_hint()
         return CompanionChatResponse(
             status="not_configured",
-            message="No Groq key configured for chat; set COMPANION_GROQ_API_KEY or GROQ_API_KEY in .env.",
+            message=f"No key configured for chat; set {hint} (or the COMPANION_ variant) in .env.",
         )
 
     reply, meta = companion_chat.chat(

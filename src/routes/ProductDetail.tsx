@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Heart } from "lucide-react";
 import { productBySlug } from "../data/products";
-import { formatDeliveryDate } from "../lib/format";
+import { formatDeliveryDate, formatINR } from "../lib/format";
 import {
   getSpecifications,
   getDescription,
@@ -21,6 +21,8 @@ import { useTracker } from "../context/TrackerContext";
 import { useWishlist } from "../context/WishlistContext";
 import { userHistory } from "../lib/userHistory";
 import { pageContext } from "../lib/pageContext";
+import { InlineHighlight } from "../components/intervention/InlineHighlight";
+import { useInlineTarget } from "../components/intervention/useInlineTarget";
 
 export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -69,6 +71,38 @@ export default function ProductDetail() {
   const reviews = getReviews(product);
   const totalRatings = ratingDistribution.reduce((sum, r) => sum + r.count, 0);
 
+  const priceInline = useInlineTarget("pdp-price-block");
+  const deliveryInline = useInlineTarget("pdp-delivery");
+
+  const priceBlock = (
+    <span ref={priceInline.anchorRef} className="inline-block">
+      <PriceBlock mrp={price.mrp} sellingPrice={price.sellingPrice} size="lg" className="mt-3" />
+    </span>
+  );
+
+  // "with priceHistory context if the product has signals" — PriceBlock itself
+  // takes no such prop, so the history summary is appended to the caption here,
+  // where the product's `signals` are already in scope.
+  const priceHistory = product.signals?.priceHistory;
+  const priceContent =
+    priceInline.isActive && priceInline.content && priceHistory && priceHistory.length > 0
+      ? {
+          ...priceInline.content,
+          reasonText: `${priceInline.content.reasonText} Was ${formatINR(priceHistory[0].price)} on ${new Date(
+            priceHistory[0].date,
+          ).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}, now ${formatINR(
+            priceHistory[priceHistory.length - 1].price,
+          )}.`,
+        }
+      : priceInline.content;
+
+  const deliveryLine = (
+    <p ref={deliveryInline.anchorRef} className="mt-2 text-fk-base text-fk-ink">
+      {delivery.free ? "Free delivery" : "Delivery charges apply"} — Delivery by{" "}
+      <span className="font-medium">{formatDeliveryDate(delivery.estimatedDays)}</span>
+    </p>
+  );
+
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_3fr]">
@@ -100,7 +134,11 @@ export default function ProductDetail() {
             <RatingStars variant="stars" value={rating.value} count={totalRatings} />
           </div>
 
-          <PriceBlock mrp={price.mrp} sellingPrice={price.sellingPrice} size="lg" className="mt-3" />
+          {priceInline.isActive && priceContent ? (
+            <InlineHighlight {...priceContent}>{priceBlock}</InlineHighlight>
+          ) : (
+            priceBlock
+          )}
 
           <div className="mt-4">
             <OffersList offers={offers} emi={emi} />
@@ -128,10 +166,11 @@ export default function ProductDetail() {
                 Check
               </Button>
             </form>
-            <p className="mt-2 text-fk-base text-fk-ink">
-              {delivery.free ? "Free delivery" : "Delivery charges apply"} — Delivery by{" "}
-              <span className="font-medium">{formatDeliveryDate(delivery.estimatedDays)}</span>
-            </p>
+            {deliveryInline.isActive && deliveryInline.content ? (
+              <InlineHighlight {...deliveryInline.content}>{deliveryLine}</InlineHighlight>
+            ) : (
+              deliveryLine
+            )}
           </div>
 
           <div className="mt-4 flex items-center gap-2 border-t border-fk-border pt-4 text-fk-base text-fk-ink">

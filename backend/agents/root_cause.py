@@ -11,8 +11,10 @@ from SHAP values, not from free association over a prompt, so it cannot name a
 cause the model did not attribute. That property is what makes the output
 defensible: "the LLM isn't guessing, it's verbalising the model's reasoning."
 
-The response is enforced by Groq's strict `json_schema` mode and re-validated
+The response is enforced by the active provider's structured-output mode
+(Groq's strict `json_schema`, or Gemini's `response_schema`) and re-validated
 locally with pydantic, so a downstream phase never has to parse free text.
+`config.LLM_PROVIDER` selects which one is live.
 """
 
 from __future__ import annotations
@@ -87,6 +89,65 @@ MATERIAL_FEATURES: Tuple[str, ...] = (
     "price_dropped_since_first_view",
 )
 
+# Features the *diagnosis* is allowed to cite as evidence. Prediction (the
+# XGBoost model + its full SHAP attribution) keeps using every feature,
+# including funnel progress — that's what it's good at. Diagnosis is a
+# narrower question: not "how likely is this cart to convert" but "why is
+# *this* shopper hesitating", and a handful of features answer a different
+# question than that.
+#
+# `checkout_steps_completed`/`checkout_progress_ratio` are pure funnel
+# position, not a friction event — a shopper who hasn't started checkout yet
+# looks the same on these features whether the barrier is cost, delivery,
+# trust or nothing at all, so they carry no information about *cause*.
+# `payment_method_on_file` is a static demo placeholder (see MODEL_CARD.md
+# limitation #2 — it never varies with live session behaviour) and, per
+# `ml/artifacts/model.joblib`'s own gain ranking, the single highest-gain
+# feature in the model; left in, it and `checkout_steps_completed` swamp every
+# other signal's SHAP magnitude regardless of scenario, which is exactly the
+# collapse-to-checkout_friction bug this subset exists to fix.
+# `checkout_friction_events` is excluded because it's a sum that embeds
+# `payment_method_on_file` as one of its four terms, reintroducing the same
+# swamping feature by another name; its genuinely diagnostic components
+# (`payment_attempts_failed`, `failed_coupon_attempts`) are already included
+# individually below. Generic profile/context features
+# (`customer_loyalty_score`, `lifetime_orders_placed`,
+# `days_since_last_purchase`, `saved_items_in_wishlist`, `is_mobile_session`,
+# `is_late_night_session`) describe who the shopper is or when they're
+# shopping, not why this cart is at risk, so they're left out too.
+# `extra_cost_burden_score` is excluded because delivery is free on every
+# cart in this catalog above the ₹500 free-delivery threshold, so the feature
+# is a near-constant that only ever reflects `cart_value_vs_typical_order`
+# restated, not a distinct cost signal.
+DIAGNOSTIC_FEATURE_NAMES: Tuple[str, ...] = (
+    # Cost / price-comparison signals
+    "cart_value_vs_typical_order",
+    "delivery_fee_percent_of_cart",
+    "price_dropped_since_first_view",
+    "discount_seeking_tendency",
+    "failed_coupon_attempts",
+    "price_sensitivity_exposure",
+    # Delivery signals
+    "estimated_delivery_days",
+    "delivery_pincode_checks",
+    "delivery_concern_index",
+    # Checkout / trust signals that are concrete events or states, not funnel position
+    "payment_attempts_failed",
+    "is_guest_checkout",
+    "trust_barrier_score",
+    # Engagement / research signals
+    "seconds_spent_in_cart",
+    "times_returned_to_product_page",
+    "product_reviews_read",
+    "seconds_idle_before_checkout",
+    "product_research_intensity",
+    "dwell_per_return_visit",
+    "hesitation_ratio",
+    # Prior behaviour
+    "past_abandonment_rate",
+    "past_order_return_rate",
+)
+
 
 def _format_value(name: str, value: float) -> str:
     """Render a feature value the way a human would describe it."""
@@ -134,8 +195,20 @@ def build_evidence(
     Positive SHAP pushes toward abandonment, negative pulls toward conversion.
     Both directions are included: knowing what is *holding the shopper in* is as
     useful for choosing a lever as knowing what is pushing them away.
+
+    Ranked over `DIAGNOSTIC_FEATURE_NAMES` only, not the full 32-feature
+    attribution `_run_inference` computes. Funnel-progress features
+    (`checkout_steps_completed`, `payment_method_on_file`, ...) are the
+    model's highest-gain features and dominate the *prediction* correctly,
+    but including them here meant the diagnosis collapsed to
+    "checkout_friction" on almost every session regardless of what was
+    actually driving hesitation — see the comment on
+    `DIAGNOSTIC_FEATURE_NAMES` above.
     """
-    ranked = sorted(feature_impacts.items(), key=lambda kv: abs(kv[1]), reverse=True)[:limit]
+    diagnostic_impacts = {
+        name: impact for name, impact in feature_impacts.items() if name in DIAGNOSTIC_FEATURE_NAMES
+    }
+    ranked = sorted(diagnostic_impacts.items(), key=lambda kv: abs(kv[1]), reverse=True)[:limit]
     evidence = []
     for name, impact in ranked:
         raw_value = features.get(name)
@@ -183,6 +256,7 @@ A gradient-boosted model has already scored this session's abandonment risk and 
 Rules:
 1. Your diagnosis must be supported by the SHAP evidence provided. Do not invent causes that the evidence does not support.
 2. Positive SHAP values push toward abandonment; negative values pull toward conversion. Weigh both.
+2b. The SHAP evidence you are given is deliberately restricted to behavioural and cost/delivery/trust signals that explain WHY a shopper hesitates. Checkout-funnel-progress facts (how many of the 3 checkout steps are done, whether a payment method is on file) are intentionally withheld from the evidence array — they tell you HOW FAR a shopper got and how risky the session is, not WHY, and are not valid support for a root cause. You may still see them quoted as plain facts under SESSION FACTS for context; do not cite them as evidence for `primary_root_cause` or `contributing_factors`.
 3. Quote concrete observed values (amounts, counts, days) in your explanation — be specific, not generic.
 4. Recommend levers ONLY from the supplied catalog, and only where they match the diagnosed cause.
 5. Populate levers_to_avoid when a lever would be wasteful or margin-destroying — e.g. do not discount a shopper showing no price sensitivity.
@@ -371,7 +445,61 @@ def _response_schema() -> Dict[str, Any]:
 
 
 class RateLimitedError(RuntimeError):
-    """Groq returned 429. Distinguished so the caller can degrade, not fail."""
+    """The provider returned 429. Distinguished so the caller can degrade, not fail."""
+
+
+def _strip_for_gemini(schema: Any) -> Any:
+    """Gemini's schema proto has no `additionalProperties`/`minItems` fields —
+    only `type_, format_, description, nullable, enum, items, max_items,
+    properties, required`. `_response_schema()` is written for Groq's strict
+    json_schema mode, which needs `additionalProperties: false`; this strips
+    what Gemini doesn't understand rather than maintaining a second schema.
+    """
+    if isinstance(schema, dict):
+        cleaned = {k: v for k, v in schema.items() if k not in ("additionalProperties", "minItems")}
+        return {k: _strip_for_gemini(v) for k, v in cleaned.items()}
+    if isinstance(schema, list):
+        return [_strip_for_gemini(item) for item in schema]
+    return schema
+
+
+def call_gemini(prompt: str, model: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Call Gemini with structured JSON output. Returns (parsed, usage)."""
+    import google.generativeai as genai
+    from google.api_core import exceptions as google_exceptions
+
+    genai.configure(api_key=config.GEMINI_API_KEY)
+    gen_model = genai.GenerativeModel(model_name=model, system_instruction=SYSTEM_PROMPT)
+
+    try:
+        response = gen_model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(
+                temperature=config.RCA_TEMPERATURE,
+                max_output_tokens=config.RCA_MAX_TOKENS,
+                response_mime_type="application/json",
+                response_schema=_strip_for_gemini(_response_schema()),
+            ),
+            request_options={"timeout": config.RCA_TIMEOUT_SECONDS},
+        )
+    except google_exceptions.ResourceExhausted as error:
+        raise RateLimitedError(str(error)) from error
+    except google_exceptions.GoogleAPIError as error:
+        raise RuntimeError(f"Gemini error: {error}") from error
+
+    usage_meta = getattr(response, "usage_metadata", None)
+    usage = {
+        "prompt_tokens": getattr(usage_meta, "prompt_token_count", None),
+        "completion_tokens": getattr(usage_meta, "candidates_token_count", None),
+    }
+    return json.loads(response.text), usage
+
+
+def call_llm(prompt: str, model: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Dispatches to whichever provider `config.LLM_PROVIDER` selects."""
+    if config.LLM_PROVIDER == "gemini":
+        return call_gemini(prompt, model)
+    return call_groq(prompt, model)
 
 
 def call_groq(prompt: str, model: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
@@ -440,9 +568,10 @@ def analyse(
     meta: Dict[str, Any] = {"model_used": None, "latency_ms": 0.0}
     started = time.time()
 
-    # Fallback is opt-in; see config.RCA_FALLBACK_MODEL for why it is off by default.
+    # Fallback is opt-in and Groq-specific; see config.RCA_FALLBACK_MODEL for why
+    # it is off by default. Gemini has no configured fallback model yet.
     candidates = [config.RCA_MODEL]
-    if config.RCA_FALLBACK_MODEL:
+    if config.LLM_PROVIDER == "groq" and config.RCA_FALLBACK_MODEL:
         candidates.append(config.RCA_FALLBACK_MODEL)
 
     for attempt, model in enumerate(candidates):
@@ -451,7 +580,7 @@ def analyse(
                 Stage.ROOT_CAUSE_AGENT,
                 f"LLM root cause analysis ({model})",
             ) as span:
-                parsed, usage = call_groq(prompt, model)
+                parsed, usage = call_llm(prompt, model)
                 analysis = RootCauseAnalysis.model_validate(parsed)
                 meta["model_used"] = model
                 meta["latency_ms"] = round((time.time() - started) * 1000, 2)

@@ -4,10 +4,13 @@ import { useCart } from "../context/CartContext";
 import { useTracker } from "../context/TrackerContext";
 import { pipelineTrace, runDurationMs, type PipelineRun } from "../lib/pipelineTrace";
 import { sessionTracker } from "../lib/tracker";
+import { fatigueBudget, MAX_SESSION_EXPOSURE, MIN_GAP_MS } from "../lib/fatigueBudget";
+import { resolveMarginApproval, setMarginApproval } from "../lib/interventionPolicy";
 import { DEMO_SCENARIOS, type DemoScenario } from "../data/demoScenarios";
 import { TraceWaterfall } from "../components/pipeline/TraceWaterfall";
 import { RcaReport } from "../components/pipeline/RcaReport";
 import { ScenarioPicker } from "../components/pipeline/ScenarioPicker";
+import { InterventionLedgerPanel } from "../components/pipeline/InterventionLedgerPanel";
 
 const STATUS_CHIP: Record<string, string> = {
   success: "bg-emerald-100 text-emerald-700",
@@ -33,16 +36,19 @@ interface PipelineConfig {
   max_per_session: number;
   rca_model: string;
   reasoning_effort: string;
-  groq_configured: boolean;
+  llm_provider: string;
+  llm_configured: boolean;
 }
 
 export default function PipelineConsole() {
   const runs = useSyncExternalStore(pipelineTrace.subscribe, pipelineTrace.getSnapshot);
+  const fatigue = useSyncExternalStore(fatigueBudget.subscribe, fatigueBudget.getSnapshot);
   const { runRootCauseAnalysis, rootCauseLoading, prediction } = useTracker();
   const { clearCart, addItem } = useCart();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeScenario, setActiveScenario] = useState<string | null>(null);
   const [config, setConfig] = useState<PipelineConfig | null>(null);
+  const [marginApproved, setMarginApprovedState] = useState(resolveMarginApproval);
 
   useEffect(() => {
     fetch("http://localhost:8000/api/pipeline-config")
@@ -94,7 +100,7 @@ export default function PipelineConsole() {
             <h1 className="text-lg font-bold text-slate-900">Agent pipeline console</h1>
             <p className="text-xs text-slate-500">
               Live trace of every stage: session telemetry → feature engineering → XGBoost → SHAP →
-              risk gate → root cause agent
+              risk gate → root cause agent → intervention ranking → delivery decision
             </p>
           </div>
 
@@ -126,6 +132,7 @@ export default function PipelineConsole() {
               ["Trigger threshold", `${(config.rca_threshold * 100).toFixed(0)}%`],
               ["Cooldown", `${config.cooldown_seconds}s`],
               ["Session cap", `${config.max_per_session}`],
+              ["Provider", config.llm_provider],
               ["Agent model", config.rca_model.split("/").pop() ?? config.rca_model],
               ["Reasoning", config.reasoning_effort],
               ["Live risk", prediction ? `${(prediction.abandonment_probability * 100).toFixed(1)}%` : "—"],
@@ -138,13 +145,107 @@ export default function PipelineConsole() {
           </dl>
         )}
 
-        {config && !config.groq_configured && (
+        {config && !config.llm_configured && (
           <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            GROQ_API_KEY is not set — the pipeline will run through the risk gate but skip the agent.
-            Copy <code>.env.example</code> to <code>.env</code> and add a key.
+            No key configured for the {config.llm_provider} provider — the pipeline will run through the
+            risk gate but skip the agent. Copy <code>.env.example</code> to <code>.env</code> and add a key.
           </p>
         )}
       </header>
+
+      {/* Phase 4 — what the client did with the plan, as opposed to what the
+          pipeline recommended. Ranking picks the best lever; this decides
+          whether it was worth the shopper's attention at all. */}
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-800">Delivery policy</h2>
+            <p className="text-xs text-slate-500">
+              Intensity gating and the per-session attention budget, applied after ranking.
+            </p>
+          </div>
+
+          <div className="ml-auto flex items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
+              <input
+                type="checkbox"
+                checked={marginApproved}
+                onChange={(event) => {
+                  setMarginApproval(event.target.checked);
+                  setMarginApprovedState(event.target.checked);
+                }}
+                className="h-3.5 w-3.5 accent-blue-600"
+              />
+              Margin approval
+            </label>
+            <button
+              onClick={() => fatigueBudget.reset()}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Reset fatigue
+            </button>
+          </div>
+        </div>
+
+        <dl className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs sm:grid-cols-3 lg:grid-cols-5">
+          {[
+            ["Attention spent", `${fatigue.decayedExposure} / ${MAX_SESSION_EXPOSURE}`],
+            ["Shown this session", `${fatigue.exposureCount}`],
+            [
+              "Next eligible",
+              fatigue.nextEligibleAt
+                ? new Date(fatigue.nextEligibleAt).toLocaleTimeString()
+                : "now",
+            ],
+            ["This route visit", fatigue.shownInCurrentVisit ? "spent" : "open"],
+            ["Rung 3 (margin)", marginApproved ? "approved" : "withheld"],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-lg bg-slate-50 px-3 py-2">
+              <dt className="text-[10px] uppercase tracking-wide text-slate-500">{label}</dt>
+              <dd className="mt-0.5 font-semibold text-slate-800">{value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <p className="mt-2 text-[11px] text-slate-500">
+          Caps: {MAX_SESSION_EXPOSURE} per session (decayed, 4-min half-life), 1 per{" "}
+          {MIN_GAP_MS / 1000}s, 1 per route visit. Dismissal suppresses a lever for the rest of
+          the session.
+        </p>
+
+        {fatigue.exposures.length > 0 && (
+          <ul className="mt-3 flex flex-col gap-1 border-t border-slate-100 pt-3">
+            {fatigue.exposures.map((exposure, index) => (
+              <li
+                key={`${exposure.leverId}-${exposure.shownAt}-${index}`}
+                className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600"
+              >
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-700">
+                  {exposure.leverId}
+                </span>
+                <span>rung {exposure.intensity}</span>
+                <span className="text-slate-400">{exposure.rootCause}</span>
+                <span
+                  className={
+                    exposure.outcome === "dismissed"
+                      ? "text-red-600"
+                      : exposure.outcome === "accepted"
+                        ? "text-emerald-600"
+                        : "text-slate-400"
+                  }
+                >
+                  {exposure.outcome === "pending" ? "ignored so far" : exposure.outcome}
+                </span>
+                <span className="ml-auto text-slate-400">
+                  {new Date(exposure.shownAt).toLocaleTimeString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <InterventionLedgerPanel />
 
       <ScenarioPicker
         activeId={activeScenario}

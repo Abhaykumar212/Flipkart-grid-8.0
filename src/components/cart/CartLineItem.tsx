@@ -7,6 +7,8 @@ import { AssuredBadge } from "../ui/Badge";
 import { formatDeliveryDate } from "../../lib/format";
 import { useCart } from "../../context/CartContext";
 import { getSeller } from "../../lib/productDetails";
+import { InlineHighlight } from "../intervention/InlineHighlight";
+import { useInlineTarget } from "../intervention/useInlineTarget";
 
 const FALLBACK = "/fallback-product.svg";
 
@@ -22,6 +24,8 @@ export function CartLineItem({ product, quantity, readOnly = false }: CartLineIt
   const [src, setSrc] = useState(product.images[0] ?? FALLBACK);
   const { price, delivery, badges } = product;
   const seller = getSeller(product);
+  const priceInline = useInlineTarget("cart-price-block");
+  const deliveryInline = useInlineTarget("cart-delivery-estimate");
 
   return (
     <div className="bg-white p-4 sm:p-6" data-testid="cart-item">
@@ -83,20 +87,35 @@ export function CartLineItem({ product, quantity, readOnly = false }: CartLineIt
             {badges.assured && <AssuredBadge />}
           </div>
 
-          <PriceBlock
-            mrp={price.mrp}
-            sellingPrice={price.sellingPrice}
-            size="md"
-            className="mt-2"
-          />
+          {(() => {
+            const priceBlock = (
+              <span ref={priceInline.anchorRef} className="inline-block">
+                <PriceBlock mrp={price.mrp} sellingPrice={price.sellingPrice} size="md" className="mt-2" />
+              </span>
+            );
+            return priceInline.isActive && priceInline.content ? (
+              <InlineHighlight {...priceInline.content}>{priceBlock}</InlineHighlight>
+            ) : (
+              priceBlock
+            );
+          })()}
 
-          <p className="mt-2 text-fk-base text-fk-ink">
-            Delivery by{" "}
-            <span className="font-medium">
-              {formatDeliveryDate(delivery.estimatedDays)}
-            </span>
-            {delivery.free && <span className="text-fk-green"> — Free</span>}
-          </p>
+          {(() => {
+            const deliveryLine = (
+              <p ref={deliveryInline.anchorRef} className="mt-2 text-fk-base text-fk-ink">
+                Delivery by{" "}
+                <span className="font-medium">
+                  {formatDeliveryDate(delivery.estimatedDays)}
+                </span>
+                {delivery.free && <span className="text-fk-green"> — Free</span>}
+              </p>
+            );
+            return deliveryInline.isActive && deliveryInline.content ? (
+              <InlineHighlight {...deliveryInline.content}>{deliveryLine}</InlineHighlight>
+            ) : (
+              deliveryLine
+            );
+          })()}
         </div>
       </div>
 

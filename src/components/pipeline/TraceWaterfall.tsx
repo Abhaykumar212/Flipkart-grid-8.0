@@ -8,7 +8,9 @@ import {
   Clock,
   Cpu,
   Filter,
+  GitBranch,
   Layers,
+  ListChecks,
   Sparkles,
   Timer,
 } from "lucide-react";
@@ -22,6 +24,8 @@ const STAGE_ICONS: Record<string, typeof Activity> = {
   shap_attribution: Filter,
   risk_gate: Timer,
   root_cause_agent: Sparkles,
+  intervention_ranking: ListChecks,
+  delivery_decision: GitBranch,
 };
 
 const STATUS_STYLE: Record<string, { dot: string; text: string; bar: string; label: string }> = {

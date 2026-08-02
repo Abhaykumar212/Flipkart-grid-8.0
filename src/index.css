@@ -16,6 +16,9 @@
   --color-fk-footer: #172337;
   --color-fk-footer-ink: #878787;
 
+  /* Intelligence layer — low-saturation accent between fk-blue and fk-yellow */
+  --color-fk-cyan: #9fc9e8;
+
   /* Type scale — Flipkart runs small and tight */
   --text-fk-xs: 0.6875rem;
   --text-fk-xs--line-height: 0.875rem;
@@ -34,6 +37,7 @@
 
   --shadow-fk-card: 0 1px 2px 0 rgba(0, 0, 0, 0.08);
   --shadow-fk-hover: 0 2px 8px 0 rgba(0, 0, 0, 0.16);
+  --shadow-fk-glow: 0 20px 60px -12px rgba(40, 116, 240, 0.28), 0 4px 16px -4px rgba(0, 0, 0, 0.08);
 
   --container-fk: 1248px;
 }

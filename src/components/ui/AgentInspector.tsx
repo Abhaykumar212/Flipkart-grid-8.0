@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  Sparkles,
   Workflow,
   X,
 } from "lucide-react";
@@ -98,6 +99,8 @@ export function AgentInspector() {
     error,
     warmupRemainingSeconds,
     requestPrediction,
+    runRootCauseAnalysis,
+    rootCauseLoading,
   } = useTracker();
 
   if (!snapshot.signals.cartActive) return null;
@@ -127,8 +130,8 @@ export function AgentInspector() {
                   <BrainCircuit className="h-5 w-5" />
                 </span>
                 <div>
-                  <h2 className="text-base font-bold">Phase 1 Risk Inspector</h2>
-                  <p className="text-[11px] text-slate-400">Live features · XGBoost · SHAP</p>
+                  <h2 className="text-base font-bold">Agent Pipeline Inspector</h2>
+                  <p className="text-[11px] text-slate-400">Live features · XGBoost · SHAP · RCA · interventions</p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -149,6 +152,16 @@ export function AgentInspector() {
                   aria-label="Refresh prediction"
                 >
                   <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void runRootCauseAnalysis({ force: true })}
+                  disabled={rootCauseLoading}
+                  className="rounded-lg p-2 text-slate-400 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+                  aria-label="Re-run root cause analysis"
+                  title="Re-run root cause analysis on this page — lets an intervention render anchored to whatever's on screen"
+                >
+                  <Sparkles className={`h-4 w-4 ${rootCauseLoading ? "animate-pulse" : ""}`} />
                 </button>
                 <button
                   type="button"
@@ -284,7 +297,7 @@ export function AgentInspector() {
           <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-blue-600 bg-emerald-400" />
         </span>
         <span className="text-left">
-          <span className="block text-xs font-bold leading-4">Phase 1 Risk</span>
+          <span className="block text-xs font-bold leading-4">Pipeline Risk</span>
           <span className="block text-[10px] text-blue-100">XGBoost + SHAP</span>
         </span>
         <span className="ml-1 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold text-white">{status}</span>

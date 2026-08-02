@@ -32,22 +32,23 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: "cost-friction",
     label: "Cost shock",
-    intent: "Expensive basket far above this shopper's norm, with a heavy delivery fee and failed coupon hunting.",
+    intent:
+      "Expensive basket well above this shopper's norm, maxed-out failed coupon hunting, and no guest/trust confound (account + saved card) so the cost signal isn't diluted by a trust story.",
     expectedOutcome: "Targets cost_friction",
     cart: [{ productId: "p-1001", quantity: 1 }, { productId: "p-2003", quantity: 1 }],
     cartAgeSeconds: 400,
     history: {
-      averageOrderValue: 4000,
+      averageOrderValue: 50000,
       historicalAbandonmentRate: 0.72,
       pastReturnRate: 0.18,
       wishlistItemCount: 1,
-      paymentMethodSaved: false,
+      paymentMethodSaved: true,
       lifetimeOrdersPlaced: 2,
       daysSinceLastPurchase: 210,
-      isGuestCheckout: true,
+      isGuestCheckout: false,
     },
     session: {
-      failedCouponAttempts: 3,
+      failedCouponAttempts: 6,
       checkoutStepsCompleted: 0,
       cartPdpBounceCount: 2,
       idleBeforeCheckoutSeconds: 120,
@@ -57,14 +58,15 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: "trust-friction",
     label: "Trust barrier",
-    intent: "High-value cart, guest checkout, no saved payment method, brand-new shopper.",
+    intent:
+      "High-value cart at a moderate (not maxed) multiple of the shopper's norm, guest checkout, no saved payment method, brand-new shopper — moderate cart value keeps cart_value_vs_typical_order from outweighing the guest/no-account trust signal.",
     expectedOutcome: "Targets trust_friction",
     cart: [{ productId: "p-1005", quantity: 1 }],
     cartAgeSeconds: 300,
     history: {
-      averageOrderValue: 12000,
-      historicalAbandonmentRate: 0.6,
-      pastReturnRate: 0.05,
+      averageOrderValue: 28000,
+      historicalAbandonmentRate: 0.85,
+      pastReturnRate: 0.12,
       wishlistItemCount: 0,
       paymentMethodSaved: false,
       lifetimeOrdersPlaced: 0,
@@ -75,7 +77,8 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
       checkoutStepsCompleted: 1,
       failedCouponAttempts: 0,
       cartPdpBounceCount: 1,
-      idleBeforeCheckoutSeconds: 90,
+      idleBeforeCheckoutSeconds: 150,
+      pincodeCheckCount: 1,
     },
     accent: "from-amber-500 to-yellow-500",
   },
@@ -83,28 +86,27 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     id: "delivery-friction",
     label: "Delivery anxiety",
     intent:
-      "Slow promised delivery with repeated pincode checks. Cart value is kept close to the shopper's norm so cost does not dominate the diagnosis.",
+      "Maxed-out pincode rechecking on a slow-delivery item. Cart value is kept BELOW the shopper's norm (not guest/no-account either) so cost and trust signals stay quiet and the delivery-concern signal isn't competing with them.",
     expectedOutcome: "Targets delivery_friction",
     cart: [{ productId: "p-5004", quantity: 1 }],
-    cartAgeSeconds: 350,
+    cartAgeSeconds: 550,
     history: {
-      // Deliberately close to the cart total (~₹32k) so
-      // cart_value_vs_typical_order stays near 1.0 and the delivery signals
-      // are what the model actually keys on.
-      averageOrderValue: 30000,
-      historicalAbandonmentRate: 0.7,
-      pastReturnRate: 0.1,
+      // Deliberately below the cart total (~₹32k) so cart_value_vs_typical_order
+      // stays well under 1.0 and doesn't compete with the delivery signals.
+      averageOrderValue: 53000,
+      historicalAbandonmentRate: 0.9,
+      pastReturnRate: 0.18,
       wishlistItemCount: 2,
       paymentMethodSaved: false,
       lifetimeOrdersPlaced: 2,
-      daysSinceLastPurchase: 240,
+      daysSinceLastPurchase: 280,
       isGuestCheckout: true,
     },
     session: {
       pincodeCheckCount: 5,
       checkoutStepsCompleted: 0,
-      cartPdpBounceCount: 3,
-      idleBeforeCheckoutSeconds: 200,
+      cartPdpBounceCount: 0,
+      idleBeforeCheckoutSeconds: 130,
     },
     accent: "from-sky-500 to-blue-600",
   },

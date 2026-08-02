@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Send, Sparkles, X } from "lucide-react";
 import { useTracker } from "../../context/TrackerContext";
+import { useIntervention } from "../../context/InterventionContext";
 import { sendInterventionFeedback } from "../../lib/tracker";
 import { pageContext, findComparisonCandidates } from "../../lib/pageContext";
 import { productById } from "../../data/products";
@@ -39,6 +40,12 @@ interface InterventionMessage extends BaseMessage {
   intervention: RecommendedIntervention;
   alternatives: RecommendedIntervention[];
   resolvedAction: "accepted" | "dismissed" | null;
+  /**
+   * True for the one the delivery policy chose. Its accept/dismiss must go back
+   * through InterventionContext so the fatigue budget learns from it; an
+   * alternative the shopper picked themselves is a plain feedback event.
+   */
+  policyDelivered: boolean;
 }
 
 /**
@@ -63,7 +70,14 @@ function newId(): string {
 }
 
 export function CompanionWidget() {
-  const { rootCause, snapshot } = useTracker();
+  const { snapshot } = useTracker();
+  const {
+    active: policyIntervention,
+    surface: policySurface,
+    alternatives: policyAlternatives,
+    accept: acceptPolicyIntervention,
+    dismiss: dismissPolicyIntervention,
+  } = useIntervention();
   const pageCtx = useSyncExternalStore(pageContext.subscribe, pageContext.getSnapshot);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -80,16 +94,16 @@ export function CompanionWidget() {
   const injectedComparisonKeyRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Backend-gated interventions are already a high-confidence, "earned" moment
-  // (80%+ risk, LLM-diagnosed) — worth opening for. A review-dwell offer is a
-  // softer heuristic signal, so it only raises attentiveness, never opens
-  // itself; see the redesign spec's distinction between "attentive" and
-  // "active" for why these two triggers behave differently.
+  // The widget no longer decides for itself whether an RCA is worth showing.
+  // InterventionContext owns that call for every surface, so a conversational
+  // lever costs the same attention budget as a spotlight one. What reaches this
+  // effect has already cleared confidence gating and the fatigue caps — which is
+  // why it is still allowed to open the panel, where the softer heuristic
+  // prompt-offers below only raise attentiveness.
   useEffect(() => {
-    const plan = rootCause?.status === "success" ? rootCause.intervention_plan : null;
-    const top = plan?.top_interventions[0];
-    if (!top || injectedLeverIdRef.current === top.lever_id) return;
-    injectedLeverIdRef.current = top.lever_id;
+    if (!policyIntervention || policySurface !== "companion") return;
+    if (injectedLeverIdRef.current === policyIntervention.lever_id) return;
+    injectedLeverIdRef.current = policyIntervention.lever_id;
 
     setMessages((prev) => [
       ...prev,
@@ -97,15 +111,16 @@ export function CompanionWidget() {
         id: newId(),
         role: "companion",
         kind: "intervention",
-        text: `${top.headline} — ${top.rationale}`,
-        intervention: top,
-        alternatives: plan?.top_interventions.slice(1) ?? [],
+        text: `${policyIntervention.headline} — ${policyIntervention.rationale}`,
+        intervention: policyIntervention,
+        alternatives: policyAlternatives,
         resolvedAction: null,
+        policyDelivered: true,
       },
     ]);
     setUnseenCount((n) => n + 1);
     setIsOpen(true);
-  }, [rootCause]);
+  }, [policyIntervention, policySurface, policyAlternatives]);
 
   function pushPromptOffer(text: string, followUpQuestion: string, comparisonProductIds?: string[]) {
     setMessages((prev) => [
@@ -248,7 +263,15 @@ export function CompanionWidget() {
   }
 
   function respondToIntervention(message: InterventionMessage, action: "accepted" | "dismissed") {
-    void sendInterventionFeedback(message.intervention.lever_id, action);
+    if (message.policyDelivered) {
+      // Routes through the context so the same call also updates the fatigue
+      // budget — a dismissal here suppresses the lever for the rest of the
+      // session exactly as it would on any other surface.
+      if (action === "accepted") acceptPolicyIntervention();
+      else dismissPolicyIntervention();
+    } else {
+      void sendInterventionFeedback(message.intervention.lever_id, action);
+    }
     setMessages((prev) =>
       prev.map((m) => (m.id === message.id && m.kind === "intervention" ? { ...m, resolvedAction: action } : m)),
     );
@@ -265,6 +288,8 @@ export function CompanionWidget() {
         intervention: alt,
         alternatives: [],
         resolvedAction: null,
+        // Shopper-chosen, not policy-chosen — no budget was spent on it.
+        policyDelivered: false,
       },
     ]);
     setShowAlternativesFor(null);

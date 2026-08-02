@@ -8,11 +8,13 @@ import { Button } from "../components/ui/Button";
 import { CartLineItem } from "../components/cart/CartLineItem";
 import { PriceSummary } from "../components/cart/PriceSummary";
 import { ProductRail } from "../components/home/ProductRail";
+import { useTargetAnchor } from "../lib/targetRegistry";
 
 export default function CartPage() {
   const { items } = useCart();
 
   const navigate = useNavigate();
+  const railAnchorRef = useTargetAnchor("cart-similar-rail");
 
   // Resolve cart lines against the catalog
   const lines = items.flatMap((item) => {
@@ -62,7 +64,9 @@ export default function CartPage() {
       </div>
 
       {recommendations.length > 0 && (
-        <ProductRail title="You might also like" products={recommendations} />
+        <div ref={railAnchorRef}>
+          <ProductRail title="You might also like" products={recommendations} />
+        </div>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import { AlertTriangle, Ban, ListTree, Quote, Sparkles, Target, TrendingUp } from "lucide-react";
+import { AlertTriangle, Ban, GitBranch, ListTree, Quote, Sparkles, Target, TrendingUp } from "lucide-react";
 import type { PipelineRun, RecommendedIntervention } from "../../lib/pipelineTrace";
 
 const CATEGORY_STYLE: Record<string, { label: string; chip: string }> = {
@@ -71,7 +71,14 @@ export function RcaReport({ run }: { run: PipelineRun }) {
     );
   }
 
-  if (!run.analysis) return <GateHeldNotice run={run} />;
+  if (!run.analysis) {
+    return (
+      <div className="flex flex-col gap-3">
+        {run.deliveryDecision && <DeliveryDecisionPanel decision={run.deliveryDecision} />}
+        <GateHeldNotice run={run} />
+      </div>
+    );
+  }
 
   const { analysis } = run;
   const cause = analysis.primary_root_cause;
@@ -233,7 +240,45 @@ export function RcaReport({ run }: { run: PipelineRun }) {
       </section>
 
       {run.interventionPlan && <InterventionPlanPanel plan={run.interventionPlan} />}
+      {run.deliveryDecision && <DeliveryDecisionPanel decision={run.deliveryDecision} />}
     </div>
+  );
+}
+
+const HELD_DECISION_TONE: Record<string, string> = {
+  gate_held: "border-emerald-200 bg-emerald-50",
+  low_confidence: "border-slate-200 bg-slate-50",
+  margin_approval_required: "border-amber-200 bg-amber-50",
+  fatigue_cap: "border-sky-200 bg-sky-50",
+  cooldown: "border-sky-200 bg-sky-50",
+  no_lever_above_threshold: "border-slate-200 bg-slate-50",
+};
+
+/**
+ * The delivery layer's outcome for this run — rendered whether it delivered
+ * something or deliberately didn't, so "no intervention" reads as a decision
+ * with a reason rather than an empty panel.
+ */
+function DeliveryDecisionPanel({ decision }: { decision: NonNullable<PipelineRun["deliveryDecision"]> }) {
+  const tone =
+    decision.outcome === "delivered"
+      ? "border-blue-200 bg-blue-50"
+      : (HELD_DECISION_TONE[decision.reason ?? "no_lever_above_threshold"] ?? "border-slate-200 bg-slate-50");
+
+  return (
+    <section className={`rounded-xl border p-5 ${tone}`}>
+      <div className="flex items-center gap-2">
+        <GitBranch className="h-4 w-4 text-slate-600" />
+        <h3 className="text-sm font-semibold text-slate-800">Delivery decision</h3>
+        {decision.reason && (
+          <span className="ml-auto rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+            {decision.reason.replace(/_/g, " ")}
+          </span>
+        )}
+      </div>
+      <p className="mt-2 text-sm font-medium text-slate-900">{decision.headline}</p>
+      <p className="mt-1 text-xs text-slate-600">{decision.detail}</p>
+    </section>
   );
 }
 
