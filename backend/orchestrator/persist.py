@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from backend.feature_engine.schema import FEATURE_SCHEMA_VERSION
+from backend.explainability.render import render_explanation
 from backend.dashboard_api.stream import broadcaster
 from backend.feature_engine.snapshot import write_feature_snapshot
 from backend.storage.models import DecisionTrace, ModelPrediction, ModelRegistry
@@ -161,6 +162,7 @@ def persist_decision(factory: sessionmaker, run: DecisionRun) -> None:
                     "trace_id": run.trace_id,
                 },
             )
+            _render_and_publish(factory, str(run.response["decision_id"]))
             return
         except Exception:
             LOGGER.exception(
@@ -169,3 +171,21 @@ def persist_decision(factory: sessionmaker, run: DecisionRun) -> None:
             )
             if attempt == 0:
                 sleep(0.2)
+
+
+def _render_and_publish(factory: sessionmaker, decision_id: str) -> None:
+    """Render prose off-path, update the trace, then notify dashboard clients."""
+
+    try:
+        with factory() as db, db.begin():
+            trace = db.get(DecisionTrace, decision_id)
+            if trace is None:
+                return
+            trace.explanation = render_explanation(trace.explanation)
+            rendered_by = trace.explanation.get("rendered_by", "template")
+        broadcaster.publish(
+            "decision_updated",
+            {"decision_id": decision_id, "rendered_by": rendered_by},
+        )
+    except Exception:
+        LOGGER.exception("explanation_render_failed", extra={"decision_id": decision_id})

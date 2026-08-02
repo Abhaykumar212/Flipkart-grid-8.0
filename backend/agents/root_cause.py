@@ -18,13 +18,11 @@ locally with pydantic, so a downstream phase never has to parse free text.
 from __future__ import annotations
 
 import hashlib
-import json
 import time
-import urllib.error
-import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
 from .. import config
+from ..llm import GroqClient, RateLimitedError
 from ..schemas import CartContext, RootCauseAnalysis
 from .levers import (
     CATEGORY_DESCRIPTIONS,
@@ -370,52 +368,16 @@ def _response_schema() -> Dict[str, Any]:
     }
 
 
-class RateLimitedError(RuntimeError):
-    """Groq returned 429. Distinguished so the caller can degrade, not fail."""
-
-
 def call_groq(prompt: str, model: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """POST to Groq with strict schema enforcement. Returns (parsed, usage)."""
-    body = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": config.RCA_TEMPERATURE,
-        "max_tokens": config.RCA_MAX_TOKENS,
-        "reasoning_effort": config.RCA_REASONING_EFFORT,
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {"name": "root_cause_analysis", "strict": True, "schema": _response_schema()},
-        },
-    }
-    request = urllib.request.Request(
-        f"{config.GROQ_BASE_URL}/chat/completions",
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {config.GROQ_API_KEY}",
-            "Content-Type": "application/json",
-            # Groq sits behind Cloudflare, which rejects Python's default
-            # urllib User-Agent with a 403.
-            "User-Agent": "flipkart-grid-rca/1.0",
-        },
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=config.RCA_TIMEOUT_SECONDS) as response:
-            payload = json.load(response)
-    except urllib.error.HTTPError as error:
-        detail = ""
-        try:
-            detail = json.loads(error.read()).get("error", {}).get("message", "")
-        except Exception:
-            pass
-        if error.code == 429:
-            raise RateLimitedError(detail or "Groq rate limit reached") from error
-        raise RuntimeError(f"Groq HTTP {error.code}: {detail}") from error
+    """Compatibility adapter; the shared HTTP client now lives in ``llm``."""
 
-    content = payload["choices"][0]["message"]["content"]
-    return json.loads(content), payload.get("usage", {})
+    parsed = GroqClient(model=model).generate_json(
+        f"{SYSTEM_PROMPT}\n\n{prompt}",
+        _response_schema(),
+        config.RCA_MAX_TOKENS,
+        config.RCA_TIMEOUT_SECONDS,
+    )
+    return parsed, {}
 
 
 def analyse(

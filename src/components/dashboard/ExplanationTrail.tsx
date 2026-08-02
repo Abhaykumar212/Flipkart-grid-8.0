@@ -12,8 +12,9 @@ export function ExplanationTrail({ trace }: { trace: DecisionTraceResponse }) {
   ];
   return (
     <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-      <h2 className="text-sm font-semibold text-white">Explanation trail</h2>
-      <p className="mt-1 text-xs text-slate-500">Deterministic, grounded statements from the persisted trace.</p>
+      <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold text-white">Explanation trail</h2><span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold uppercase text-cyan-300">{trace.explanation.rendered_by === "LLM" ? "LLM" : "template"}</span></div>
+      <p className="mt-1 text-xs text-slate-500">Grounded statements from the persisted trace.</p>
+      {trace.explanation.rendered_text && <p className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-sm leading-relaxed text-slate-300">{trace.explanation.rendered_text}</p>}
       <ol className="mt-5">
         {steps.map(({ label, icon: Icon, text }, index) => (
           <li key={label}>

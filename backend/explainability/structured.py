@@ -16,6 +16,7 @@ from .templates import (
     feature_statement,
     rejection_statement,
 )
+from .render import template_prose
 
 
 def _dominant(causes: CauseResult) -> CausePrediction:
@@ -114,7 +115,7 @@ def build_explanation(
         selected.candidate.intervention_id if selected else InterventionId.NO_ACTION
     )
     action_confidence = selected.confidence if selected else 0.0
-    return {
+    explanation = {
         "decision_id": decision_id,
         "observations": observations,
         "risk": {
@@ -157,3 +158,5 @@ def build_explanation(
         },
         "rendered_by": "template",
     }
+    explanation["rendered_text"] = template_prose(explanation)
+    return explanation

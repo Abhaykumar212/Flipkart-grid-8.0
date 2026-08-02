@@ -31,7 +31,7 @@ export interface ActiveSessionsResponse {
 
 export interface DashboardEvent {
   id: string;
-  type: "event_ingested" | "decision_made";
+  type: "event_ingested" | "decision_made" | "decision_updated";
   data: Record<string, unknown>;
 }
 
@@ -143,6 +143,7 @@ export interface ExplanationTrailData {
   uncertainty: { cause_margin: number; statement: string };
   versions: Record<string, string>;
   rendered_by: string;
+  rendered_text?: string;
 }
 
 export interface DecisionTraceResponse {

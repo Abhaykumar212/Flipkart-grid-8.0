@@ -34,8 +34,10 @@ export function useDashboardStream(
     };
     const onIngested = receive("event_ingested");
     const onDecision = receive("decision_made");
+    const onDecisionUpdated = receive("decision_updated");
     source.addEventListener("event_ingested", onIngested);
     source.addEventListener("decision_made", onDecision);
+    source.addEventListener("decision_updated", onDecisionUpdated);
     source.onopen = () => {
       setStatus("connected");
       openHandler.current?.();
@@ -44,6 +46,7 @@ export function useDashboardStream(
     return () => {
       source.removeEventListener("event_ingested", onIngested);
       source.removeEventListener("decision_made", onDecision);
+      source.removeEventListener("decision_updated", onDecisionUpdated);
       source.close();
     };
   }, []);
