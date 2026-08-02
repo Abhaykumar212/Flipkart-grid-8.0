@@ -249,6 +249,7 @@ class Experiment(Base):
     control_group: Mapped[str] = mapped_column(String, nullable=False)
     treatment_group: Mapped[str] = mapped_column(String, nullable=False)
     traffic_split: Mapped[int] = mapped_column(Integer, nullable=False)
+    discount_budget: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

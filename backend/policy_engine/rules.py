@@ -82,9 +82,21 @@ def cooldown(candidate, state, _features, _risk, _causes, now) -> RuleVerdict:
 
 
 def _requirement_met(name: str, features: dict[str, float]) -> bool:
+    explicit_feature = {
+        "review_summary_available": "review_summary_available",
+        "delivery_data_available": "delivery_data_available",
+        "price_history_available": "price_history_available",
+        "discount_budget_available": "discount_budget_available",
+    }.get(name)
+    if explicit_feature in features:
+        return features[explicit_feature] > 0
+    if name.endswith("comparable_products") and "comparable_products_available" in features:
+        return features["comparable_products_available"] >= 2
+    if name.endswith("similar_in_stock") and "similar_products_in_stock" in features:
+        return features["similar_products_in_stock"] >= 3
     checks = {
         # Phase 13 replaces this optimistic stub with a grounded cache lookup.
-        "review_summary_available": True,
+        "review_summary_available": features.get("review_summary_available", 1.0) > 0,
         "≥2_comparable_products": features["s_distinct_products_viewed"] >= 2,
         "delivery_data_available": (
             features["d_check_count"] > 0 or features["c_item_count"] > 0
@@ -94,7 +106,7 @@ def _requirement_met(name: str, features: dict[str, float]) -> bool:
         "emi_eligible": features["pay_emi_eligible"] > 0,
         "payment_failure_occurred": features["pay_failure_count"] > 0,
         "checkout_started": features["s_checkout_start_count"] > 0,
-        "discount_budget_available": True,
+        "discount_budget_available": features.get("discount_budget_available", 1.0) > 0,
         "cart_value≥5000": features["c_value"] >= config.EMI_MIN_CART_VALUE,
         "cart_value≥1000": features["c_value"] >= config.DISCOUNT_MIN_CART_VALUE,
     }

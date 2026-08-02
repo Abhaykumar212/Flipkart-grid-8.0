@@ -33,8 +33,11 @@ export function CandidateTable({ candidates }: { candidates: DashboardCandidate[
                 </td>
                 <td className="px-4 py-4"><PolicyBadge status={candidate.policy_status} /></td>
                 <td className="max-w-sm px-4 py-4 text-slate-400">
-                  {candidate.policy_reasons.length ? candidate.policy_reasons.map((reason) => reason.replaceAll("_", " ")).join("; ") : "All ordered policy checks passed"}
-                  {candidate.explanation && <p className="mt-1 text-[11px] text-slate-500">{candidate.explanation}</p>}
+                  <details>
+                    <summary className="cursor-pointer">{candidate.policy_reasons.length ? `${candidate.policy_reasons.length} policy reason(s)` : "All checks passed"}</summary>
+                    <p className="mt-1">{candidate.policy_reasons.length ? candidate.policy_reasons.map((reason) => reason.replaceAll("_", " ")).join("; ") : "All ordered policy checks passed"}</p>
+                    {candidate.explanation && <p className="mt-1 text-[11px] text-slate-500">{candidate.explanation}</p>}
+                  </details>
                 </td>
                 <td className="px-4 py-4 text-right font-mono font-semibold text-slate-200">{candidate.utility_score?.toFixed(3) ?? "—"}</td>
                 <td className="px-4 py-4 text-slate-400">{candidate.channel?.replaceAll("_", " ") ?? "—"}</td>

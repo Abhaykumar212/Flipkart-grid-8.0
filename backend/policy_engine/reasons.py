@@ -2,6 +2,7 @@ from enum import StrEnum
 
 
 class PolicyReason(StrEnum):
+    CATALOGUE_ENTRY_INVALID = "catalogue_entry_invalid"
     ORDER_ALREADY_COMPLETED = "order_already_completed"
     RISK_BELOW_INTERVENTION_THRESHOLD = "risk_below_intervention_threshold"
     SESSION_INTERVENTION_CAP_REACHED = "session_intervention_cap_reached"
