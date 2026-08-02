@@ -21,7 +21,7 @@ from backend.policy_engine.engine import (
 )
 from backend.recommendation.candidates import generate_candidates
 from backend.recommendation.ranker import ScoredIntervention, score_all
-from backend.risk_model import stub as risk_model
+from backend.risk_model.predict import predict as predict_risk
 from backend.risk_model.contracts import RiskPrediction
 from backend.root_cause import stub as root_cause_model
 from backend.root_cause.contracts import CauseResult
@@ -142,9 +142,11 @@ def run_decision(
             decision_time=decision_time,
         )
 
-    risk = risk_model.predict(features)
+    risk = predict_risk(features)
     timings["risk"] = risk.latency_ms
-    if risk.probability < config.RISK_INTERVENTION_THRESHOLD:
+    if risk.model_version == "risk-unavailable":
+        causes = CauseResult.unknown(model_version="cause-unavailable")
+    elif risk.probability < config.RISK_INTERVENTION_THRESHOLD:
         causes = CauseResult((), "cause-stub-v1", False, 0.0, 0.0)
     else:
         causes = root_cause_model.predict(features)

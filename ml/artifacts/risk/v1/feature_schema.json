@@ -1,0 +1,538 @@
+{
+  "feature_schema_version": "fs-v1",
+  "features": [
+    {
+      "name": "u_lifetime_orders",
+      "minimum": 0,
+      "maximum": 10000,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "u_prior_abandonment_rate",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5,
+      "type": "float"
+    },
+    {
+      "name": "u_avg_order_value",
+      "minimum": 0,
+      "maximum": 1000000,
+      "default": 15000,
+      "type": "float"
+    },
+    {
+      "name": "u_discount_usage_rate",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.3,
+      "type": "float"
+    },
+    {
+      "name": "u_category_affinity",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "u_days_since_last_purchase",
+      "minimum": 0,
+      "maximum": 400,
+      "default": 365,
+      "type": "float"
+    },
+    {
+      "name": "u_avg_session_to_purchase_s",
+      "minimum": 0,
+      "maximum": 86400,
+      "default": 900,
+      "type": "float"
+    },
+    {
+      "name": "u_return_rate",
+      "minimum": 0,
+      "maximum": 0.5,
+      "default": 0.08,
+      "type": "float"
+    },
+    {
+      "name": "u_is_new_user",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 1,
+      "type": "int"
+    },
+    {
+      "name": "u_affinity_informational",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5,
+      "type": "float"
+    },
+    {
+      "name": "u_affinity_incentive",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5,
+      "type": "float"
+    },
+    {
+      "name": "c_value",
+      "minimum": 0,
+      "maximum": 2000000,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "c_item_count",
+      "minimum": 0,
+      "maximum": 20,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "c_distinct_categories",
+      "minimum": 0,
+      "maximum": 5,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "c_value_to_aov_ratio",
+      "minimum": 0,
+      "maximum": 6,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "c_discount_pct_available",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "c_age_seconds",
+      "minimum": 0,
+      "maximum": 3600,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "c_promo_applied",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "c_max_price_drop_pct",
+      "minimum": 0,
+      "maximum": 50,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "c_price_increased_since_view",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "p_max_item_price",
+      "minimum": 0,
+      "maximum": 2000000,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "p_avg_rating",
+      "minimum": 1,
+      "maximum": 5,
+      "default": 4,
+      "type": "float"
+    },
+    {
+      "name": "p_min_rating_count",
+      "minimum": 0,
+      "maximum": 100000000,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "p_any_low_stock",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "p_any_out_of_stock",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "d_max_days",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 5,
+      "type": "int"
+    },
+    {
+      "name": "d_min_days",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 5,
+      "type": "int"
+    },
+    {
+      "name": "d_fee",
+      "minimum": 0,
+      "maximum": 100000,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "d_fee_pct_of_cart",
+      "minimum": 0,
+      "maximum": 25,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "d_check_count",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "pay_method_on_file",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "pay_failure_count",
+      "minimum": 0,
+      "maximum": 5,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "pay_method_change_count",
+      "minimum": 0,
+      "maximum": 5,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "pay_emi_eligible",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "pay_checkout_max_step",
+      "minimum": 0,
+      "maximum": 3,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_duration_seconds",
+      "minimum": 0,
+      "maximum": 3600,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "s_product_view_count",
+      "minimum": 0,
+      "maximum": 60,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_distinct_products_viewed",
+      "minimum": 0,
+      "maximum": 40,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_review_open_count",
+      "minimum": 0,
+      "maximum": 20,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_review_dwell_seconds",
+      "minimum": 0,
+      "maximum": 900,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "s_similar_product_view_count",
+      "minimum": 0,
+      "maximum": 30,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_comparison_count",
+      "minimum": 0,
+      "maximum": 15,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_cart_view_count",
+      "minimum": 0,
+      "maximum": 20,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_cart_add_count",
+      "minimum": 0,
+      "maximum": 20,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_cart_remove_count",
+      "minimum": 0,
+      "maximum": 20,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_cart_product_switch_count",
+      "minimum": 0,
+      "maximum": 20,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_search_count",
+      "minimum": 0,
+      "maximum": 20,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_price_sort_count",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_coupon_search_count",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_checkout_start_count",
+      "minimum": 0,
+      "maximum": 5,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_back_from_checkout_count",
+      "minimum": 0,
+      "maximum": 5,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "s_idle_seconds_current",
+      "minimum": 0,
+      "maximum": 900,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "s_event_velocity_per_min",
+      "minimum": 0,
+      "maximum": 60,
+      "default": 0.0,
+      "type": "float"
+    },
+    {
+      "name": "x_is_mobile",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "x_hour_of_day",
+      "minimum": 0,
+      "maximum": 23,
+      "default": 12,
+      "type": "int"
+    },
+    {
+      "name": "x_is_late_night",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "x_is_weekend",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "x_is_returning_user",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "x_referral_direct",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 1,
+      "type": "int"
+    },
+    {
+      "name": "x_referral_search",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "x_referral_social",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "x_referral_email",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "i_shown_count",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "i_dismissal_count",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "i_click_count",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 0.0,
+      "type": "int"
+    },
+    {
+      "name": "i_seconds_since_last",
+      "minimum": 0,
+      "maximum": 3600,
+      "default": 3600,
+      "type": "float"
+    },
+    {
+      "name": "i_distinct_types_shown",
+      "minimum": 0,
+      "maximum": 12,
+      "default": 0.0,
+      "type": "int"
+    }
+  ],
+  "risk_model_features": [
+    "u_lifetime_orders",
+    "u_prior_abandonment_rate",
+    "u_avg_order_value",
+    "u_discount_usage_rate",
+    "u_category_affinity",
+    "u_days_since_last_purchase",
+    "u_avg_session_to_purchase_s",
+    "u_return_rate",
+    "u_is_new_user",
+    "u_affinity_informational",
+    "u_affinity_incentive",
+    "c_value",
+    "c_item_count",
+    "c_distinct_categories",
+    "c_value_to_aov_ratio",
+    "c_discount_pct_available",
+    "c_age_seconds",
+    "c_promo_applied",
+    "c_max_price_drop_pct",
+    "c_price_increased_since_view",
+    "p_max_item_price",
+    "p_avg_rating",
+    "p_min_rating_count",
+    "p_any_low_stock",
+    "p_any_out_of_stock",
+    "d_max_days",
+    "d_min_days",
+    "d_fee",
+    "d_fee_pct_of_cart",
+    "d_check_count",
+    "pay_method_on_file",
+    "pay_failure_count",
+    "pay_method_change_count",
+    "pay_emi_eligible",
+    "pay_checkout_max_step",
+    "s_duration_seconds",
+    "s_product_view_count",
+    "s_distinct_products_viewed",
+    "s_review_open_count",
+    "s_review_dwell_seconds",
+    "s_similar_product_view_count",
+    "s_comparison_count",
+    "s_cart_view_count",
+    "s_cart_add_count",
+    "s_cart_remove_count",
+    "s_cart_product_switch_count",
+    "s_search_count",
+    "s_price_sort_count",
+    "s_coupon_search_count",
+    "s_checkout_start_count",
+    "s_back_from_checkout_count",
+    "s_idle_seconds_current",
+    "s_event_velocity_per_min",
+    "x_is_mobile",
+    "x_hour_of_day",
+    "x_is_late_night",
+    "x_is_weekend",
+    "x_is_returning_user",
+    "x_referral_direct",
+    "x_referral_search",
+    "x_referral_social",
+    "x_referral_email"
+  ]
+}

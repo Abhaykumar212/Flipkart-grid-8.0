@@ -52,6 +52,9 @@ from .session_state.router import router as sessions_router  # noqa: E402
 from .orchestrator.router import router as decisions_router  # noqa: E402
 from .dashboard_api.router import router as dashboard_router  # noqa: E402
 from .observability.logging import configure_logging  # noqa: E402
+from .risk_model import loader as risk_loader  # noqa: E402
+from .storage.db import SessionLocal  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 
 LOGGER = logging.getLogger(__name__)
 
@@ -172,6 +175,13 @@ async def lifespan(_: FastAPI):
     except Exception as error:
         ARTIFACT_LOAD_ERROR = str(error)
         LOGGER.warning("Legacy ML artifacts unavailable; inference endpoints will return 503: %s", error)
+    try:
+        risk_loader.load()
+    except risk_loader.FeatureSchemaMismatch:
+        raise
+    except Exception as error:
+        risk_loader.unload(str(error))
+        LOGGER.warning("Risk model unavailable; decisions will abstain: %s", error)
     yield
 
 
@@ -235,6 +245,18 @@ def health() -> dict:
         "total_feature_count": len(FEATURE_NAMES),
         "calibrated": CALIBRATOR is not None,
     }
+
+
+@app.get("/ready")
+def ready() -> dict:
+    try:
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+    except Exception as error:
+        raise HTTPException(status_code=503, detail=f"database unavailable: {error}") from error
+    if not risk_loader.is_ready():
+        raise HTTPException(status_code=503, detail=risk_loader.load_error() or "risk model unavailable")
+    return {"status": "ready", "risk_model": True}
 
 
 @app.get("/metrics")

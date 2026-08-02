@@ -1,5 +1,5 @@
-"""Abandonment-risk model contract and deterministic Phase 5 implementation."""
+"""Calibrated abandonment-risk inference package."""
 
-from .stub import predict
+from .predict import predict
 
 __all__ = ("predict",)
