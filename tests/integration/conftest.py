@@ -47,6 +47,7 @@ class ApiHarness:
 @pytest.fixture
 def api_harness(migrated_database, monkeypatch):
     run_command([sys.executable, "-m", "scripts.seed_catalog"], migrated_database)
+    run_command([sys.executable, "-m", "scripts.warm_review_cache"], migrated_database)
     engine = build_engine(migrated_database)
     testing_sessions = sessionmaker(bind=engine, expire_on_commit=False)
     store = InMemorySessionStore()

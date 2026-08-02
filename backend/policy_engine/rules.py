@@ -95,8 +95,7 @@ def _requirement_met(name: str, features: dict[str, float]) -> bool:
     if name.endswith("similar_in_stock") and "similar_products_in_stock" in features:
         return features["similar_products_in_stock"] >= 3
     checks = {
-        # Phase 13 replaces this optimistic stub with a grounded cache lookup.
-        "review_summary_available": features.get("review_summary_available", 1.0) > 0,
+        "review_summary_available": features.get("review_summary_available", 0.0) > 0,
         "≥2_comparable_products": features["s_distinct_products_viewed"] >= 2,
         "delivery_data_available": (
             features["d_check_count"] > 0 or features["c_item_count"] > 0
@@ -149,10 +148,9 @@ def delivery_data(candidate, _state, features, _risk, _causes, _now) -> RuleVerd
 
 
 def review_grounding(candidate, _state, features, _risk, _causes, _now) -> RuleVerdict:
-    # Phase 13 replaces the deterministic template with a grounded cached summary.
     if (
         candidate.intervention_id == InterventionId.REVIEW_SUMMARY
-        and features.get("review_summary_available", 1.0) <= 0
+        and features.get("review_summary_available", 0.0) <= 0
     ):
         return RuleVerdict(PolicyReason.NO_GROUNDED_SUMMARY_AVAILABLE)
     return _pass()

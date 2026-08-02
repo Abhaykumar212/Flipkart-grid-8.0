@@ -100,6 +100,15 @@ def latest_intervention(
             "reason": action_statement(intervention_id),
             "confidence": trace.recommendation_confidence,
         }
+        if intervention_id == InterventionId.REVIEW_SUMMARY:
+            product_ids = [
+                str(item.get("product_id"))
+                for item in state.cart.get("items", [])
+                if isinstance(item, dict) and item.get("product_id")
+            ]
+            recommended["review_product_id"] = (
+                product_ids[0] if product_ids else state.current_product_id
+            )
         if intervention_id == InterventionId.LIMITED_TIME_DISCOUNT:
             recommended["discount_pct"] = min(
                 config.DEFAULT_DISCOUNT_PCT,

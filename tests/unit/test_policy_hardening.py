@@ -35,6 +35,7 @@ def test_discount_downgrade_preserves_original_and_replacement_entries() -> None
 def test_invalid_catalogue_entry_is_dropped_with_closed_reason() -> None:
     invalid = replace(CATALOGUE_BY_ID[InterventionId.REVIEW_SUMMARY], requires=("free_text",))
     features = {item.name: float(item.default) for item in FEATURE_SCHEMA_V1}
+    features["review_summary_available"] = 1
     result = evaluate_all(
         (invalid,), SessionState(session_id="invalid"), features,
         RiskPrediction(0.8, 0.8, RiskBand.HIGH, "test", (), 0),
@@ -50,6 +51,7 @@ def test_catalogue_cooldown_expires_per_intervention() -> None:
     review = CATALOGUE_BY_ID[InterventionId.REVIEW_SUMMARY]
     state.cooldowns[review.intervention_id.value] = (now + timedelta(minutes=1)).isoformat()
     features = {item.name: float(item.default) for item in FEATURE_SCHEMA_V1}
+    features["review_summary_available"] = 1
     risk = RiskPrediction(0.8, 0.8, RiskBand.HIGH, "test", (), 0)
     assert evaluate_all((review,), state, features, risk, CauseResult.unknown(), now=now)[0].reasons == (PolicyReason.COOLDOWN_ACTIVE,)
     assert evaluate_all((review,), state, features, risk, CauseResult.unknown(), now=now + timedelta(minutes=2))[0].status == PolicyStatus.PASS

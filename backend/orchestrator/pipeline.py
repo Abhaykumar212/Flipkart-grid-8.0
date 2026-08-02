@@ -25,6 +25,7 @@ from backend.risk_model.predict import predict as predict_risk
 from backend.risk_model.contracts import RiskPrediction
 from backend.root_cause.predict import predict as predict_root_causes
 from backend.root_cause.contracts import CauseResult
+from backend.review_intelligence.cache import summary_available
 from backend.session_state.cache import cache_session_state
 from backend.session_state.rebuild import rebuild_from_events
 from backend.session_state.state import SessionState
@@ -181,9 +182,20 @@ def run_decision(
     timings["root_cause"] = causes.latency_ms
 
     policy_started = perf_counter()
+    product_ids = tuple(
+        str(item.get("product_id"))
+        for item in state.cart.get("items", [])
+        if isinstance(item, dict) and item.get("product_id")
+    )
+    if not product_ids and state.current_product_id:
+        product_ids = (state.current_product_id,)
+    policy_features = dict(features)
+    policy_features["review_summary_available"] = float(
+        summary_available(db, product_ids)
+    )
     candidates = generate_candidates(causes, features)
     policy_results = evaluate_all(
-        candidates, state, features, risk, causes, now=decision_time
+        candidates, state, policy_features, risk, causes, now=decision_time
     )
     ranked = score_all(
         approved_candidates(policy_results),
@@ -226,6 +238,8 @@ def run_decision(
         }
     else:
         recommended["decision_id"] = decision_id
+        if selected and selected.candidate.intervention_id == InterventionId.REVIEW_SUMMARY:
+            recommended["review_product_id"] = product_ids[0] if product_ids else None
         if selected and selected.candidate.intervention_id == InterventionId.LIMITED_TIME_DISCOUNT:
             recommended["discount_pct"] = min(
                 config.DEFAULT_DISCOUNT_PCT,

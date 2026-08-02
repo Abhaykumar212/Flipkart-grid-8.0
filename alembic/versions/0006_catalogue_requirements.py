@@ -14,16 +14,29 @@ def upgrade() -> None:
     if "discount_budget" not in {column["name"] for column in inspector.get_columns("experiments")}:
         op.add_column("experiments", sa.Column("discount_budget", sa.Float(), nullable=False, server_default="0"))
     if op.get_bind().dialect.name == "sqlite":
-        with op.batch_alter_table("intervention_catalogue") as batch:
-            batch.create_check_constraint("ck_catalogue_requires_json_array", "json_valid(requires) AND json_type(requires) = 'array'")
+        # Recreating this referenced table fails on populated SQLite databases.
+        # Triggers provide the same validation without dropping the parent table.
+        op.execute("DROP TABLE IF EXISTS _alembic_tmp_intervention_catalogue")
+        op.execute("""
+            CREATE TRIGGER IF NOT EXISTS ck_catalogue_requires_json_array_insert
+            BEFORE INSERT ON intervention_catalogue
+            WHEN json_valid(NEW.requires) = 0 OR json_type(NEW.requires) != 'array'
+            BEGIN SELECT RAISE(ABORT, 'intervention_catalogue.requires must be a JSON array'); END
+        """)
+        op.execute("""
+            CREATE TRIGGER IF NOT EXISTS ck_catalogue_requires_json_array_update
+            BEFORE UPDATE OF requires ON intervention_catalogue
+            WHEN json_valid(NEW.requires) = 0 OR json_type(NEW.requires) != 'array'
+            BEGIN SELECT RAISE(ABORT, 'intervention_catalogue.requires must be a JSON array'); END
+        """)
     else:
         op.create_check_constraint("ck_catalogue_requires_json_array", "intervention_catalogue", "jsonb_typeof(requires::jsonb) = 'array'")
 
 
 def downgrade() -> None:
     if op.get_bind().dialect.name == "sqlite":
-        with op.batch_alter_table("intervention_catalogue") as batch:
-            batch.drop_constraint("ck_catalogue_requires_json_array", type_="check")
+        op.execute("DROP TRIGGER IF EXISTS ck_catalogue_requires_json_array_insert")
+        op.execute("DROP TRIGGER IF EXISTS ck_catalogue_requires_json_array_update")
     else:
         op.drop_constraint("ck_catalogue_requires_json_array", "intervention_catalogue", type_="check")
     if "discount_budget" in {column["name"] for column in sa.inspect(op.get_bind()).get_columns("experiments")}:

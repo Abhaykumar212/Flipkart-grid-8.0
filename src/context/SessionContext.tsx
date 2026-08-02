@@ -35,6 +35,7 @@ export interface RecommendedIntervention {
   reason: string;
   confidence: number;
   discount_pct?: number;
+  review_product_id?: string | null;
 }
 
 export interface DecisionResponse {
