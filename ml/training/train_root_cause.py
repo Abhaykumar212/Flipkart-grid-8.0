@@ -17,6 +17,7 @@ from backend.feature_engine.schema import RISK_MODEL_FEATURES, write_feature_sch
 from ml.training.model_types import ScaledOneVsRest
 
 CAUSES = tuple(cause.value for cause in RootCause if cause is not RootCause.UNKNOWN)
+UNKNOWN_THRESHOLD = 0.45
 
 
 def _matrix(frame: pd.DataFrame) -> np.ndarray:
@@ -39,11 +40,17 @@ def _tune(y: np.ndarray, probability: np.ndarray) -> list[float]:
     return thresholds
 
 
-def _metrics(y: np.ndarray, probability: np.ndarray, thresholds: np.ndarray) -> dict[str, object]:
+def _metrics(
+    y: np.ndarray,
+    probability: np.ndarray,
+    thresholds: np.ndarray,
+    *,
+    unknown_threshold: float = UNKNOWN_THRESHOLD,
+) -> dict[str, object]:
     predicted = probability >= thresholds
     top2 = np.argsort(probability, axis=1)[:, -2:]
     top2_hits = [bool(y[row, top2[row]].any()) for row in range(len(y)) if y[row].any()]
-    unknown = probability.max(axis=1) < 0.35
+    unknown = probability.max(axis=1) < unknown_threshold
     abandoning = y.any(axis=1)
     return {
         "micro_f1": float(f1_score(y, predicted, average="micro", zero_division=0)),
@@ -61,8 +68,14 @@ def evaluate_saved_model() -> dict[str, object]:
     frame = pd.read_parquet("ml/data/decision_points.parquet")
     test = frame[frame["split"] == "test"]
     model = joblib.load(artifact / "model.joblib")
-    thresholds = np.asarray(json.loads((artifact / "thresholds.json").read_text(encoding="utf-8"))["thresholds"])
-    return _metrics(_matrix(test), model.predict_proba(test.loc[:, RISK_MODEL_FEATURES]), thresholds)
+    settings = json.loads((artifact / "thresholds.json").read_text(encoding="utf-8"))
+    thresholds = np.asarray(settings["thresholds"])
+    return _metrics(
+        _matrix(test),
+        model.predict_proba(test.loc[:, RISK_MODEL_FEATURES]),
+        thresholds,
+        unknown_threshold=float(settings["unknown_threshold"]),
+    )
 
 
 def main() -> None:
@@ -96,12 +109,17 @@ def main() -> None:
     availability_index = CAUSES.index("PRODUCT_AVAILABILITY_CONCERN")
     thresholds[[index for index in range(len(CAUSES)) if index not in (trust_index, availability_index)]] = 0.30
     test_probability = model.predict_proba(test.loc[:, RISK_MODEL_FEATURES])
-    metrics = _metrics(y_test, test_probability, thresholds)
+    metrics = _metrics(
+        y_test,
+        test_probability,
+        thresholds,
+        unknown_threshold=UNKNOWN_THRESHOLD,
+    )
     metrics.update({"model_name": "root_cause", "model_version": "root_cause-v1", "training_data_version": "simulator-v1"})
     joblib.dump(model, artifact / "model.joblib")
     joblib.dump([shap.TreeExplainer(estimator) for estimator in model.estimators_], artifact / "explainers.joblib")
     write_feature_schema(artifact / "feature_schema.json")
-    (artifact / "thresholds.json").write_text(json.dumps({"causes": CAUSES, "thresholds": thresholds.tolist(), "unknown_threshold": 0.35}, indent=2) + "\n", encoding="utf-8")
+    (artifact / "thresholds.json").write_text(json.dumps({"causes": CAUSES, "thresholds": thresholds.tolist(), "unknown_threshold": UNKNOWN_THRESHOLD}, indent=2) + "\n", encoding="utf-8")
     (artifact / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(metrics, indent=2))
 

@@ -13,7 +13,10 @@ from backend.session_state.state import SessionState
 from backend.storage.models import (
     DecisionTrace,
     Event,
+    InterventionImpression,
+    InterventionOutcome,
     InterventionCatalogue,
+    ModelRegistry,
     Product,
     SessionFeatureSnapshot,
     ShoppingSession,
@@ -45,6 +48,32 @@ def _decision_summary(trace: DecisionTrace) -> dict[str, Any]:
         "selected_intervention": trace.selected_intervention,
         "confidence": trace.recommendation_confidence,
         "trigger": trace.trigger,
+    }
+
+
+def _outcome_summary(db: Session, decision_id: str) -> dict[str, Any] | None:
+    outcome = db.scalar(
+        select(InterventionOutcome).where(InterventionOutcome.decision_id == decision_id)
+    )
+    if outcome is None:
+        return None
+    impression = db.scalar(
+        select(InterventionImpression).where(InterventionImpression.decision_id == decision_id)
+    )
+    return {
+        "intervention_shown": outcome.intervention_shown,
+        "clicked": outcome.clicked,
+        "dismissed": outcome.dismissed,
+        "order_completed": outcome.order_completed,
+        "time_to_purchase_seconds": outcome.time_to_purchase_seconds,
+        "discount_cost": outcome.discount_cost,
+        "estimated_margin": outcome.estimated_margin,
+        "recorded_at": _iso(outcome.recorded_at),
+        "impression": ({
+            "shown_at": _iso(impression.shown_at),
+            "surface": impression.surface,
+            "channel": impression.channel,
+        } if impression else None),
     }
 
 
@@ -172,6 +201,10 @@ def session_detail(session_id: str, db: Session, store: SessionStore) -> dict[st
         "counters": state.counters,
         "feature_snapshot": feature_snapshot,
         "decisions": [_decision_summary(trace) for trace in decisions],
+        "outcomes": {
+            trace.decision_id: _outcome_summary(db, trace.decision_id)
+            for trace in decisions
+        },
         "interventions": state.interventions,
     }
 
@@ -277,6 +310,7 @@ def decision_trace(decision_id: str, db: Session) -> dict[str, Any] | None:
         } if snapshot else None),
         "model_versions": trace.model_versions,
         "latency_ms": trace.latency_ms,
+        "outcome": _outcome_summary(db, trace.decision_id),
         "audit_answers": {
             "elevated_risk": explanation.get("risk", {}).get("statement"),
             "root_cause": explanation.get("inference", {}).get("statement"),
@@ -288,4 +322,31 @@ def decision_trace(decision_id: str, db: Session) -> dict[str, Any] | None:
             "uncertainty": explanation.get("uncertainty", {}).get("statement"),
             "versions": trace.model_versions,
         },
+    }
+
+
+def model_metrics(db: Session) -> dict[str, Any]:
+    models = list(db.scalars(
+        select(ModelRegistry)
+        .order_by(ModelRegistry.model_type, ModelRegistry.status, ModelRegistry.trained_at.desc())
+    ))
+    return {
+        "models": [
+            {
+                "model_id": model.model_id,
+                "model_name": model.model_name,
+                "model_version": model.model_version,
+                "model_type": model.model_type,
+                "status": model.status,
+                "feature_schema_version": model.feature_schema_version,
+                "training_data_version": model.training_data_version,
+                "trained_at": _iso(model.trained_at),
+                "promoted_at": _iso(model.promoted_at),
+                "metrics": model.metrics,
+                "notes": model.notes,
+            }
+            for model in models
+        ],
+        "count": len(models),
+        "generated_at": _iso(datetime.now(timezone.utc)),
     }

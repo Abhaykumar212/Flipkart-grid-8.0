@@ -7,6 +7,8 @@ from typing import Any
 
 from backend import config
 from backend.llm import LLMClient, client_from_config
+from backend.observability.latency import metrics_registry
+from .i18n import localized_template, resolve_language
 
 
 SYSTEM_INSTRUCTION = (
@@ -22,20 +24,8 @@ NUMBER_PATTERN = re.compile(r"(?<![A-Za-z])\d+(?:\.\d+)?%?")
 ENUM_PATTERN = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b")
 
 
-def template_prose(explanation: dict[str, Any]) -> str:
-    observations = explanation.get("observations", [])
-    evidence = " ".join(
-        str(item.get("statement", ""))
-        for item in observations[:2]
-        if isinstance(item, dict) and item.get("statement")
-    )
-    parts = [
-        evidence,
-        str(explanation.get("risk", {}).get("statement", "")),
-        str(explanation.get("inference", {}).get("statement", "")),
-        str(explanation.get("action", {}).get("statement", "")),
-    ]
-    return " ".join(part for part in parts if part).strip()
+def template_prose(explanation: dict[str, Any], language: str = "en") -> str:
+    return localized_template(explanation, resolve_language(language))
 
 
 def _grounded(prose: str, structured: dict[str, Any]) -> bool:
@@ -49,17 +39,25 @@ def render_explanation(
     structured: dict[str, Any],
     *,
     client: LLMClient | None = None,
+    language: str = "en",
 ) -> dict[str, Any]:
     """Render only the structured trace; always return a grounded fallback."""
 
     rendered = deepcopy(structured)
-    rendered["rendered_text"] = template_prose(rendered)
+    target_language = resolve_language(language)
+    rendered["rendered_text"] = template_prose(rendered, target_language)
     rendered["rendered_by"] = "template"
+    rendered["language"] = target_language
     source = json.dumps(structured, sort_keys=True, ensure_ascii=False)
     if INJECTION_PATTERN.search(source):
         return rendered
+    language_instruction = (
+        "Render in Hindi while preserving every identifier and number exactly."
+        if target_language == "hi"
+        else "Render in English."
+    )
     prompt = (
-        f"{SYSTEM_INSTRUCTION}\n\n<structured-explanation>\n"
+        f"{SYSTEM_INSTRUCTION} {language_instruction}\n\n<structured-explanation>\n"
         f"{source}\n</structured-explanation>"
     )
     try:
@@ -69,8 +67,12 @@ def render_explanation(
             timeout=config.LLM_TIMEOUT_SECONDS,
         ).strip()
     except Exception:
+        metrics_registry.increment("llm_render", label="fallback")
         return rendered
     if prose and _grounded(prose, structured):
         rendered["rendered_text"] = prose
         rendered["rendered_by"] = "LLM"
+        metrics_registry.increment("llm_render", label="success")
+    else:
+        metrics_registry.increment("llm_render", label="fallback")
     return rendered

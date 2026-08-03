@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const apiBase = process.env.E2E_API_BASE ?? "http://localhost:8000";
+
 test("backend decision renders a dismissible grounded cart intervention", async ({ page, request }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: /^add to cart$/i }).first().click();
@@ -7,40 +9,47 @@ test("backend decision renders a dismissible grounded cart intervention", async 
   expect(sessionId).toBeTruthy();
 
   await expect.poll(async () => {
-    const response = await request.get(`http://localhost:8000/api/v1/sessions/${sessionId}`);
+    const response = await request.get(`${apiBase}/api/v1/sessions/${sessionId}`);
     if (!response.ok()) return 0;
     return (await response.json() as { counters: { cart_adds: number } }).counters.cart_adds;
   }).toBe(1);
 
-  const eventTypes = [
-    "REVIEW_OPENED", "REVIEW_OPENED", "REVIEW_OPENED",
-    "SIMILAR_PRODUCT_VIEWED", "SIMILAR_PRODUCT_VIEWED", "SIMILAR_PRODUCT_VIEWED",
-    "SIMILAR_PRODUCT_VIEWED", "SIMILAR_PRODUCT_VIEWED",
+  const eventSpecs = [
+    { eventType: "REVIEW_OPENED", productId: "p-1001", metadata: { source: "PRODUCT_PAGE" } },
+    { eventType: "REVIEW_DWELL_RECORDED", productId: "p-1001", metadata: { dwell_ms: 40_000 } },
+    { eventType: "REVIEW_OPENED", productId: "p-1001", metadata: { source: "PRODUCT_PAGE" } },
+    { eventType: "REVIEW_DWELL_RECORDED", productId: "p-1001", metadata: { dwell_ms: 40_000 } },
+    { eventType: "REVIEW_OPENED", productId: "p-1001", metadata: { source: "PRODUCT_PAGE" } },
+    { eventType: "REVIEW_DWELL_RECORDED", productId: "p-1001", metadata: { dwell_ms: 40_000 } },
+    ...["p-1002", "p-1003", "p-1004", "p-1005", "p-1006"].map((productId) => ({
+      eventType: "SIMILAR_PRODUCT_VIEWED",
+      productId,
+      metadata: { origin_product_id: "p-1001" },
+    })),
+    { eventType: "CART_VIEWED", metadata: { cart_value: 71_999, item_count: 1 } },
   ];
-  const events = eventTypes.map((eventType, index) => ({
+  const events = eventSpecs.map(({ eventType, productId, metadata }, index) => ({
     event_id: crypto.randomUUID(),
     event_type: eventType,
     session_id: sessionId,
-    product_id: "p-1001",
+    ...(productId ? { product_id: productId } : {}),
     sequence_no: index + 3,
     client_timestamp: new Date().toISOString(),
-    metadata: eventType === "REVIEW_OPENED"
-      ? { source: "PRODUCT_PAGE" }
-      : { origin_product_id: "p-1001" },
+    metadata,
   }));
-  const ingested = await request.post("http://localhost:8000/api/v1/events", {
+  const ingested = await request.post(`${apiBase}/api/v1/events`, {
     data: { events },
   });
   expect(ingested.ok()).toBeTruthy();
   await page.evaluate(({ key, value }) => sessionStorage.setItem(key, value), {
     key: `fk-event-sequence:${sessionId}`,
-    value: "10",
+    value: String(events.length + 2),
   });
 
   await page.waitForTimeout(3_100);
   const decision = await request.post(
-    `http://localhost:8000/api/v1/sessions/${sessionId}/decisions`,
-    { data: { trigger: "SIMILAR_PRODUCT_VIEWED", force: true } },
+    `${apiBase}/api/v1/sessions/${sessionId}/decisions`,
+    { data: { trigger: "CART_VIEWED", force: true } },
   );
   expect(decision.ok()).toBeTruthy();
   const decisionBody = await decision.json() as {

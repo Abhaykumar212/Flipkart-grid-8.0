@@ -101,8 +101,8 @@ def _write(db: Session, run: DecisionRun) -> None:
         recommendation_confidence=float(run.response["confidence_score"]),
         decision=str(run.response["decision"]),
         explanation=run.response["explanation"],
-        experiment_id=None,
-        experiment_group=None,
+        experiment_id=run.experiment_id,
+        experiment_group=run.experiment_group,
         feature_snapshot_id=None,
         latency_ms=run.response["latency_ms"],
     )

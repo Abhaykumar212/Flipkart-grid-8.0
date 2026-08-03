@@ -1,0 +1,16 @@
+{
+  "scenario":"D","title":"Payment failure","sessions":[{
+    "session_id":"demo-d-0","actions":[{"events":[
+      {"event_type":"SESSION_STARTED","metadata":{"device_type":"DESKTOP","referral_source":"DIRECT","viewport_width":1440}},
+      {"event_type":"PRODUCT_VIEWED","product_id":"p-1006","metadata":{"source":"DIRECT"}},
+      {"event_type":"ITEM_ADDED_TO_CART","product_id":"p-1006","metadata":{"quantity":1,"unit_price":12999,"variant":null}},
+      {"event_type":"CHECKOUT_STARTED","metadata":{"cart_value":12999,"item_count":1}},
+      {"event_type":"CHECKOUT_STEP_VIEWED","metadata":{"step":1,"step_name":"ADDRESS"}},
+      {"event_type":"CHECKOUT_STEP_VIEWED","metadata":{"step":2,"step_name":"SUMMARY"}},
+      {"event_type":"CHECKOUT_STEP_VIEWED","metadata":{"step":3,"step_name":"PAYMENT"}},
+      {"event_type":"PAYMENT_FAILED","metadata":{"method":"CARD","reason_code":"DECLINED","attempt_no":1}},
+      {"event_type":"PAYMENT_METHOD_CHANGED","metadata":{"from_method":"CARD","to_method":"UPI"}}
+    ]},{"decide":"PAYMENT_FAILED"}],
+    "expect":{"decision":"INTERVENE","intervention":"ALTERNATE_PAYMENT_METHOD","dominant_cause":"CHECKOUT_OR_PAYMENT_FAILURE","experiment_group":"PERSONALIZED_V1"}
+  }]
+}

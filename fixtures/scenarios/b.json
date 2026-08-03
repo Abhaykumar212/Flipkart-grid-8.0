@@ -1,0 +1,15 @@
+{
+  "scenario":"B","title":"Delivery concern","sessions":[{
+    "session_id":"demo-b-1","actions":[{"events":[
+      {"event_type":"SESSION_STARTED","metadata":{"device_type":"DESKTOP","referral_source":"DIRECT","viewport_width":1440}},
+      {"event_type":"PRODUCT_VIEWED","product_id":"p-4001","metadata":{"source":"DIRECT"}},
+      {"event_type":"ITEM_ADDED_TO_CART","product_id":"p-4001","metadata":{"quantity":1,"unit_price":32999,"variant":null}},
+      {"event_type":"DELIVERY_CHECKED","product_id":"p-4001","metadata":{"pincode":"560001","estimated_days":7,"available":true}},
+      {"event_type":"DELIVERY_CHECKED","product_id":"p-4001","metadata":{"pincode":"110001","estimated_days":7,"available":true}},
+      {"event_type":"DELIVERY_CHECKED","product_id":"p-4001","metadata":{"pincode":"400001","estimated_days":7,"available":true}},
+      {"event_type":"CART_VIEWED","metadata":{"cart_value":32999,"item_count":1}},
+      {"event_type":"CART_VIEWED","metadata":{"cart_value":32999,"item_count":1}}
+    ]},{"decide":"CART_VIEWED"}],
+    "expect":{"decision":"INTERVENE","intervention":"DELIVERY_REASSURANCE","dominant_cause":"DELIVERY_CONCERN","experiment_group":"PERSONALIZED_V1"}
+  }]
+}

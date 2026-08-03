@@ -13,6 +13,8 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
 from sklearn.model_selection import GroupKFold, RandomizedSearchCV
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
 from backend.feature_engine.schema import RISK_MODEL_FEATURES, write_feature_schema
@@ -42,6 +44,25 @@ def _choose_calibrator(y_fit: np.ndarray, p_fit: np.ndarray, y_eval: np.ndarray,
     return ({"isotonic": isotonic, "sigmoid": sigmoid}.get(chosen), losses)
 
 
+def _feature_distributions(frame: pd.DataFrame) -> dict[str, dict[str, list[float]]]:
+    reference: dict[str, dict[str, list[float]]] = {}
+    for name in RISK_MODEL_FEATURES:
+        values = frame[name].to_numpy(dtype=float)
+        edges = np.unique(np.quantile(values, np.linspace(0, 1, 11)))
+        if len(edges) < 2:
+            value = float(edges[0]) if len(edges) else 0.0
+            edges = np.asarray([value - 0.5, value + 0.5])
+        span = max(1.0, float(values.max() - values.min()))
+        edges[0] = float(values.min()) - span * 0.001
+        edges[-1] = float(values.max()) + span * 0.001
+        counts, _ = np.histogram(values, bins=edges)
+        reference[name] = {
+            "bin_edges": [float(value) for value in edges],
+            "proportions": (counts / max(1, counts.sum())).astype(float).tolist(),
+        }
+    return reference
+
+
 def main() -> None:
     data_path = Path("ml/data/decision_points.parquet")
     artifact = Path("ml/artifacts/risk/v1")
@@ -57,7 +78,10 @@ def main() -> None:
     x_val, y_val = val.loc[:, RISK_MODEL_FEATURES], val["y_abandoned"].to_numpy()
     x_test, y_test = test.loc[:, RISK_MODEL_FEATURES], test["y_abandoned"].to_numpy()
 
-    baseline_lr = LogisticRegression(max_iter=1000, class_weight="balanced", n_jobs=-1).fit(x_train, y_train)
+    baseline_lr = make_pipeline(
+        StandardScaler(),
+        LogisticRegression(max_iter=2_000, class_weight="balanced"),
+    ).fit(x_train, y_train)
     baseline_rf = RandomForestClassifier(n_estimators=250, min_samples_leaf=4, class_weight="balanced", random_state=42, n_jobs=-1).fit(x_train, y_train)
     baselines = {
         "logistic_regression": binary_metrics(y_test, baseline_lr.predict_proba(x_test)[:, 1]),
@@ -98,6 +122,7 @@ def main() -> None:
         "best_params": params,
         "best_cv_neg_log_loss": float(search.best_score_),
         "baselines": baselines,
+        "feature_distributions": _feature_distributions(x_train),
         "operating_table": operating_table(y_test, probability),
         "reliability_curve": reliability_curve(y_test, probability),
     })

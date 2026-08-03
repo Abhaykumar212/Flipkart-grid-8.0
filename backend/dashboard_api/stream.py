@@ -116,6 +116,11 @@ class DashboardBroadcaster:
             self._next_event_id = 1
             self._next_subscriber_id = 1
 
+    @property
+    def subscriber_count(self) -> int:
+        with self._lock:
+            return len(self._subscribers)
+
 
 broadcaster = DashboardBroadcaster()
 

@@ -10,6 +10,7 @@ from backend.deps import get_session_store
 from backend.domain.events import EventEnvelope
 from backend.storage.db import get_db
 from backend.storage.session_store import SessionStore
+from backend.observability.rate_limit import event_rate_limiter
 
 from .ingest import ingest_events
 from .validate import IngestionError
@@ -52,6 +53,21 @@ def post_events(
     store: SessionStore = Depends(get_session_store),
 ) -> dict:
     events = _parse_payload(payload)
+    counts: dict[str, int] = {}
+    for event in events:
+        counts[event.session_id] = counts.get(event.session_id, 0) + 1
+    for session_id, amount in counts.items():
+        verdict = event_rate_limiter.acquire(
+            session_id,
+            limit=config.EVENT_RATE_LIMIT_PER_MINUTE,
+            amount=amount,
+        )
+        if not verdict.allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="Event rate limit exceeded",
+                headers={"Retry-After": str(verdict.retry_after_seconds)},
+            )
     try:
         result = ingest_events(events, db, store)
     except IngestionError as error:

@@ -120,7 +120,7 @@ def test_payment_failure_authorizes_only_backend_identified_intervention(api_har
 def test_two_dismissals_suppress_all_further_customer_actions(api_harness, monkeypatch):
     monkeypatch.setattr("backend.config.DECISION_DEBOUNCE_SECONDS", 0)
     monkeypatch.setattr("backend.config.MIN_DECISION_INTERVAL_SECONDS", 0)
-    session_id = "decision-fatigue"
+    session_id = "decision-fatigue-treatment"
     _create_session(api_harness, session_id)
     _emit_low_value_cart(api_harness, session_id, 1)
     for sequence in range(2, 5):

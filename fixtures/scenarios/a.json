@@ -1,0 +1,28 @@
+{
+  "scenario": "A",
+  "title": "Product-quality uncertainty",
+  "sessions": [{
+    "session_id": "demo-a-0",
+    "actions": [
+      {"events": [
+        {"event_type":"SESSION_STARTED","metadata":{"device_type":"DESKTOP","referral_source":"DIRECT","viewport_width":1440}},
+        {"event_type":"PRODUCT_VIEWED","product_id":"p-1001","metadata":{"source":"DIRECT"}},
+        {"event_type":"ITEM_ADDED_TO_CART","product_id":"p-1001","metadata":{"quantity":1,"unit_price":71999,"variant":null}},
+        {"event_type":"REVIEW_OPENED","product_id":"p-1001","metadata":{"source":"PRODUCT_PAGE"}},
+        {"event_type":"REVIEW_DWELL_RECORDED","product_id":"p-1001","metadata":{"dwell_ms":40000}},
+        {"event_type":"REVIEW_OPENED","product_id":"p-1001","metadata":{"source":"PRODUCT_PAGE"}},
+        {"event_type":"REVIEW_DWELL_RECORDED","product_id":"p-1001","metadata":{"dwell_ms":40000}},
+        {"event_type":"REVIEW_OPENED","product_id":"p-1001","metadata":{"source":"PRODUCT_PAGE"}},
+        {"event_type":"REVIEW_DWELL_RECORDED","product_id":"p-1001","metadata":{"dwell_ms":40000}},
+        {"event_type":"SIMILAR_PRODUCT_VIEWED","product_id":"p-1002","metadata":{"origin_product_id":"p-1001"}},
+        {"event_type":"SIMILAR_PRODUCT_VIEWED","product_id":"p-1003","metadata":{"origin_product_id":"p-1001"}},
+        {"event_type":"SIMILAR_PRODUCT_VIEWED","product_id":"p-1004","metadata":{"origin_product_id":"p-1001"}},
+        {"event_type":"SIMILAR_PRODUCT_VIEWED","product_id":"p-1005","metadata":{"origin_product_id":"p-1001"}},
+        {"event_type":"SIMILAR_PRODUCT_VIEWED","product_id":"p-1006","metadata":{"origin_product_id":"p-1001"}},
+        {"event_type":"CART_VIEWED","metadata":{"cart_value":71999,"item_count":1}}
+      ]},
+      {"decide":"CART_VIEWED"}
+    ],
+    "expect":{"decision":"INTERVENE","intervention":"REVIEW_SUMMARY","dominant_cause":"PRODUCT_QUALITY_UNCERTAINTY","experiment_group":"PERSONALIZED_V1"}
+  }]
+}

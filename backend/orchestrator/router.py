@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -16,6 +16,8 @@ from backend.session_state.state import SessionState
 from backend.storage.db import get_db
 from backend.storage.models import DecisionTrace, ShoppingSession
 from backend.storage.session_store import SessionStore
+from backend.observability.rate_limit import decision_rate_limiter
+from backend.explainability.i18n import resolve_language
 
 from .persist import persist_decision
 from .pipeline import run_decision
@@ -39,14 +41,32 @@ def decide(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     store: SessionStore = Depends(get_session_store),
+    accept_language: str | None = Header(default=None),
 ) -> dict[str, object]:
     if db.get(ShoppingSession, session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
     if payload.trigger not in TRIGGER_NAMES:
         raise HTTPException(status_code=422, detail="Unsupported decision trigger")
-    run = run_decision(
-        session_id, payload.trigger, db, store, force=payload.force
+    rate_limit = decision_rate_limiter.acquire(
+        session_id,
+        limit=config.DECISION_RATE_LIMIT_PER_MINUTE,
     )
+    if not rate_limit.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Decision rate limit exceeded",
+            headers={"Retry-After": str(rate_limit.retry_after_seconds)},
+        )
+    run = run_decision(
+        session_id,
+        payload.trigger,
+        db,
+        store,
+        force=payload.force,
+        language=resolve_language(accept_language),
+    )
+    if run.experiment_id is not None:
+        db.commit()
     if run.should_persist:
         factory = sessionmaker(
             bind=db.get_bind(), autoflush=False, expire_on_commit=False

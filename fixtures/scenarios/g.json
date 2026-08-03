@@ -1,0 +1,29 @@
+{
+  "scenario":"G","title":"Fatigue protection","sessions":[{
+    "session_id":"demo-g-2","actions":[
+      {"events":[
+        {"event_type":"SESSION_STARTED","metadata":{"device_type":"DESKTOP","referral_source":"DIRECT","viewport_width":1440}},
+        {"event_type":"PRODUCT_VIEWED","product_id":"p-1001","metadata":{"source":"DIRECT"}},
+        {"event_type":"ITEM_ADDED_TO_CART","product_id":"p-1001","metadata":{"quantity":1,"unit_price":71999,"variant":null}},
+        {"event_type":"REVIEW_OPENED","product_id":"p-1001","metadata":{"source":"PRODUCT_PAGE"}},
+        {"event_type":"REVIEW_OPENED","product_id":"p-1001","metadata":{"source":"PRODUCT_PAGE"}},
+        {"event_type":"REVIEW_OPENED","product_id":"p-1001","metadata":{"source":"PRODUCT_PAGE"}},
+        {"event_type":"SIMILAR_PRODUCT_VIEWED","product_id":"p-1002","metadata":{"origin_product_id":"p-1001"}},
+        {"event_type":"SIMILAR_PRODUCT_VIEWED","product_id":"p-1003","metadata":{"origin_product_id":"p-1001"}},
+        {"event_type":"SIMILAR_PRODUCT_VIEWED","product_id":"p-1004","metadata":{"origin_product_id":"p-1001"}},
+        {"event_type":"SIMILAR_PRODUCT_VIEWED","product_id":"p-1005","metadata":{"origin_product_id":"p-1001"}},
+        {"event_type":"SIMILAR_PRODUCT_VIEWED","product_id":"p-1006","metadata":{"origin_product_id":"p-1001"}}
+      ]},
+      {"decide":"SIMILAR_PRODUCT_VIEWED","dismiss_last":true},
+      {"events":[
+        {"event_type":"CHECKOUT_STARTED","metadata":{"cart_value":71999,"item_count":1}},
+        {"event_type":"CHECKOUT_STEP_VIEWED","metadata":{"step":3,"step_name":"PAYMENT"}},
+        {"event_type":"PAYMENT_FAILED","metadata":{"method":"CARD","reason_code":"DECLINED","attempt_no":1}}
+      ]},
+      {"decide":"PAYMENT_FAILED","dismiss_last":true},
+      {"events":[{"event_type":"DELIVERY_CHECKED","product_id":"p-1001","metadata":{"pincode":"560001","estimated_days":5,"available":true}}]},
+      {"decide":"DELIVERY_CHECKED","expect":{"decision":"NO_ACTION","intervention":"NO_ACTION","experiment_group":"PERSONALIZED_V1"}}
+    ],
+    "expect":{"decision":"NO_ACTION","intervention":"NO_ACTION","experiment_group":"PERSONALIZED_V1"}
+  }]
+}

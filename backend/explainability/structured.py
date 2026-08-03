@@ -53,6 +53,7 @@ def build_explanation(
     ranked: tuple[ScoredIntervention, ...],
     selected: ScoredIntervention | None,
     decision: Decision,
+    language: str = "en",
 ) -> dict[str, object]:
     dominant = _dominant(causes)
     factor_names = [factor.feature for factor in risk.top_factors]
@@ -157,6 +158,7 @@ def build_explanation(
             "policy": POLICY_VERSION,
         },
         "rendered_by": "template",
+        "language": language,
     }
-    explanation["rendered_text"] = template_prose(explanation)
+    explanation["rendered_text"] = template_prose(explanation, language)
     return explanation

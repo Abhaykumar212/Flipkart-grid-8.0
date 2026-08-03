@@ -18,6 +18,9 @@ import DashboardLayout from "./routes/dashboard/DashboardLayout";
 import LiveSessions from "./routes/dashboard/LiveSessions";
 import SessionDetail from "./routes/dashboard/SessionDetail";
 import DecisionTrace from "./routes/dashboard/DecisionTrace";
+import SessionReplay from "./routes/dashboard/SessionReplay";
+import ModelMetrics from "./routes/dashboard/ModelMetrics";
+import Experiments from "./routes/dashboard/Experiments";
 
 function StorefrontRoutes() {
   return (
@@ -55,7 +58,10 @@ export default function App() {
         <Route path="dashboard" element={<DashboardLayout />}>
           <Route index element={<LiveSessions />} />
           <Route path="sessions/:sessionId" element={<SessionDetail />} />
+          <Route path="sessions/:sessionId/replay" element={<SessionReplay />} />
           <Route path="decisions/:decisionId" element={<DecisionTrace />} />
+          <Route path="metrics" element={<ModelMetrics />} />
+          <Route path="experiments" element={<Experiments />} />
         </Route>
         <Route path="*" element={<StorefrontRoutes />} />
       </Routes>

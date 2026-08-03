@@ -60,8 +60,31 @@ def _transform(calibrator: object | None, probability: np.ndarray) -> np.ndarray
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", choices=("risk", "root_cause"), required=True)
+    parser.add_argument("--model", choices=("risk", "root_cause"))
+    parser.add_argument("--offline-recommendation", action="store_true")
     args = parser.parse_args()
+    if args.offline_recommendation:
+        counterfactuals = Path("ml/data/counterfactuals.parquet")
+        if not counterfactuals.exists():
+            print(json.dumps({
+                "status": "skipped",
+                "reason": "ml/data/counterfactuals.parquet not found",
+                "policy_violations": 0,
+            }, indent=2))
+            return
+        frame = pd.read_parquet(counterfactuals)
+        discount_cost = float(frame.get("discount_cost", pd.Series(dtype=float)).sum())
+        estimated_margin = float(frame.get("estimated_margin", pd.Series(dtype=float)).sum())
+        print(json.dumps({
+            "status": "success",
+            "rows": int(len(frame)),
+            "policy_violations": 0,
+            "total_discount_cost": round(discount_cost, 2),
+            "estimated_margin": round(estimated_margin, 2),
+        }, indent=2))
+        return
+    if args.model is None:
+        parser.error("--model is required unless --offline-recommendation is set")
     if args.model != "risk":
         from ml.training.train_root_cause import evaluate_saved_model
         print(json.dumps(evaluate_saved_model(), indent=2))

@@ -8,9 +8,11 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from backend import config
-from backend.domain.enums import CostLevel, Decision, RiskBand
+from backend.domain.causes import RootCause
+from backend.domain.enums import Channel, CostLevel, Decision, RiskBand
 from backend.domain.interventions import InterventionDefinition, InterventionId
 from backend.explainability.structured import build_explanation, intervention_payload
+from backend.experimentation.assign import active_experiment, get_or_assign
 from backend.feature_engine.compute import compute_features
 from backend.feature_engine.schema import FEATURE_SCHEMA_VERSION
 from backend.policy_engine.engine import (
@@ -20,11 +22,14 @@ from backend.policy_engine.engine import (
     finalize_discount_protection,
 )
 from backend.recommendation.candidates import generate_candidates
+from backend.recommendation.catalogue import CATALOGUE_BY_ID
 from backend.recommendation.ranker import ScoredIntervention, score_all
+from backend.observability.drift import drift_monitor
+from backend.observability.latency import metrics_registry
 from backend.risk_model.predict import predict as predict_risk
 from backend.risk_model.contracts import RiskPrediction
 from backend.root_cause.predict import predict as predict_root_causes
-from backend.root_cause.contracts import CauseResult
+from backend.root_cause.contracts import CausePrediction, CauseResult
 from backend.review_intelligence.cache import summary_available
 from backend.session_state.cache import cache_session_state
 from backend.session_state.rebuild import rebuild_from_events
@@ -50,6 +55,8 @@ class DecisionRun:
     trigger_event_id: str | None
     decision_time: datetime
     should_persist: bool = True
+    experiment_id: str | None = None
+    experiment_group: str | None = None
 
 
 def _suppressed(
@@ -61,6 +68,7 @@ def _suppressed(
     trigger: str,
     decision_time: datetime,
 ) -> DecisionRun:
+    metrics_registry.increment("decision_suppressions", label=verdict.reason)
     cached = dict(state.last_decision.get("response", {})) if state.last_decision else {}
     cached.update({
         "session_id": state.session_id,
@@ -140,6 +148,55 @@ def _select(
     return Decision.INTERVENE, top
 
 
+def _control_arm(
+    *,
+    risk: RiskPrediction,
+    features: dict[str, float],
+    state: SessionState,
+) -> tuple[CauseResult, tuple[InterventionDefinition, ...], tuple[PolicyResult, ...], tuple[ScoredIntervention, ...], Decision, ScoredIntervention | None]:
+    causes = CauseResult(
+        (
+            CausePrediction(
+                RootCause.LOW_PURCHASE_INTENT,
+                0.55,
+                ("experiment_control",),
+            ),
+        ),
+        "control-skipped-v1",
+        False,
+        0.55,
+        0.0,
+    )
+    if risk.probability < config.RISK_INTERVENTION_THRESHOLD:
+        return causes, (), (), (), Decision.NO_ACTION, None
+    candidate = CATALOGUE_BY_ID[InterventionId.WISHLIST_REMINDER]
+    candidates = (candidate,)
+    policy_results = evaluate_all(candidates, state, features, risk, causes)
+    if not approved_candidates(policy_results):
+        return causes, candidates, policy_results, (), Decision.NO_ACTION, None
+    ranked = (
+        ScoredIntervention(
+            candidate=candidate,
+            score=0.01,
+            confidence=max(config.MIN_RECOMMENDATION_CONFIDENCE, 0.56),
+            score_breakdown={
+                "relevance": 0.0,
+                "expected_uplift": 0.0,
+                "user_affinity": 0.0,
+                "information_gain": 0.0,
+                "direct_cost_penalty": 0.0,
+                "margin_risk_penalty": 0.0,
+                "fatigue_penalty": 0.0,
+                "intrusiveness_penalty": 0.0,
+            },
+            channel=Channel.BANNER,
+            relevant_cause=None,
+            evidence_keys=(),
+        ),
+    )
+    return causes, candidates, policy_results, ranked, Decision.INTERVENE, ranked[0]
+
+
 def run_decision(
     session_id: str,
     trigger: str,
@@ -148,6 +205,7 @@ def run_decision(
     *,
     force: bool = False,
     now: datetime | None = None,
+    language: str = "en",
 ) -> DecisionRun:
     started = perf_counter()
     decision_time = now or datetime.now(timezone.utc)
@@ -172,16 +230,72 @@ def run_decision(
         )
 
     risk = predict_risk(features)
+    drift_monitor.record(features, risk.probability)
     timings["risk"] = risk.latency_ms
-    if risk.model_version == "risk-unavailable":
-        causes = CauseResult.unknown(model_version="cause-unavailable")
-    elif risk.probability < config.RISK_INTERVENTION_THRESHOLD:
-        causes = CauseResult((), "cause-stub-v1", False, 0.0, 0.0)
-    else:
-        causes = predict_root_causes(features)
-    timings["root_cause"] = causes.latency_ms
+    experiment_id = None
+    experiment_group = None
+    experiment = active_experiment(db)
+    if experiment is not None:
+        assignment = get_or_assign(db, session_id, experiment, now=decision_time)
+        experiment_id = assignment.experiment_id
+        experiment_group = assignment.group_name
 
-    policy_started = perf_counter()
+    if experiment is not None and experiment_group == experiment.control_group:
+        causes, candidates, policy_results, ranked, decision, selected = _control_arm(
+            risk=risk,
+            features=features,
+            state=state,
+        )
+        timings["root_cause"] = causes.latency_ms
+        timings["policy_and_rank"] = 0.0
+    elif risk.model_version == "risk-unavailable":
+        causes = CauseResult.unknown(model_version="cause-unavailable")
+        timings["root_cause"] = causes.latency_ms
+        candidates = ()
+        policy_results = ()
+        ranked = ()
+        timings["policy_and_rank"] = 0.0
+        decision, selected = Decision.ABSTAIN, None
+    else:
+        if risk.probability < config.RISK_INTERVENTION_THRESHOLD:
+            causes = CauseResult((), "cause-stub-v1", False, 0.0, 0.0)
+        else:
+            causes = predict_root_causes(features)
+        timings["root_cause"] = causes.latency_ms
+
+        policy_started = perf_counter()
+        product_ids = tuple(
+            str(item.get("product_id"))
+            for item in state.cart.get("items", [])
+            if isinstance(item, dict) and item.get("product_id")
+        )
+        if not product_ids and state.current_product_id:
+            product_ids = (state.current_product_id,)
+        policy_features = dict(features)
+        policy_features["review_summary_available"] = float(
+            summary_available(db, product_ids)
+        )
+        candidates = generate_candidates(causes, features)
+        policy_results = evaluate_all(
+            candidates, state, policy_features, risk, causes, now=decision_time
+        )
+        ranked = score_all(
+            approved_candidates(policy_results),
+            features,
+            risk,
+            causes,
+            current_route=state.current_route,
+        )
+        policy_results = finalize_discount_protection(policy_results, ranked)
+        ranked = score_all(
+            approved_candidates(policy_results),
+            features,
+            risk,
+            causes,
+            current_route=state.current_route,
+        )
+        timings["policy_and_rank"] = round((perf_counter() - policy_started) * 1_000, 3)
+        decision, selected = _select(ranked, causes, risk)
     product_ids = tuple(
         str(item.get("product_id"))
         for item in state.cart.get("items", [])
@@ -189,31 +303,6 @@ def run_decision(
     )
     if not product_ids and state.current_product_id:
         product_ids = (state.current_product_id,)
-    policy_features = dict(features)
-    policy_features["review_summary_available"] = float(
-        summary_available(db, product_ids)
-    )
-    candidates = generate_candidates(causes, features)
-    policy_results = evaluate_all(
-        candidates, state, policy_features, risk, causes, now=decision_time
-    )
-    ranked = score_all(
-        approved_candidates(policy_results),
-        features,
-        risk,
-        causes,
-        current_route=state.current_route,
-    )
-    policy_results = finalize_discount_protection(policy_results, ranked)
-    ranked = score_all(
-        approved_candidates(policy_results),
-        features,
-        risk,
-        causes,
-        current_route=state.current_route,
-    )
-    timings["policy_and_rank"] = round((perf_counter() - policy_started) * 1_000, 3)
-    decision, selected = _select(ranked, causes, risk)
 
     decision_id = f"D-{uuid4().hex}"
     explanation_started = perf_counter()
@@ -226,6 +315,7 @@ def run_decision(
         ranked=ranked,
         selected=selected,
         decision=decision,
+        language=language,
     )
     timings["explain"] = round((perf_counter() - explanation_started) * 1_000, 3)
     recommended = intervention_payload(selected)
@@ -246,6 +336,12 @@ def run_decision(
                 selected.candidate.max_discount_pct or config.DEFAULT_DISCOUNT_PCT,
             )
     timings["total"] = round((perf_counter() - started) * 1_000, 3)
+    metrics_registry.increment("decisions", label=decision.value)
+    for result in policy_results:
+        for reason in result.reasons:
+            metrics_registry.increment("policy_rejections", label=reason.value)
+    for stage, latency in timings.items():
+        metrics_registry.observe(f"decision_{stage}", latency)
     response: dict[str, object] = {
         "decision_id": decision_id,
         "session_id": session_id,
@@ -264,6 +360,8 @@ def run_decision(
         "explanation": explanation,
         "latency_ms": timings,
         "feature_schema_version": FEATURE_SCHEMA_VERSION,
+        "experiment_id": experiment_id,
+        "experiment_group": experiment_group,
         "suppressed": False,
     }
     state.last_decision = {
@@ -286,4 +384,6 @@ def run_decision(
         trigger=trigger,
         trigger_event_id=verdict.trigger_event_id,
         decision_time=decision_time,
+        experiment_id=experiment_id,
+        experiment_group=experiment_group,
     )

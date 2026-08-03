@@ -1,0 +1,18 @@
+{
+  "scenario":"C","title":"Price sensitivity with discount protection","sessions":[{
+    "session_id":"demo-c-0",
+    "user":{"user_id":"demo-price-user","persona":"BARGAIN_HUNTER","device_preference":"MOBILE","lifetime_orders":6,"avg_order_value":4500,"prior_abandonment_rate":0.76,"discount_usage_rate":0.92,"return_rate":0.05},
+    "actions":[{"events":[
+      {"event_type":"SESSION_STARTED","metadata":{"device_type":"MOBILE","referral_source":"SEARCH","viewport_width":390}},
+      {"event_type":"PRODUCT_VIEWED","product_id":"p-1001","metadata":{"source":"SEARCH"}},
+      {"event_type":"ITEM_ADDED_TO_CART","product_id":"p-1001","metadata":{"quantity":2,"unit_price":2100,"variant":null}},
+      {"event_type":"SEARCH_PERFORMED","repeat":5,"metadata":{"query":"budget phone","result_count":10,"sort_order":"PRICE_LOW_TO_HIGH"}},
+      {"event_type":"SEARCH_PERFORMED","repeat":5,"metadata":{"query":"cheap phone","result_count":10,"sort_order":"PRICE_LOW_TO_HIGH"}},
+      {"event_type":"COUPON_SEARCHED","repeat":10,"metadata":{"code":"SAVE10","applied":false}},
+      {"event_type":"CART_VIEWED","metadata":{"cart_value":4200,"item_count":2}},
+      {"event_type":"CART_VIEWED","metadata":{"cart_value":4200,"item_count":2}},
+      {"event_type":"CART_VIEWED","metadata":{"cart_value":4200,"item_count":2}}
+    ]},{"decide":"CART_VIEWED"}],
+    "expect":{"decision":"INTERVENE","intervention":"PRICE_DROP_ALERT","dominant_cause":"PRICE_SENSITIVITY","experiment_group":"PERSONALIZED_V1"}
+  }]
+}

@@ -24,17 +24,30 @@ def predict(features: dict[str, float]) -> CauseResult:
     if confidence < loaded.unknown_threshold:
         return CauseResult.unknown(confidence, model_version=loaded.version, latency_ms=(perf_counter() - started) * 1000)
     predictions = []
-    for index, (name, threshold) in enumerate(zip(loaded.causes, loaded.thresholds, strict=True)):
-        if probability[index] < threshold:
-            continue
-        explanation = loaded.explainers[index](frame)
-        values = np.asarray(explanation.values, dtype=float)[0]
+    fired = sorted(
+        (
+            (index, name)
+            for index, (name, threshold) in enumerate(
+                zip(loaded.causes, loaded.thresholds, strict=True)
+            )
+            if probability[index] >= threshold
+        ),
+        key=lambda item: (-probability[item[0]], item[1]),
+    )[:3]
+    for index, name in fired:
+        values = np.asarray(
+            loaded.explainers[index].shap_values(frame, check_additivity=False),
+            dtype=float,
+        )[0]
         shap_by_name = {feature: float(values[position]) for position, feature in enumerate(RISK_MODEL_FEATURES)}
         cause = RootCause(name)
         evidence = evidence_for(cause, shap_by_name)
         if evidence:
             predictions.append(CausePrediction(cause, float(probability[index]), evidence))
-    if not predictions:
+    if (
+        not predictions
+        or max(item.probability for item in predictions) < loaded.unknown_threshold
+    ):
         return CauseResult.unknown(confidence, model_version=loaded.version, latency_ms=(perf_counter() - started) * 1000)
     predictions.sort(key=lambda item: (-item.probability, item.cause.value))
     return CauseResult(tuple(predictions), loaded.version, False, confidence, (perf_counter() - started) * 1000)

@@ -1,4 +1,4 @@
-import { Activity, ExternalLink, RadioTower } from "lucide-react";
+import { Activity, BarChart3, FlaskConical, ExternalLink, RadioTower } from "lucide-react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 
 export default function DashboardLayout() {
@@ -12,6 +12,8 @@ export default function DashboardLayout() {
           </div>
           <nav className="flex items-center gap-2 text-xs">
             <NavLink end to="/dashboard" className={({ isActive }) => `inline-flex items-center gap-1.5 rounded-lg px-3 py-2 ${isActive ? "bg-slate-800 text-cyan-300" : "text-slate-400 hover:text-white"}`}><Activity className="h-3.5 w-3.5" />Live sessions</NavLink>
+            <NavLink to="/dashboard/metrics" className={({ isActive }) => `inline-flex items-center gap-1.5 rounded-lg px-3 py-2 ${isActive ? "bg-slate-800 text-cyan-300" : "text-slate-400 hover:text-white"}`}><BarChart3 className="h-3.5 w-3.5" />Models</NavLink>
+            <NavLink to="/dashboard/experiments" className={({ isActive }) => `inline-flex items-center gap-1.5 rounded-lg px-3 py-2 ${isActive ? "bg-slate-800 text-cyan-300" : "text-slate-400 hover:text-white"}`}><FlaskConical className="h-3.5 w-3.5" />Experiments</NavLink>
             <Link to="/" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-slate-400 hover:text-white">Storefront<ExternalLink className="h-3.5 w-3.5" /></Link>
           </nav>
         </div>

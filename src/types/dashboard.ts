@@ -31,7 +31,7 @@ export interface ActiveSessionsResponse {
 
 export interface DashboardEvent {
   id: string;
-  type: "event_ingested" | "decision_made" | "decision_updated";
+  type: "event_ingested" | "decision_made" | "decision_updated" | "intervention_shown" | "outcome_recorded";
   data: Record<string, unknown>;
 }
 
@@ -91,7 +91,20 @@ export interface SessionDetailResponse {
   counters: Record<string, number>;
   feature_snapshot: FeatureSnapshot;
   decisions: DecisionSummary[];
+  outcomes: Record<string, DecisionOutcome | null>;
   interventions: Record<string, unknown>;
+}
+
+export interface DecisionOutcome {
+  intervention_shown: boolean;
+  clicked: boolean;
+  dismissed: boolean;
+  order_completed: boolean;
+  time_to_purchase_seconds: number | null;
+  discount_cost: number;
+  estimated_margin: number | null;
+  recorded_at: string;
+  impression: { shown_at: string; surface: string; channel: string } | null;
 }
 
 export interface RootCauseResult {
@@ -178,6 +191,7 @@ export interface DecisionTraceResponse {
   feature_snapshot: FeatureSnapshot | null;
   model_versions: Record<string, string>;
   latency_ms: Record<string, number>;
+  outcome: DecisionOutcome | null;
   audit_answers: {
     elevated_risk: string;
     root_cause: string;
@@ -186,5 +200,80 @@ export interface DecisionTraceResponse {
     discount_not_offered: string;
     uncertainty: string;
     versions: Record<string, string>;
+  };
+}
+
+export interface ModelMetricsResponse {
+  models: Array<{
+    model_id: string;
+    model_name: string;
+    model_version: string;
+    model_type: string;
+    status: string;
+    feature_schema_version: string;
+    training_data_version: string;
+    trained_at: string;
+    promoted_at: string | null;
+    metrics: Record<string, number | string | boolean>;
+    notes: string | null;
+  }>;
+  count: number;
+  generated_at: string;
+}
+
+export interface RuntimeMetricsResponse {
+  counters: Record<string, {
+    total: number;
+    by_label: Record<string, number>;
+  }>;
+  latency_ms: Record<string, {
+    count: number;
+    p50: number;
+    p95: number;
+    p99: number;
+    max: number;
+  }>;
+  gauges: Record<string, number>;
+  drift: {
+    observations: number;
+    mean_predicted_probability: number | null;
+    feature_psi: Record<string, number>;
+    drift_suspected: boolean;
+    warning_features: string[];
+    baseline_available: boolean;
+    automated_action: false;
+  };
+}
+
+export interface ExperimentMetricsResponse {
+  experiment: {
+    experiment_id: string;
+    name: string;
+    status: string;
+    traffic_split: number;
+    control_group: string;
+    treatment_group: string;
+  };
+  arms: Record<string, {
+    group: string;
+    sessions: number;
+    decisions: number;
+    interventions_shown: number;
+    intervention_rate: number;
+    ctr: number;
+    dismissal_rate: number;
+    conversion_rate: number;
+    mean_time_to_purchase_seconds: number | null;
+    total_discount_cost: number;
+    total_revenue: number;
+    estimated_margin: number;
+    margin_per_session: number;
+    interventions_per_session: number;
+  }>;
+  uplift: {
+    absolute: number;
+    relative: number | null;
+    ci95: number | null;
+    label: string;
   };
 }

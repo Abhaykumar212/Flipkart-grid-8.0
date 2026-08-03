@@ -31,7 +31,7 @@ def test_seed_is_complete_and_idempotent(migrated_database):
     assert second == first
 
 
-def test_products_api_returns_seeded_catalog(migrated_database):
+def test_products_api_returns_seeded_catalog(migrated_database, monkeypatch):
     run_command([sys.executable, "-m", "scripts.seed_catalog"], migrated_database)
     engine = create_engine(migrated_database, connect_args={"check_same_thread": False})
     testing_session = sessionmaker(bind=engine, expire_on_commit=False)
@@ -41,6 +41,9 @@ def test_products_api_returns_seeded_catalog(migrated_database):
             yield session
 
     app.dependency_overrides[get_db] = override_db
+    monkeypatch.setattr("backend.main._load_artifacts", lambda: None)
+    monkeypatch.setattr("backend.main.risk_loader.load", lambda: None)
+    monkeypatch.setattr("backend.main.root_cause_loader.load", lambda: None)
     try:
         with TestClient(app) as client:
             products = client.get("/api/v1/products", params={"category": "mobiles"})

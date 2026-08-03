@@ -5,7 +5,7 @@ from backend.deps import get_session_store
 from backend.storage.db import get_db
 from backend.storage.session_store import SessionStore
 
-from .queries import active_sessions, decision_trace, session_detail
+from .queries import active_sessions, decision_trace, model_metrics, session_detail
 from .stream import stream_response
 
 
@@ -41,6 +41,11 @@ def get_decision_trace(
     if result is None:
         raise HTTPException(status_code=404, detail="Decision not found")
     return result
+
+
+@router.get("/metrics")
+def get_model_metrics(db: Session = Depends(get_db)) -> dict:
+    return model_metrics(db)
 
 
 @router.get("/stream")

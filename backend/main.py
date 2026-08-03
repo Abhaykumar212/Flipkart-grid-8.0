@@ -51,7 +51,12 @@ from .event_ingestion.router import router as events_router  # noqa: E402
 from .session_state.router import router as sessions_router  # noqa: E402
 from .orchestrator.router import router as decisions_router  # noqa: E402
 from .dashboard_api.router import router as dashboard_router  # noqa: E402
+from .feedback.router import router as feedback_router  # noqa: E402
+from .experimentation.router import router as experiments_router  # noqa: E402
 from .observability.logging import configure_logging  # noqa: E402
+from .observability.latency import metrics_registry  # noqa: E402
+from .observability.drift import drift_monitor  # noqa: E402
+from .dashboard_api.stream import broadcaster  # noqa: E402
 from .risk_model import loader as risk_loader  # noqa: E402
 from .root_cause import loader as root_cause_loader  # noqa: E402
 from .storage.db import SessionLocal  # noqa: E402
@@ -211,6 +216,8 @@ app.include_router(events_router)
 app.include_router(sessions_router)
 app.include_router(decisions_router)
 app.include_router(dashboard_router)
+app.include_router(feedback_router)
+app.include_router(experiments_router)
 
 
 @app.exception_handler(HTTPException)
@@ -275,6 +282,12 @@ def metrics() -> dict:
     if not METRICS_PATH.exists():
         raise HTTPException(status_code=404, detail="metrics.json not found")
     return json.loads(METRICS_PATH.read_text(encoding="utf-8"))
+
+
+@app.get("/api/v1/metrics", tags=["observability"])
+def runtime_metrics() -> dict:
+    metrics_registry.gauge("sse_clients", broadcaster.subscriber_count)
+    return {**metrics_registry.snapshot(), "drift": drift_monitor.snapshot()}
 
 
 def _risk_tier(probability: float) -> str:

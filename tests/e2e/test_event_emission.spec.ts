@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const apiBase = process.env.E2E_API_BASE ?? "http://localhost:8000";
+
 test("add-to-cart persists an ITEM_ADDED_TO_CART event", async ({ page, request }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   const addButton = page.getByRole("button", { name: /^add to cart$/i }).first();
@@ -11,7 +13,7 @@ test("add-to-cart persists an ITEM_ADDED_TO_CART event", async ({ page, request 
   expect(sessionId).toBeTruthy();
 
   await expect.poll(async () => {
-    const response = await request.get(`http://localhost:8000/api/v1/sessions/${sessionId}`);
+    const response = await request.get(`${apiBase}/api/v1/sessions/${sessionId}`);
     if (!response.ok()) return 0;
     const state = await response.json() as { counters: { cart_adds: number } };
     return state.counters.cart_adds;
@@ -32,7 +34,7 @@ test("ten rapid cart additions preserve order and batch efficiently", async ({ p
 
   const sessionId = await page.evaluate(() => sessionStorage.getItem("fk-session-id-v1"));
   await expect.poll(async () => {
-    const response = await request.get(`http://localhost:8000/api/v1/sessions/${sessionId}`);
+    const response = await request.get(`${apiBase}/api/v1/sessions/${sessionId}`);
     if (!response.ok()) return 0;
     const state = await response.json() as { counters: { cart_adds: number } };
     return state.counters.cart_adds;
@@ -47,7 +49,7 @@ test("ten rapid cart additions preserve order and batch efficiently", async ({ p
 });
 
 test("the storefront remains usable and buffers events while the API is down", async ({ page }) => {
-  await page.route("http://localhost:8000/api/**", (route) => route.abort("failed"));
+  await page.route(`${apiBase}/api/**`, (route) => route.abort("failed"));
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: /^add to cart$/i }).first().click();
 
@@ -66,13 +68,13 @@ test("closing the tab beacons SESSION_ENDED", async ({ page, request }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   const sessionId = await page.evaluate(() => sessionStorage.getItem("fk-session-id-v1"));
   await expect.poll(async () => (
-    await request.get(`http://localhost:8000/api/v1/sessions/${sessionId}`)
+    await request.get(`${apiBase}/api/v1/sessions/${sessionId}`)
   ).status()).toBe(200);
 
   await page.close();
 
   await expect.poll(async () => {
-    const response = await request.get(`http://localhost:8000/api/v1/sessions/${sessionId}`);
+    const response = await request.get(`${apiBase}/api/v1/sessions/${sessionId}`);
     if (!response.ok()) return false;
     const state = await response.json() as { session: { ended: boolean } };
     return state.session.ended;
@@ -114,7 +116,7 @@ test("a storefront journey updates the server-owned session counters", async ({ 
 
   const sessionId = await page.evaluate(() => sessionStorage.getItem("fk-session-id-v1"));
   await expect.poll(async () => {
-    const response = await request.get(`http://localhost:8000/api/v1/sessions/${sessionId}`);
+    const response = await request.get(`${apiBase}/api/v1/sessions/${sessionId}`);
     if (!response.ok()) return null;
     const state = await response.json() as {
       session: { order_completed: boolean };

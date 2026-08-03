@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useLocation } from "react-router-dom";
-import { apiGet } from "../lib/api";
+import { apiGet, apiPost } from "../lib/api";
 import {
   useSession,
   type DecisionResponse,
@@ -88,6 +88,8 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
   const shown = useCallback((surface: string) => {
     if (!intervention || shownIds.current.has(intervention.decision_id)) return;
     shownIds.current.add(intervention.decision_id);
+    void apiPost(`/api/v1/decisions/${intervention.decision_id}/impression`, { surface })
+      .catch(() => undefined);
     emit("INTERVENTION_SHOWN", {
       metadata: {
         decision_id: intervention.decision_id,
@@ -99,6 +101,8 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
 
   const click = useCallback(() => {
     if (!intervention) return;
+    void apiPost(`/api/v1/decisions/${intervention.decision_id}/outcome`, { clicked: true })
+      .catch(() => undefined);
     emit("INTERVENTION_CLICKED", {
       metadata: {
         decision_id: intervention.decision_id,
@@ -109,6 +113,8 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
 
   const dismiss = useCallback(() => {
     if (!intervention) return;
+    void apiPost(`/api/v1/decisions/${intervention.decision_id}/outcome`, { dismissed: true })
+      .catch(() => undefined);
     const ids = dismissedIds();
     ids.add(intervention.decision_id);
     try {

@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 from backend import config
 from backend.dashboard_api.stream import broadcaster
 from backend.domain.events import EventEnvelope, EventType
+from backend.feedback.outcomes import record_impression, record_outcome, resolve_session
 from backend.observability.logging import log_event
+from backend.observability.latency import metrics_registry
 from backend.session_state.cache import cache_session_state
 from backend.session_state.rebuild import rebuild_from_events
 from backend.session_state.state import SessionState
@@ -99,13 +101,13 @@ def ingest_events(
                 state,
                 trace_id=trace_id,
             )
+            metadata = envelope.metadata.model_dump(mode="json")
             if envelope.event_type == EventType.SESSION_STARTED:
                 if shopping_session is None:
                     shopping_session = _new_session(envelope)
                     db.add(shopping_session)
                     db.flush()
                 else:
-                    metadata = envelope.metadata.model_dump()
                     shopping_session.started_at = envelope.client_timestamp
                     shopping_session.user_id = envelope.user_id
                     shopping_session.device_type = metadata["device_type"]
@@ -152,11 +154,63 @@ def ingest_events(
             if envelope.event_type == EventType.ORDER_COMPLETED:
                 shopping_session.outcome = "CONVERTED"
                 shopping_session.outcome_resolved_at = server_timestamp
+                resolve_session(
+                    db,
+                    envelope.session_id,
+                    converted=True,
+                    order_value=float(metadata["order_value"]),
+                    resolved_at=server_timestamp,
+                )
             elif envelope.event_type == EventType.SESSION_ENDED:
                 shopping_session.ended_at = server_timestamp
                 if shopping_session.outcome == "OPEN":
                     shopping_session.outcome = "ABANDONED"
                     shopping_session.outcome_resolved_at = server_timestamp
+                    resolve_session(
+                        db,
+                        envelope.session_id,
+                        converted=False,
+                        resolved_at=server_timestamp,
+                    )
+            elif envelope.event_type == EventType.INTERVENTION_SHOWN:
+                try:
+                    record_impression(
+                        db,
+                        metadata["decision_id"],
+                        surface=str(metadata["surface"]),
+                        shown_at=server_timestamp,
+                    )
+                except (KeyError, ValueError):
+                    LOGGER.warning(
+                        "intervention_impression_event_unmatched",
+                        extra={"decision_id": metadata.get("decision_id")},
+                    )
+            elif envelope.event_type == EventType.INTERVENTION_CLICKED:
+                try:
+                    record_outcome(
+                        db,
+                        metadata["decision_id"],
+                        clicked=True,
+                        now=server_timestamp,
+                    )
+                except KeyError:
+                    LOGGER.warning(
+                        "intervention_click_event_unmatched",
+                        extra={"decision_id": metadata.get("decision_id")},
+                    )
+            elif envelope.event_type == EventType.INTERVENTION_DISMISSED:
+                try:
+                    record_outcome(
+                        db,
+                        metadata["decision_id"],
+                        dismissed=True,
+                        now=server_timestamp,
+                    )
+                except KeyError:
+                    LOGGER.warning(
+                        "intervention_dismiss_event_unmatched",
+                        extra={"decision_id": metadata.get("decision_id")},
+                    )
 
     for session_id, state in states.items():
         cache_session_state(
@@ -166,6 +220,11 @@ def ingest_events(
         )
 
     latency_ms = round((perf_counter() - started) * 1000, 3)
+    metrics_registry.increment("events_ingested", accepted)
+    metrics_registry.increment("event_duplicates", duplicates)
+    for event in events:
+        metrics_registry.increment("events_by_type", label=event.event_type.value)
+    metrics_registry.observe("event_ingest", latency_ms)
     log_event(
         LOGGER,
         "events_ingested",

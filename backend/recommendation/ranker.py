@@ -76,7 +76,7 @@ def _compare(left: ScoredIntervention, right: ScoredIntervention) -> int:
     return (left_key > right_key) - (left_key < right_key)
 
 
-def score_all(
+def rules_score_all(
     candidates: tuple[InterventionDefinition, ...] | list[InterventionDefinition],
     features: dict[str, float],
     risk: RiskPrediction,
@@ -134,3 +134,34 @@ def score_all(
             tie_break_applied=tie_break,
         ))
     return tuple(scored)
+
+
+def score_all(
+    candidates: tuple[InterventionDefinition, ...] | list[InterventionDefinition],
+    features: dict[str, float],
+    risk: RiskPrediction,
+    causes: CauseResult,
+    *,
+    current_route: str | None = None,
+) -> tuple[ScoredIntervention, ...]:
+    """Select the configured ranker; rules remain the deterministic default."""
+
+    from backend import config
+
+    if config.RANKER_STRATEGY == "bandit":
+        from .bandit import live_bandit
+
+        return live_bandit.score_all(
+            candidates,
+            features,
+            risk,
+            causes,
+            current_route=current_route,
+        )
+    return rules_score_all(
+        candidates,
+        features,
+        risk,
+        causes,
+        current_route=current_route,
+    )

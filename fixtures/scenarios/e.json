@@ -1,0 +1,12 @@
+{
+  "scenario":"E","title":"Low risk","sessions":[{
+    "session_id":"demo-e-0","session_age_seconds":0,"actions":[{"events":[
+      {"event_type":"SESSION_STARTED","metadata":{"device_type":"DESKTOP","referral_source":"DIRECT","viewport_width":1440}},
+      {"event_type":"PRODUCT_VIEWED","product_id":"p-1006","metadata":{"source":"DIRECT"}},
+      {"event_type":"ITEM_ADDED_TO_CART","product_id":"p-1006","metadata":{"quantity":1,"unit_price":8499,"variant":null}},
+      {"event_type":"CHECKOUT_STARTED","metadata":{"cart_value":8499,"item_count":1}},
+      {"event_type":"CHECKOUT_STEP_VIEWED","metadata":{"step":3,"step_name":"PAYMENT"}}
+    ]},{"decide":"CHECKOUT_STARTED"}],
+    "expect":{"decision":"NO_ACTION","intervention":"NO_ACTION","experiment_group":"PERSONALIZED_V1"}
+  }]
+}
