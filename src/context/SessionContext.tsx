@@ -104,8 +104,14 @@ function initializeSession(): SessionIdentity {
   eventClient.pause();
   eventClient.setSession(identity.sessionId);
   const startedKey = `${SESSION_STARTED_PREFIX}${identity.sessionId}`;
-  if (!safeGet(startedKey)) {
-    safeSet(startedKey, "1");
+  // The "started" flag is only persisted once delivery is confirmed (see markStarted
+  // in SessionProvider below). If we set it optimistically here and the first
+  // network attempt silently fails, this tab's session would never be retried and
+  // every subsequent event would be rejected by the backend forever.
+  const alreadyQueued = eventClient.pendingEvents().some((event) => (
+    event.session_id === identity.sessionId && event.event_type === "SESSION_STARTED"
+  ));
+  if (!safeGet(startedKey) && !alreadyQueued) {
     eventClient.emit("SESSION_STARTED", {
       metadata: {
         device_type: window.innerWidth < 768 ? "MOBILE" : "DESKTOP",
@@ -142,15 +148,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [identity.sessionId]);
 
   useEffect(() => {
+    const startedKey = `${SESSION_STARTED_PREFIX}${identity.sessionId}`;
+    const markStarted = () => safeSet(startedKey, "1");
+
     if (creationRequest.current === null) {
       creationRequest.current = apiPost<{ session_id: string }>("/api/v1/sessions", {
         session_id: identity.sessionId,
         device_type: window.innerWidth < 768 ? "MOBILE" : "DESKTOP",
         referral_source: document.referrer ? "REFERRAL" : "DIRECT",
-      }).catch((error: unknown) => {
-        // The queued SESSION_STARTED event can create the row after an outage.
-        if (error instanceof ApiError && error.status === 409) return;
-      });
+      }).then(() => markStarted())
+        .catch((error: unknown) => {
+          // The row already exists either way; only a genuine delivery failure
+          // (network/5xx) should fall through to the queued SESSION_STARTED event,
+          // which confirms via the subscribe callback below once it lands.
+          if (error instanceof ApiError && error.status === 409) markStarted();
+        });
     }
     void creationRequest.current.finally(() => eventClient.resume());
 
@@ -163,6 +175,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener("pagehide", endSession);
     const unsubscribe = eventClient.subscribe((events) => {
+      if (events.some((event) => (
+        event.session_id === identity.sessionId && event.event_type === "SESSION_STARTED"
+      ))) {
+        markStarted();
+      }
       const trigger = [...events].reverse().find((event) => (
         DECISION_TRIGGER_TYPES.has(event.event_type)
       ));

@@ -81,7 +81,7 @@ function ComparisonRow({
   );
 }
 
-export default function Experiments() {
+export default function Experiments({ embedded = false }: { embedded?: boolean }) {
   const [data, setData] = useState<ExperimentMetricsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [simulating, setSimulating] = useState(false);
@@ -140,8 +140,8 @@ export default function Experiments() {
   return (
     <div>
       <PageHeader
-        eyebrow={data.experiment.experiment_id}
-        title={data.experiment.name}
+        eyebrow={embedded ? undefined : data.experiment.experiment_id}
+        title={embedded ? "Control vs personalized intervention" : data.experiment.name}
         description={`Deterministic ${data.experiment.traffic_split}/${100 - data.experiment.traffic_split} split by session hash. Control applies one fixed wishlist reminder to every session; the treatment arm runs the full diagnosis-and-policy path.`}
         action={simulateButton}
       />

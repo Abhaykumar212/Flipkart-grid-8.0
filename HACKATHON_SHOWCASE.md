@@ -24,7 +24,7 @@ previous run left them occupied, starts the API and the storefront/dashboard,
 waits for `/ready`, and opens:
 
 - Storefront — http://localhost:5173/
-- Scenario theatre — http://localhost:5173/dashboard/scenarios
+- Decision Command Center — http://localhost:5173/dashboard
 - Swagger API — http://localhost:8000/docs
 
 Press `Ctrl+C` in that terminal to stop both servers cleanly.
@@ -42,20 +42,18 @@ Useful flags:
 Full run-of-show with talking points: [docs/demo-script.md](docs/demo-script.md).
 Short version:
 
-1. Open **Scenario theatre** (`/dashboard/scenarios`) → **Run all eight**. Each
-   row replays a real session through the live decision pipeline and shows
-   expected vs. actual cause, intervention, decision, and A/B arm.
-2. Open **Architecture** (`/dashboard/architecture`) to show the six-agent
-   pipeline judges can point at while you talk.
-3. Shop the storefront yourself (add to cart, reopen reviews, browse a few
-   similar products) and open the assistant inspector (bottom-right FAB) to
-   show live risk scoring and the reasoning behind whatever the agent decides
-   — including deciding to stay silent.
-4. Open **Live sessions** (`/dashboard`) and click into any decision's full
-   trace; toggle **EN/हिंदी** to show localized explanations.
-5. Press **Generate 40 sessions** in Scenario theatre to populate the A/B and
-   latency panels with a documented synthetic response model (assumptions are
-   printed on screen, never presented as production numbers).
+1. Keep the storefront and **Decision Command Center** (`/dashboard`) side by
+   side. Reopen reviews and browse similar products in the storefront.
+2. Select the new live session in the Command Center. Its real decision path
+   resolves automatically from events through all six agents to customer action.
+3. Select **Policy Agent** to show the rejected discount and its reason, then
+   select **Recommendation Agent** to show why the review summary won.
+4. Open **Proof Lab** (`/dashboard/proof/scenarios`) to run A, F, and G, or all
+   eight deterministic cases. The matrix keeps every case visible together.
+5. Open **System Blueprint** (`/dashboard/architecture`) for the system-wide
+   architecture, feedback loop, and reliability boundaries.
+6. Use Proof Lab's Experiment, Models, and Runtime tabs only when judges ask
+   for evaluation evidence or serving details.
 
 If time is short: run scenario A (helpful review-summary nudge), F (honest
 `UNKNOWN → ABSTAIN`), and G (two dismissals suppress further nudging). That

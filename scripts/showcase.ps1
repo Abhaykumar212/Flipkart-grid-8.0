@@ -133,16 +133,16 @@ try {
         if (-not $NoBrowser) {
             Start-Sleep -Seconds 2
             Start-Process "http://localhost:$frontendPort/"
-            Start-Process "http://localhost:$frontendPort/dashboard/scenarios"
+            Start-Process "http://localhost:$frontendPort/dashboard"
             Start-Process "http://localhost:$backendPort/docs"
         }
 
         Write-Host ""
         Write-Host "Flipkart GRiD 8.0 demo is live:" -ForegroundColor Green
         Write-Host "  Storefront        http://localhost:$frontendPort/"
-        Write-Host "  Live sessions     http://localhost:$frontendPort/dashboard"
-        Write-Host "  Scenario theatre  http://localhost:$frontendPort/dashboard/scenarios"
-        Write-Host "  Architecture      http://localhost:$frontendPort/dashboard/architecture"
+        Write-Host "  Command Center    http://localhost:$frontendPort/dashboard"
+        Write-Host "  Proof Lab         http://localhost:$frontendPort/dashboard/proof/scenarios"
+        Write-Host "  System Blueprint  http://localhost:$frontendPort/dashboard/architecture"
         Write-Host "  Swagger API       http://localhost:$backendPort/docs"
         Write-Host ""
         Write-Host "Press Ctrl+C to stop both servers." -ForegroundColor Cyan

@@ -1,131 +1,73 @@
 import {
+  Activity,
   ArrowDown,
+  ArrowRight,
   BrainCircuit,
   Database,
-  Layers,
+  FileCheck2,
+  Filter,
+  Gauge,
+  GitBranch,
+  History,
+  Layers3,
   MessageSquareText,
   Radio,
   Scale,
   ShieldCheck,
   ShoppingCart,
-  Target,
+  Sparkles,
 } from "lucide-react";
-import { PageHeader, Panel } from "../../components/dashboard/Panel";
-
-/**
- * The architecture diagram, in the product rather than in a slide deck.
- *
- * The brief lists an architecture diagram as a required deliverable, and a
- * reviewer reading the dashboard should not have to open a separate document to
- * find out what produced the numbers in front of them.
- */
+import { PageHeader } from "../../components/dashboard/Panel";
 
 const AGENTS = [
-  {
-    icon: Layers,
-    name: "Feature Agent",
-    role: "Rebuilds the canonical 67-signal vector",
-    detail:
-      "Replays the immutable event log into session state, then computes one frozen feature contract shared by simulation, training, and serving. Intervention-history signals are excluded from risk training to prevent leakage.",
-    outputs: "67 features · fs-v1",
-  },
-  {
-    icon: BrainCircuit,
-    name: "Risk Agent",
-    role: "Calibrated abandonment probability",
-    detail:
-      "Gradient-boosted classifier with isotonic calibration, returning a probability, a risk band, and per-feature SHAP attribution. Model failure degrades to ABSTAIN rather than a guess.",
-    outputs: "probability · band · SHAP",
-  },
-  {
-    icon: Target,
-    name: "Reasoning Agent",
-    role: "Multi-label root-cause inference",
-    detail:
-      "Predicts which of ten supported causes the evidence backs, constrained to a frozen evidence family per cause. Conflicting signals produce UNKNOWN instead of a fabricated diagnosis.",
-    outputs: "ranked causes · evidence keys",
-  },
-  {
-    icon: ShieldCheck,
-    name: "Policy Agent",
-    role: "Eleven ordered safety rules",
-    detail:
-      "Screens every candidate in the closed 12-intervention catalogue before any ranking happens. Fatigue, margin, eligibility, and discount protection can all override model confidence, and each rejection carries a closed reason code.",
-    outputs: "pass / reject / downgrade",
-  },
-  {
-    icon: Scale,
-    name: "Recommendation Agent",
-    role: "Utility ranking over approved actions",
-    detail:
-      "Scores only what policy already approved, trading expected uplift and relevance against direct cost, margin risk, fatigue, and intrusiveness. An optional contextual bandit may reorder approved actions but can never introduce a rejected one.",
-    outputs: "ranked utility · confidence",
-  },
-  {
-    icon: MessageSquareText,
-    name: "Explainability Agent",
-    role: "Grounded justification trail",
-    detail:
-      "Builds evidence → prediction → inference → policy → action statements from the persisted trace. Optional LLM rendering is checked against the structured facts and discarded if it drifts; the deterministic template is always the fallback.",
-    outputs: "trail · prose (en / hi)",
-  },
+  { icon: Filter, name: "Feature", output: "67 signals", tone: "text-teal-200 bg-teal-400/10 border-teal-400/30" },
+  { icon: Gauge, name: "Risk", output: "Probability", tone: "text-rose-200 bg-rose-400/10 border-rose-400/30" },
+  { icon: BrainCircuit, name: "Root cause", output: "Supported intent", tone: "text-blue-200 bg-blue-400/10 border-blue-400/30" },
+  { icon: ShieldCheck, name: "Policy", output: "Pass / reject", tone: "text-amber-200 bg-amber-400/10 border-amber-400/30" },
+  { icon: Scale, name: "Recommend", output: "Utility winner", tone: "text-teal-200 bg-teal-400/10 border-teal-400/30" },
+  { icon: MessageSquareText, name: "Explain", output: "Grounded trail", tone: "text-blue-200 bg-blue-400/10 border-blue-400/30" },
 ];
 
 const GUARANTEES = [
-  {
-    title: "Silence is a decision",
-    detail:
-      "NO_ACTION and ABSTAIN are persisted with the same audit bundle as an intervention, so restraint is measurable rather than invisible.",
-  },
-  {
-    title: "Policy runs before ranking",
-    detail:
-      "A high-confidence model cannot route around a safety rule, because rejected candidates never reach the ranker.",
-  },
-  {
-    title: "Discounts need five independent checks",
-    detail:
-      "Verified price sensitivity, margin headroom, eligibility, budget, and fatigue must all pass. The counterfactual is recorded even when no discount was considered.",
-  },
-  {
-    title: "Every decision is replayable",
-    detail:
-      "Session state is rebuildable from the event log, and the exact serving feature vector is persisted alongside the decision that used it.",
-  },
-  {
-    title: "Failure is safe by construction",
-    detail:
-      "A missing model, a dead LLM, or an unreachable review cache degrades to a quieter decision, never to an unexplained one.",
-  },
-  {
-    title: "Offline by default",
-    detail:
-      "SQLite, local model artifacts, and deterministic templates mean the demo does not depend on venue Wi-Fi or an API key.",
-  },
+  { icon: ShieldCheck, title: "Policy before ranking", detail: "Rejected actions never reach utility scoring." },
+  { icon: History, title: "Replayable decisions", detail: "Event log, feature vector, and versions are persisted." },
+  { icon: FileCheck2, title: "Grounded explanations", detail: "Every statement maps back to structured evidence." },
+  { icon: Activity, title: "Safe degradation", detail: "Failures become ABSTAIN or NO_ACTION, never guesses." },
+  { icon: GitBranch, title: "Measured feedback", detail: "Impressions, response, conversion, and cost are attributed." },
 ];
 
-function AgentNode({ agent, index }: { agent: (typeof AGENTS)[number]; index: number }) {
-  const Icon = agent.icon;
+function FlowArrow({ vertical = false }: { vertical?: boolean }) {
+  return vertical
+    ? <ArrowDown className="h-5 w-5 text-zinc-700" aria-hidden="true" />
+    : <ArrowRight className="h-5 w-5 text-zinc-700" aria-hidden="true" />;
+}
+
+function BoundaryNode({
+  icon: Icon,
+  label,
+  value,
+  tone = "blue",
+}: {
+  icon: typeof ShoppingCart;
+  label: string;
+  value: string;
+  tone?: "blue" | "teal" | "green";
+}) {
+  const color = tone === "teal"
+    ? "border-teal-400/35 bg-teal-400/8 text-teal-200"
+    : tone === "green"
+      ? "border-emerald-400/35 bg-emerald-400/8 text-emerald-200"
+      : "border-blue-400/35 bg-blue-400/8 text-blue-200";
   return (
-    <li>
-      <div className="flex gap-4 rounded-xl border border-slate-800 bg-slate-900 p-4">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-cyan-500/15 text-cyan-300">
-          <Icon className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-semibold text-white">{agent.name}</h3>
-            <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
-              stage {index + 1}
-            </span>
-          </div>
-          <p className="mt-0.5 text-xs font-medium text-cyan-300/80">{agent.role}</p>
-          <p className="mt-2 text-xs leading-relaxed text-slate-400">{agent.detail}</p>
-          <p className="mt-2 font-mono text-[10px] text-slate-600">→ {agent.outputs}</p>
-        </div>
+    <div className={`flex min-h-24 items-center gap-3 border p-4 ${color}`}>
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-black/20">
+        <Icon className="h-5 w-5" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] opacity-70">{label}</p>
+        <p className="mt-1 text-sm font-semibold text-white">{value}</p>
       </div>
-      {index < AGENTS.length - 1 && <ArrowDown className="mx-auto my-1.5 h-4 w-4 text-slate-700" />}
-    </li>
+    </div>
   );
 }
 
@@ -133,110 +75,108 @@ export default function Architecture() {
   return (
     <div>
       <PageHeader
-        eyebrow="System design"
-        title="Architecture"
-        description="How a browser event becomes a governed, explainable intervention — and what stops it becoming a blanket coupon."
+        eyebrow="System blueprint"
+        title="One governed path from hesitation to help"
+        description="The system stays event-driven and auditable: models propose, deterministic policy governs, and only an authorized action reaches the shopper."
       />
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-        <div className="min-w-0 space-y-5">
-          <Panel
-            title="Ingress"
-            subtitle="Everything downstream is derived from an append-only event log."
-          >
-            <div className="grid gap-3 sm:grid-cols-3">
-              {[
-                {
-                  icon: ShoppingCart,
-                  name: "Storefront",
-                  detail: "21 strictly validated event types emitted from the React shopfront",
-                },
-                {
-                  icon: Database,
-                  name: "Event ingestion",
-                  detail: "Idempotent, ordered, immutable persistence with late-event marking",
-                },
-                {
-                  icon: Radio,
-                  name: "Trigger gate",
-                  detail: "Debounce, minimum interval, and material-change checks before any spend",
-                },
-              ].map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div key={item.name} className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
-                    <Icon className="h-4 w-4 text-cyan-300" />
-                    <p className="mt-2 text-xs font-semibold text-white">{item.name}</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{item.detail}</p>
+      <section aria-labelledby="online-flow" className="border border-zinc-800 bg-[#0d1117]">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 px-5 py-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-teal-300">Online decision path</p>
+            <h2 id="online-flow" className="mt-1 text-sm font-semibold text-white">Real-time architecture</h2>
+          </div>
+          <div className="flex items-center gap-4 font-mono text-[10px] text-zinc-500">
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-teal-300" /> dashboard &lt; 1s</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-blue-300" /> decision &lt; 300ms</span>
+          </div>
+        </header>
+
+        <div className="p-5">
+          <div className="flex flex-col items-stretch gap-3 xl:flex-row xl:items-center">
+            <div className="xl:w-[180px] xl:shrink-0">
+              <BoundaryNode icon={ShoppingCart} label="Experience" value="Storefront events" />
+            </div>
+            <div className="hidden justify-center xl:flex"><FlowArrow /></div>
+            <div className="xl:w-[190px] xl:shrink-0">
+              <BoundaryNode icon={Radio} label="Ingress" value="Validate and trigger" tone="teal" />
+            </div>
+            <div className="hidden justify-center xl:flex"><FlowArrow /></div>
+
+            <div className="min-w-0 border border-zinc-700 bg-[#090d13] p-4 xl:flex-1">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Layers3 className="h-4 w-4 text-blue-300" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-300">Decision orchestrator</p>
+                    <p className="mt-0.5 text-xs text-zinc-500">Fixed order, persisted trace</p>
                   </div>
-                );
-              })}
-            </div>
-          </Panel>
-
-          <Panel
-            title="Agent orchestration"
-            subtitle="Six specialised agents in a fixed order. No single heuristic decides anything."
-          >
-            <ol>
-              {AGENTS.map((agent, index) => (
-                <AgentNode key={agent.name} agent={agent} index={index} />
-              ))}
-            </ol>
-          </Panel>
-
-          <Panel
-            title="Feedback loop"
-            subtitle="What happened next is written back against the decision that caused it."
-          >
-            <div className="grid gap-3 sm:grid-cols-4">
-              {[
-                { name: "Impression", detail: "Surface and channel recorded when shown" },
-                { name: "Engagement", detail: "Click or dismissal attributed to the decision" },
-                { name: "Conversion", detail: "Order value, discount cost, estimated margin" },
-                { name: "Learning", detail: "Affinity priors and optional bandit posteriors" },
-              ].map((item) => (
-                <div key={item.name} className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
-                  <p className="text-xs font-semibold text-white">{item.name}</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{item.detail}</p>
                 </div>
-              ))}
+                <span className="border border-zinc-700 px-2 py-1 font-mono text-[9px] text-zinc-500">modular monolith</span>
+              </div>
+              <ol className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+                {AGENTS.map((agent, index) => {
+                  const Icon = agent.icon;
+                  return (
+                    <li key={agent.name} className={`relative min-w-0 border p-3 ${agent.tone}`}>
+                      <span className="flex items-center justify-between gap-2">
+                        <Icon className="h-4 w-4" />
+                        <span className="font-mono text-[9px] opacity-60">0{index + 1}</span>
+                      </span>
+                      <p className="mt-3 text-[11px] font-semibold text-white">{agent.name}</p>
+                      <p className="mt-1 text-[9px] opacity-70">{agent.output}</p>
+                      {index < AGENTS.length - 1 && <ArrowRight className="absolute -right-2.5 top-1/2 z-10 hidden h-4 w-4 -translate-y-1/2 text-zinc-600 xl:block" />}
+                    </li>
+                  );
+                })}
+              </ol>
             </div>
-          </Panel>
-        </div>
 
-        <div className="min-w-0 space-y-5">
-          <Panel title="Design guarantees" subtitle="The claims this system is prepared to defend.">
-            <ul className="space-y-4">
-              {GUARANTEES.map((item) => (
-                <li key={item.title}>
-                  <p className="text-xs font-semibold text-white">{item.title}</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{item.detail}</p>
-                </li>
-              ))}
-            </ul>
-          </Panel>
+            <div className="hidden justify-center xl:flex"><FlowArrow /></div>
+            <div className="xl:w-[190px] xl:shrink-0">
+              <BoundaryNode icon={Sparkles} label="Authorized output" value="Helpful action or silence" tone="green" />
+            </div>
+          </div>
 
-          <Panel title="Stack" subtitle="Deliberately boring where it does not need to be clever.">
-            <dl className="space-y-2.5 text-xs">
-              {[
-                ["Storefront", "React 19 · Vite · Tailwind"],
-                ["Service", "FastAPI · SQLAlchemy modular monolith"],
-                ["Store", "SQLite by default · PostgreSQL by config"],
-                ["Models", "XGBoost + isotonic calibration · SHAP"],
-                ["Retrieval", "TF-IDF over sanitised review corpus"],
-                ["LLM", "Optional Groq · never in the decision path"],
-                ["Streaming", "Server-sent events to the dashboard"],
-              ].map(([name, value]) => (
-                <div key={name} className="flex items-baseline justify-between gap-3">
-                  <dt className="shrink-0 text-slate-500">{name}</dt>
-                  <dd className="text-right text-slate-300">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          </Panel>
+          <div className="my-4 flex justify-center"><FlowArrow vertical /></div>
+
+          <div className="grid items-center gap-3 border-t border-zinc-800 pt-4 md:grid-cols-[1fr_24px_1fr_24px_1fr]">
+            <BoundaryNode icon={Database} label="Evidence store" value="Events, state, decisions" tone="teal" />
+            <div className="hidden justify-center md:flex"><FlowArrow /></div>
+            <BoundaryNode icon={GitBranch} label="Outcome attribution" value="Shown, clicked, dismissed, converted" />
+            <div className="hidden justify-center md:flex"><FlowArrow /></div>
+            <BoundaryNode icon={Activity} label="Learning loop" value="Experiments, affinity, drift" tone="green" />
+          </div>
         </div>
-      </div>
+      </section>
+
+      <section className="mt-5 border-y border-zinc-800">
+        <header className="flex items-center gap-2 py-3">
+          <ShieldCheck className="h-4 w-4 text-amber-300" />
+          <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-300">System guarantees</h2>
+        </header>
+        <ul className="grid border-t border-zinc-800 sm:grid-cols-2 xl:grid-cols-5">
+          {GUARANTEES.map((item) => {
+            const Icon = item.icon;
+            return (
+              <li key={item.title} className="border-b border-r border-zinc-800 px-4 py-4 xl:border-b-0">
+                <Icon className="h-4 w-4 text-amber-300" />
+                <p className="mt-3 text-xs font-semibold text-white">{item.title}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">{item.detail}</p>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <footer className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 border border-zinc-800 bg-[#0d1117] px-5 py-3 font-mono text-[10px] text-zinc-500">
+        <span>React + Vite</span>
+        <span>FastAPI modular monolith</span>
+        <span>SQLite / PostgreSQL</span>
+        <span>Gradient-boosted models + SHAP</span>
+        <span>Local deterministic fallback</span>
+        <span>SSE dashboard stream</span>
+      </footer>
     </div>
   );
 }

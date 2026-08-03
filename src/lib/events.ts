@@ -1,4 +1,4 @@
-import { apiPost, apiUrl } from "./api";
+import { apiPost, apiUrl, ApiError } from "./api";
 
 export const EVENT_TYPES = [
   "SESSION_STARTED",
@@ -148,6 +148,7 @@ export class EventClient {
   private inFlight: Promise<void> | null = null;
   private retryCount = 0;
   private paused = false;
+  private narrowedBatch = false;
 
   constructor(options: EventClientOptions = {}) {
     this.localStorage = options.localStorage ?? browserStorage("localStorage");
@@ -208,17 +209,45 @@ export class EventClient {
       window.clearTimeout(this.timer);
       this.timer = null;
     }
-    const batch = this.queue.slice(0, MAX_BATCH_SIZE);
+    const batch = this.queue.slice(0, this.narrowedBatch ? 1 : MAX_BATCH_SIZE);
     const ids = new Set(batch.map((event) => event.event_id));
     this.inFlight = this.postEvents(batch)
       .then(() => {
         this.queue = this.queue.filter((event) => !ids.has(event.event_id));
         this.retryCount = 0;
+        this.narrowedBatch = false;
         this.persist();
         this.listeners.forEach((listener) => listener(batch));
         if (this.queue.length > 0) this.scheduleFlush(FLUSH_DELAY_MS);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        // The backend rejects a whole batch atomically when any single event in it
+        // is invalid (e.g. a stale reference or a duplicate). Blindly retrying that
+        // same batch forever would jam every event queued behind it. A 4xx (other
+        // than a rate limit) is a permanent rejection, so first narrow down to one
+        // event at a time to find the offending event, then drop just that one.
+        const status = error instanceof ApiError ? error.status : undefined;
+        const isPermanentRejection = (
+          status !== undefined && status >= 400 && status < 500 && status !== 429
+        );
+        if (isPermanentRejection && batch.length > 1) {
+          this.narrowedBatch = true;
+          this.scheduleFlush(FLUSH_DELAY_MS);
+          return;
+        }
+        if (isPermanentRejection) {
+          this.queue = this.queue.filter((event) => !ids.has(event.event_id));
+          this.retryCount = 0;
+          this.narrowedBatch = false;
+          this.persist();
+          if (typeof console !== "undefined") {
+            console.warn(
+              `[events] dropping event ${batch[0]?.event_type} rejected with status ${status}`,
+            );
+          }
+          if (this.queue.length > 0) this.scheduleFlush(FLUSH_DELAY_MS);
+          return;
+        }
         this.retryCount += 1;
         const delay = Math.min(
           FLUSH_DELAY_MS * (2 ** (this.retryCount - 1)),
@@ -255,6 +284,7 @@ export class EventClient {
     this.userId = undefined;
     this.retryCount = 0;
     this.paused = false;
+    this.narrowedBatch = false;
     this.memorySequences.clear();
     this.persist();
   }

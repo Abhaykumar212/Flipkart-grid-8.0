@@ -8,7 +8,7 @@ import { formatPercent } from "../../lib/metrics";
 import { useOverview } from "../../hooks/useOverview";
 import type { ModelMetricsResponse, RuntimeMetricsResponse } from "../../types/dashboard";
 
-export default function ModelMetrics() {
+export default function ModelMetrics({ embedded = false }: { embedded?: boolean }) {
   const [data, setData] = useState<ModelMetricsResponse | null>(null);
   const [runtime, setRuntime] = useState<RuntimeMetricsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,8 +44,8 @@ export default function ModelMetrics() {
   return (
     <div>
       <PageHeader
-        eyebrow="Model registry"
-        title="Model metrics"
+        eyebrow={embedded ? undefined : "Model registry"}
+        title={embedded ? "Serving model evidence" : "Model metrics"}
         description="Held-out results for the models currently serving decisions, plus what the decision path actually cost at runtime."
       />
 

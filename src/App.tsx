@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { CartProvider } from "./context/CartContext";
 import { WishlistProvider } from "./context/WishlistContext";
 import { TrackerProvider } from "./context/TrackerContext";
@@ -15,14 +15,15 @@ import NotFoundPage from "./routes/NotFoundPage";
 import SearchResultsPage from "./routes/SearchResultsPage";
 import PipelineConsole from "./routes/PipelineConsole";
 import DashboardLayout from "./routes/dashboard/DashboardLayout";
-import LiveSessions from "./routes/dashboard/LiveSessions";
-import SessionDetail from "./routes/dashboard/SessionDetail";
+import CommandCenter from "./routes/dashboard/CommandCenter";
 import DecisionTrace from "./routes/dashboard/DecisionTrace";
 import SessionReplay from "./routes/dashboard/SessionReplay";
 import ModelMetrics from "./routes/dashboard/ModelMetrics";
 import Experiments from "./routes/dashboard/Experiments";
 import ScenarioTheatre from "./routes/dashboard/ScenarioTheatre";
 import Architecture from "./routes/dashboard/Architecture";
+import ProofLab from "./routes/dashboard/ProofLab";
+import RuntimeProof from "./routes/dashboard/RuntimeProof";
 
 function StorefrontRoutes() {
   return (
@@ -58,13 +59,20 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="dashboard" element={<DashboardLayout />}>
-          <Route index element={<LiveSessions />} />
-          <Route path="sessions/:sessionId" element={<SessionDetail />} />
+          <Route index element={<CommandCenter />} />
+          <Route path="sessions/:sessionId" element={<CommandCenter />} />
           <Route path="sessions/:sessionId/replay" element={<SessionReplay />} />
           <Route path="decisions/:decisionId" element={<DecisionTrace />} />
-          <Route path="scenarios" element={<ScenarioTheatre />} />
-          <Route path="metrics" element={<ModelMetrics />} />
-          <Route path="experiments" element={<Experiments />} />
+          <Route path="proof" element={<ProofLab />}>
+            <Route index element={<Navigate to="scenarios" replace />} />
+            <Route path="scenarios" element={<ScenarioTheatre embedded />} />
+            <Route path="experiment" element={<Experiments embedded />} />
+            <Route path="models" element={<ModelMetrics embedded />} />
+            <Route path="runtime" element={<RuntimeProof />} />
+          </Route>
+          <Route path="scenarios" element={<Navigate to="/dashboard/proof/scenarios" replace />} />
+          <Route path="metrics" element={<Navigate to="/dashboard/proof/models" replace />} />
+          <Route path="experiments" element={<Navigate to="/dashboard/proof/experiment" replace />} />
           <Route path="architecture" element={<Architecture />} />
         </Route>
         <Route path="*" element={<StorefrontRoutes />} />

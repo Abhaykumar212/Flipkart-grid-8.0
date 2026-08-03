@@ -5,11 +5,11 @@ Start the frontend and API with `./scripts/dev.ps1`. Keep the storefront and `/d
 ## Three-minute judge run-of-show
 
 1. **Problem (20 seconds).** “Cart abandonment is not one problem. A worried buyer, a failed payment, and a low-intent browser should not receive the same coupon.”
-2. **Architecture proof (30 seconds).** Open `/dashboard/model-metrics` and explain the chain: 21 validated events → 67 versioned features → calibrated risk → multi-label causes with SHAP evidence → policy → ranked intervention → immutable trace.
-3. **Helpful action (45 seconds).** Run Scenario A. Show `PRODUCT_QUALITY_UNCERTAINTY → REVIEW_SUMMARY`, cited review evidence, rejected alternatives, and the dismissible inline card.
-4. **Safety (35 seconds).** Run Scenario F to show `UNKNOWN → ABSTAIN`, then Scenario G to show two dismissals suppressing further actions. Say: “The safest recommendation is sometimes silence.”
-5. **Checkout recovery (25 seconds).** Run Scenario D and show `ALTERNATE_PAYMENT_METHOD` beside checkout, never as an obstructive modal.
-6. **Experimentation (25 seconds).** Run Scenario H and open `/dashboard/experiments`: deterministic control/treatment assignment, complete traces in both arms, confidence intervals, and no discounts in control.
+2. **Live shopper evidence (35 seconds).** Keep the storefront and `/dashboard` side by side. Reopen reviews, browse similar products, and return to cart.
+3. **Architecture proof (55 seconds).** Select the new session in the Command Center. Let the session architecture resolve automatically: validated events → 67 versioned features → calibrated risk → supported root cause → policy → utility ranking → explanation → customer action.
+4. **Helpful action (35 seconds).** Show `PRODUCT_QUALITY_UNCERTAINTY → REVIEW_SUMMARY`. Select Policy to show why the discount was rejected, then show the dismissible inline card in the storefront.
+5. **Safety (25 seconds).** In `/dashboard/proof/scenarios`, run F for `UNKNOWN → ABSTAIN` and G for fatigue suppression. Say: “The safest recommendation is sometimes silence.”
+6. **System proof (10 seconds).** Open `/dashboard/architecture` to show the full online path, persistence, feedback loop, and guardrails in one diagram.
 
 Close with: “This is not a coupon popup. It is an auditable decision system that knows when to help, what evidence supports the help, and when to leave the customer alone.”
 
