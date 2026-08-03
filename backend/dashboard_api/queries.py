@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.explainability.i18n import localized_template, resolve_language
 from backend.feature_engine.compute import compute_features
 from backend.feature_engine.schema import FEATURE_SCHEMA_VERSION
 from backend.session_state.rebuild import rebuild_from_events
@@ -266,12 +267,24 @@ def _candidate_rows(trace: DecisionTrace, db: Session) -> list[dict[str, Any]]:
     return rows
 
 
-def decision_trace(decision_id: str, db: Session) -> dict[str, Any] | None:
+def decision_trace(
+    decision_id: str, db: Session, language: str = "en"
+) -> dict[str, Any] | None:
     trace = db.get(DecisionTrace, decision_id)
     if trace is None:
         return None
     snapshot = db.get(SessionFeatureSnapshot, trace.feature_snapshot_id) if trace.feature_snapshot_id else None
     explanation = trace.explanation
+    # The persisted trace is language-neutral; only the prose is localised. A
+    # reviewer can therefore switch languages without re-running the decision.
+    target = resolve_language(language)
+    if target != explanation.get("language", "en"):
+        explanation = {
+            **explanation,
+            "rendered_text": localized_template(explanation, target),
+            "rendered_by": "template",
+            "language": target,
+        }
     candidates = _candidate_rows(trace, db)
     rejected = explanation.get("rejected", [])
     discount = next(
@@ -322,6 +335,104 @@ def decision_trace(decision_id: str, db: Session) -> dict[str, Any] | None:
             "uncertainty": explanation.get("uncertainty", {}).get("statement"),
             "versions": trace.model_versions,
         },
+    }
+
+
+def _percentile(sorted_values: list[float], fraction: float) -> float:
+    if not sorted_values:
+        return 0.0
+    index = min(len(sorted_values) - 1, max(0, round(fraction * (len(sorted_values) - 1))))
+    return round(sorted_values[index], 2)
+
+
+def decision_overview(db: Session) -> dict[str, Any]:
+    """Aggregate what the agent has actually done, from persisted traces.
+
+    The in-process metrics registry resets whenever the API restarts, which
+    leaves the operations view claiming zero work on a database full of
+    evidence. Everything here is derived from the durable audit trail instead.
+    """
+
+    traces = list(db.scalars(select(DecisionTrace)))
+    total = len(traces)
+    by_decision: dict[str, int] = {}
+    by_intervention: dict[str, int] = {}
+    by_cause: dict[str, int] = {}
+    by_band: dict[str, int] = {}
+    stage_latencies: dict[str, list[float]] = {}
+    probabilities: list[float] = []
+    confidences: list[float] = []
+
+    for trace in traces:
+        by_decision[trace.decision] = by_decision.get(trace.decision, 0) + 1
+        by_band[trace.risk_band] = by_band.get(trace.risk_band, 0) + 1
+        if trace.selected_intervention:
+            by_intervention[trace.selected_intervention] = (
+                by_intervention.get(trace.selected_intervention, 0) + 1
+            )
+        dominant = max(
+            trace.root_causes or [],
+            key=lambda item: float(item.get("probability", 0.0)),
+            default=None,
+        )
+        if dominant:
+            cause = str(dominant.get("cause", "UNKNOWN"))
+            by_cause[cause] = by_cause.get(cause, 0) + 1
+        if trace.abandonment_probability is not None:
+            probabilities.append(float(trace.abandonment_probability))
+        if trace.recommendation_confidence is not None:
+            confidences.append(float(trace.recommendation_confidence))
+        for stage, value in (trace.latency_ms or {}).items():
+            try:
+                stage_latencies.setdefault(stage, []).append(float(value))
+            except (TypeError, ValueError):
+                continue
+
+    latency = {}
+    for stage, values in stage_latencies.items():
+        values.sort()
+        latency[stage] = {
+            "count": len(values),
+            "p50": _percentile(values, 0.50),
+            "p95": _percentile(values, 0.95),
+            "p99": _percentile(values, 0.99),
+            "max": round(values[-1], 2),
+        }
+
+    outcomes = list(db.scalars(select(InterventionOutcome)))
+    shown = sum(1 for item in outcomes if item.intervention_shown)
+    clicked = sum(1 for item in outcomes if item.clicked)
+    dismissed = sum(1 for item in outcomes if item.dismissed)
+    converted = sum(1 for item in outcomes if item.order_completed)
+    discount_spend = round(sum(float(item.discount_cost or 0.0) for item in outcomes), 2)
+
+    intervened = by_decision.get("INTERVENE", 0)
+    sessions_total = int(db.scalar(select(func.count()).select_from(ShoppingSession)) or 0)
+
+    return {
+        "decisions": total,
+        "sessions": sessions_total,
+        "by_decision": dict(sorted(by_decision.items())),
+        "by_intervention": dict(sorted(by_intervention.items(), key=lambda item: -item[1])),
+        "by_cause": dict(sorted(by_cause.items(), key=lambda item: -item[1])),
+        "by_risk_band": dict(sorted(by_band.items())),
+        "intervention_rate": round(intervened / total, 4) if total else 0.0,
+        "restraint_rate": round(
+            (by_decision.get("NO_ACTION", 0) + by_decision.get("ABSTAIN", 0)) / total, 4
+        ) if total else 0.0,
+        "mean_probability": round(sum(probabilities) / len(probabilities), 4) if probabilities else None,
+        "mean_confidence": round(sum(confidences) / len(confidences), 4) if confidences else None,
+        "outcomes": {
+            "shown": shown,
+            "clicked": clicked,
+            "dismissed": dismissed,
+            "converted": converted,
+            "ctr": round(clicked / shown, 4) if shown else 0.0,
+            "dismissal_rate": round(dismissed / shown, 4) if shown else 0.0,
+        },
+        "discount_spend": discount_spend,
+        "latency_ms": latency,
+        "generated_at": _iso(datetime.now(timezone.utc)),
     }
 
 

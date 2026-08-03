@@ -53,6 +53,7 @@ from .orchestrator.router import router as decisions_router  # noqa: E402
 from .dashboard_api.router import router as dashboard_router  # noqa: E402
 from .feedback.router import router as feedback_router  # noqa: E402
 from .experimentation.router import router as experiments_router  # noqa: E402
+from .demo.router import router as demo_router  # noqa: E402
 from .observability.logging import configure_logging  # noqa: E402
 from .observability.latency import metrics_registry  # noqa: E402
 from .observability.drift import drift_monitor  # noqa: E402
@@ -218,6 +219,7 @@ app.include_router(decisions_router)
 app.include_router(dashboard_router)
 app.include_router(feedback_router)
 app.include_router(experiments_router)
+app.include_router(demo_router)
 
 
 @app.exception_handler(HTTPException)

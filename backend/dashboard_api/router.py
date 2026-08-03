@@ -1,11 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from backend.deps import get_session_store
 from backend.storage.db import get_db
 from backend.storage.session_store import SessionStore
 
-from .queries import active_sessions, decision_trace, model_metrics, session_detail
+from .queries import (
+    active_sessions,
+    decision_overview,
+    decision_trace,
+    model_metrics,
+    session_detail,
+)
 from .stream import stream_response
 
 
@@ -36,11 +42,17 @@ def get_session_detail(
 def get_decision_trace(
     decision_id: str,
     db: Session = Depends(get_db),
+    accept_language: str | None = Header(default=None),
 ) -> dict:
-    result = decision_trace(decision_id, db)
+    result = decision_trace(decision_id, db, language=accept_language or "en")
     if result is None:
         raise HTTPException(status_code=404, detail="Decision not found")
     return result
+
+
+@router.get("/overview")
+def get_decision_overview(db: Session = Depends(get_db)) -> dict:
+    return decision_overview(db)
 
 
 @router.get("/metrics")

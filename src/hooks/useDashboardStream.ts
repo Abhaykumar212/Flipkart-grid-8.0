@@ -54,7 +54,7 @@ export function useDashboardStream(
   return { status, lastEvent, eventCount };
 }
 
-export function useDashboardResource<T>(path: string) {
+export function useDashboardResource<T>(path: string, language?: string) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +63,13 @@ export function useDashboardResource<T>(path: string) {
   const refresh = useCallback(async () => {
     const requestId = ++activeRequest.current;
     try {
-      const response = await apiGet<T>(path);
+      // Passing the language as a plain string keeps the callback identity
+      // stable; a header object literal would re-fire the effect every render.
+      const response = await apiGet<T>(
+        path,
+        undefined,
+        language ? { "Accept-Language": language } : undefined,
+      );
       if (requestId !== activeRequest.current) return;
       setData(response);
       setError(null);
@@ -73,7 +79,7 @@ export function useDashboardResource<T>(path: string) {
     } finally {
       if (requestId === activeRequest.current) setLoading(false);
     }
-  }, [path]);
+  }, [path, language]);
 
   useEffect(() => {
     setLoading(true);

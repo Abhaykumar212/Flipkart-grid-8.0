@@ -21,6 +21,8 @@ import DecisionTrace from "./routes/dashboard/DecisionTrace";
 import SessionReplay from "./routes/dashboard/SessionReplay";
 import ModelMetrics from "./routes/dashboard/ModelMetrics";
 import Experiments from "./routes/dashboard/Experiments";
+import ScenarioTheatre from "./routes/dashboard/ScenarioTheatre";
+import Architecture from "./routes/dashboard/Architecture";
 
 function StorefrontRoutes() {
   return (
@@ -60,8 +62,10 @@ export default function App() {
           <Route path="sessions/:sessionId" element={<SessionDetail />} />
           <Route path="sessions/:sessionId/replay" element={<SessionReplay />} />
           <Route path="decisions/:decisionId" element={<DecisionTrace />} />
+          <Route path="scenarios" element={<ScenarioTheatre />} />
           <Route path="metrics" element={<ModelMetrics />} />
           <Route path="experiments" element={<Experiments />} />
+          <Route path="architecture" element={<Architecture />} />
         </Route>
         <Route path="*" element={<StorefrontRoutes />} />
       </Routes>

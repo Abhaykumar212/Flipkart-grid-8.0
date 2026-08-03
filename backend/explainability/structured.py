@@ -9,6 +9,7 @@ from backend.recommendation.ranker import RANKER_VERSION, ScoredIntervention
 from backend.risk_model.contracts import RiskPrediction
 from backend.root_cause.contracts import CausePrediction, CauseResult
 
+from .narratives import display_probability_pct, informative
 from .templates import (
     CAUSE_STATEMENTS,
     INTERVENTION_COPY,
@@ -17,6 +18,9 @@ from .templates import (
     rejection_statement,
 )
 from .render import template_prose
+
+#: A trail longer than this stops being read and starts being skimmed.
+MAX_OBSERVATIONS = 4
 
 
 def _dominant(causes: CauseResult) -> CausePrediction:
@@ -57,13 +61,21 @@ def build_explanation(
 ) -> dict[str, object]:
     dominant = _dominant(causes)
     factor_names = [factor.feature for factor in risk.top_factors]
+    # The evidence that supports the *diagnosis* leads, whether or not it also
+    # happens to be a top risk driver. "Reopened the reviews three times" is what
+    # justifies a product-quality reading; "the session has been idle" may move
+    # the risk score without explaining anything, and belongs further down.
+    ranked_names = [name for name in dominant.evidence_keys if name in features]
+    ranked_names.extend(name for name in factor_names if name not in ranked_names)
+    # A reading of zero on a behaviour the shopper never performed is noise, not
+    # evidence. Dropping it is what keeps the trail readable, but the trail must
+    # never be empty, so the strongest attributed factor is kept as a floor.
     observation_names = [
-        name for name in factor_names if name in dominant.evidence_keys
-    ]
-    observation_names.extend(
-        name for name in factor_names if name not in observation_names
-    )
-    observation_names = observation_names[:5]
+        name for name in ranked_names
+        if name in features and informative(name, features[name])
+    ][:MAX_OBSERVATIONS]
+    if not observation_names:
+        observation_names = [name for name in ranked_names if name in features][:1]
     factors = {factor.feature: factor.shap for factor in risk.top_factors}
     observations = [
         {
@@ -125,7 +137,7 @@ def build_explanation(
             "model_version": risk.model_version,
             "statement": (
                 f"Abandonment risk is {risk.band.value.lower()} at "
-                f"{round(risk.probability * 100)}%."
+                f"{display_probability_pct(risk.probability)}%."
             ),
         },
         "inference": {

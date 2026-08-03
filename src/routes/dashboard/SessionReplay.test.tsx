@@ -73,18 +73,37 @@ vi.mock("../../hooks/useSessionDetail", () => ({
   useSessionDetail: () => ({ data: detail, loading: false, error: null }),
 }));
 
+function renderReplay() {
+  return render(
+    <MemoryRouter initialEntries={["/dashboard/sessions/session-1/replay"]}>
+      <Routes>
+        <Route path="/dashboard/sessions/:sessionId/replay" element={<SessionReplay />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("SessionReplay", () => {
   it("renders the event trail, decision, and resolved outcome", () => {
-    render(
-      <MemoryRouter initialEntries={["/dashboard/sessions/session-1/replay"]}>
-        <Routes>
-          <Route path="/dashboard/sessions/:sessionId/replay" element={<SessionReplay />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    renderReplay();
     expect(screen.getByRole("heading", { name: "Session replay" })).toBeInTheDocument();
     expect(screen.getByText("ITEM ADDED TO CART")).toBeInTheDocument();
-    expect(screen.getByText("INTERVENE · REVIEW_SUMMARY")).toBeInTheDocument();
+    // The label sits alongside an icon, so match on the text content itself.
+    expect(
+      screen.getByText((_, element) => element?.textContent === "INTERVENE · Review Summary"),
+    ).toBeTruthy();
     expect(screen.getByText("Converted")).toBeInTheDocument();
+  });
+
+  it("exposes playback controls over the event log", () => {
+    renderReplay();
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(screen.getByRole("slider")).toHaveValue("0");
+  });
+
+  it("rebuilds session state from the events replayed so far", () => {
+    renderReplay();
+    // The single fixture event is a cart add, so that counter must be present.
+    expect(screen.getByText("Cart adds")).toBeInTheDocument();
   });
 });

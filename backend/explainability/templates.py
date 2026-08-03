@@ -3,21 +3,7 @@ from __future__ import annotations
 from backend.domain.causes import RootCause
 from backend.domain.interventions import InterventionId
 
-
-FEATURE_LABELS = {
-    "s_review_open_count": "The customer reopened reviews {value:g} times.",
-    "s_review_dwell_seconds": "The customer spent {value:g} seconds reading reviews.",
-    "s_similar_product_view_count": "The customer viewed {value:g} similar products.",
-    "s_price_sort_count": "The customer sorted by price {value:g} times.",
-    "s_coupon_search_count": "The customer searched for coupons {value:g} times.",
-    "d_check_count": "The customer checked delivery {value:g} times.",
-    "pay_failure_count": "The checkout recorded {value:g} failed payment attempts.",
-    "pay_method_change_count": "The payment method changed {value:g} times.",
-    "s_cart_product_switch_count": "The customer switched cart items {value:g} times.",
-    "s_idle_seconds_current": "The session has been idle for {value:g} seconds.",
-    "c_value_to_aov_ratio": "The cart is {value:.1f} times the customer's typical order.",
-    "c_value": "The cart value is ₹{value:,.0f}.",
-}
+from .narratives import NARRATIVES, informative, statement
 
 CAUSE_STATEMENTS = {
     RootCause.PRICE_SENSITIVITY: "Price comparisons and coupon activity indicate price sensitivity.",
@@ -109,8 +95,19 @@ INTERVENTION_COPY = {
 
 
 def feature_statement(feature: str, value: float) -> str:
-    template = FEATURE_LABELS.get(feature, "The {feature} signal is {value:g}.")
-    return template.format(feature=feature.replace("_", " "), value=value)
+    """Render one feature reading as a complete English sentence."""
+
+    return statement(feature, value)
+
+
+def feature_is_informative(feature: str, value: float) -> bool:
+    """Whether this reading is worth putting in front of a human."""
+
+    return informative(feature, value)
+
+
+#: Retained for callers that only need the sentence templates.
+FEATURE_LABELS = {name: item.template for name, item in NARRATIVES.items()}
 
 
 def action_statement(intervention: InterventionId) -> str:

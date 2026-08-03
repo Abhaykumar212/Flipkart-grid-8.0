@@ -245,6 +245,89 @@ export interface RuntimeMetricsResponse {
   };
 }
 
+export interface LatencyPercentiles {
+  count: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  max: number;
+}
+
+export interface DecisionOverviewResponse {
+  decisions: number;
+  sessions: number;
+  by_decision: Record<string, number>;
+  by_intervention: Record<string, number>;
+  by_cause: Record<string, number>;
+  by_risk_band: Record<string, number>;
+  intervention_rate: number;
+  restraint_rate: number;
+  mean_probability: number | null;
+  mean_confidence: number | null;
+  outcomes: {
+    shown: number;
+    clicked: number;
+    dismissed: number;
+    converted: number;
+    ctr: number;
+    dismissal_rate: number;
+  };
+  discount_spend: number;
+  latency_ms: Record<string, LatencyPercentiles>;
+  generated_at: string;
+}
+
+export interface ScenarioExpectation {
+  session_id: string;
+  expected: Record<string, string>;
+}
+
+export interface DemoScenario {
+  scenario: string;
+  title: string;
+  proves: string;
+  detail: string;
+  session_count: number;
+  event_count: number;
+  expectations: ScenarioExpectation[];
+}
+
+export interface ScenarioStep {
+  session_id: string;
+  trigger: string;
+  decision_id: string | null;
+  decision: string | null;
+  intervention: string | null;
+  dominant_cause: string | null;
+  probability: number | null;
+  confidence: number | null;
+  experiment_group: string | null;
+  channel: string | null;
+  rendered_text: string | null;
+  expected: Record<string, string>;
+  mismatches: Record<string, { expected: string; actual: string }>;
+  passed: boolean;
+}
+
+export interface ScenarioRunResponse {
+  scenario: string;
+  title: string;
+  proves: string;
+  detail: string;
+  run_key: string;
+  passed: boolean;
+  duration_ms: number;
+  steps: ScenarioStep[];
+}
+
+export interface SimulateResponse {
+  requested_sessions: number;
+  totals: Record<string, number>;
+  by_scenario: Record<string, number>;
+  response_model: Record<string, number | string>;
+  disclaimer: string;
+}
+
 export interface ExperimentMetricsResponse {
   experiment: {
     experiment_id: string;
