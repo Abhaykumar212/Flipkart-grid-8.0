@@ -151,7 +151,7 @@ class RankingAgentTests(unittest.TestCase):
 
     def test_repeated_shows_escalate_the_penalty(self):
         analysis = make_analysis()
-        memory = InterventionMemoryStore()
+        memory = InterventionMemoryStore(db_path=":memory:")
 
         once_context = intervention.build_context(analysis, 0.9, EMPTY_PROFILE, "once", memory)
         once_score = intervention.score_candidate("free_delivery_waiver", once_context).score
@@ -166,7 +166,7 @@ class RankingAgentTests(unittest.TestCase):
 
     def test_dismissed_lever_is_penalised(self):
         analysis = make_analysis()
-        memory = InterventionMemoryStore()
+        memory = InterventionMemoryStore(db_path=":memory:")
         memory.record("s1", "free_delivery_waiver", "shown")
         memory.record("s1", "free_delivery_waiver", "dismissed")
 
@@ -197,7 +197,7 @@ class ExplainabilityAgentTests(unittest.TestCase):
 
 class OrchestratorTests(unittest.TestCase):
     def setUp(self):
-        self.memory = InterventionMemoryStore()
+        self.memory = InterventionMemoryStore(db_path=":memory:")
 
     def test_returns_top_three_sorted_descending(self):
         plan = intervention.build_intervention_plan(
@@ -242,13 +242,13 @@ class OrchestratorTests(unittest.TestCase):
 
 class MemoryAgentTests(unittest.TestCase):
     def test_sessions_are_isolated(self):
-        store = InterventionMemoryStore()
+        store = InterventionMemoryStore(db_path=":memory:")
         store.record("s1", "free_delivery_waiver", "dismissed")
         self.assertTrue(store.get("s1").was_dismissed("free_delivery_waiver"))
         self.assertFalse(store.get("s2").was_dismissed("free_delivery_waiver"))
 
     def test_reset_clears_single_session(self):
-        store = InterventionMemoryStore()
+        store = InterventionMemoryStore(db_path=":memory:")
         store.record("s1", "free_delivery_waiver", "shown")
         store.record("s2", "free_delivery_waiver", "shown")
         store.reset("s1")

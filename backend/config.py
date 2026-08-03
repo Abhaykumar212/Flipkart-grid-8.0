@@ -101,6 +101,53 @@ COMPANION_CHAT_TIMEOUT_SECONDS = float(os.getenv("COMPANION_CHAT_TIMEOUT_SECONDS
 # replies short means a chat session competes less aggressively with the
 # recommendation engine for the same tokens/minute allowance.
 
+# --- Critic gate -------------------------------------------------------------
+
+CRITIC_ENABLED = os.getenv("CRITIC_ENABLED", "1").strip().lower() not in ("0", "false", "")
+
+# Skip the critic call entirely when the ranking and the diagnosis already agree
+# loudly. Calibrated against `SCORING_WEIGHTS`: a lever that matches the primary
+# category (3.0), is the LLM's own first pick (2.0) and carries high confidence
+# (1.0) lands around 8.5, while a merely category-matching low-cost lever lands
+# around 5.6 — so 7.0 sits between "the agent picked this too" and "the catalog
+# happened to match".
+CRITIC_SKIP_SCORE = float(os.getenv("CRITIC_SKIP_SCORE", "7.0"))
+
+# A lever passes when the critic's alignment score reaches this. Raising it is
+# how you force a downgrade without editing code.
+CRITIC_PASS_THRESHOLD = float(os.getenv("CRITIC_PASS_THRESHOLD", "0.5"))
+
+# Far smaller than RCA_MAX_TOKENS: the response is three short verdicts, and
+# every token reserved here competes with the analysis for the same per-minute
+# free-tier allowance.
+CRITIC_MAX_TOKENS = int(os.getenv("CRITIC_MAX_TOKENS", "900"))
+
+
+# --- Explanation grounding scorer ---------------------------------------------
+
+# Always-on by default, unlike CRITIC_ENABLED's cost/benefit calculus: this
+# check only ever runs after the critic has already approved a lever (see
+# main.py), so it costs nothing when the run would have been discarded anyway,
+# and unlike the critic there's no ranking score to skip it against — every
+# grounded-or-not judgment needs the same one call. Still a flag, not a
+# hardcoded True, so a quota emergency can turn it off without a code change.
+EXPLANATION_SCORER_ENABLED = os.getenv("EXPLANATION_SCORER_ENABLED", "1").strip().lower() not in (
+    "0",
+    "false",
+    "",
+)
+
+# Smaller than CRITIC_MAX_TOKENS: the response is a bool, a short claims list,
+# and a float — no free-text reasoning field like the critic's `reasoning`.
+EXPLANATION_SCORER_MAX_TOKENS = int(os.getenv("EXPLANATION_SCORER_MAX_TOKENS", "500"))
+
+# The regenerate call returns one rewritten paragraph, nothing else — smaller
+# still. Only spent when the first call actually flags an unsupported claim.
+EXPLANATION_SCORER_REGENERATE_MAX_TOKENS = int(
+    os.getenv("EXPLANATION_SCORER_REGENERATE_MAX_TOKENS", "300")
+)
+
+
 # --- Trigger policy ---------------------------------------------------------
 
 # Matches the "high" tier in main._risk_tier. Chosen from the model's own

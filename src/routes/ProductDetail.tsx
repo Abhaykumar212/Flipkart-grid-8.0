@@ -10,6 +10,7 @@ import {
   getRatingDistribution,
   getReviews,
 } from "../lib/productDetails";
+import { getCompareProducts } from "../lib/relatedProducts";
 import { Button } from "../components/ui/Button";
 import { RatingStars } from "../components/ui/RatingStars";
 import { PriceBlock } from "../components/ui/PriceBlock";
@@ -17,6 +18,13 @@ import { ImageGallery } from "../components/pdp/ImageGallery";
 import { SpecificationsTable } from "../components/pdp/SpecificationsTable";
 import { RatingsAndReviews } from "../components/pdp/RatingsAndReviews";
 import { OffersList } from "../components/pdp/OffersList";
+import { ProductBreadcrumb } from "../components/pdp/ProductBreadcrumb";
+import { StockUrgency } from "../components/pdp/StockUrgency";
+import { EMICalculator } from "../components/pdp/EMICalculator";
+import { SellerInfo } from "../components/pdp/SellerInfo";
+import { ProductComparison } from "../components/pdp/ProductComparison";
+import { QuestionsAndAnswers } from "../components/pdp/QuestionsAndAnswers";
+import { RelatedProductsRail } from "../components/pdp/RelatedProductsRail";
 import { useTracker } from "../context/TrackerContext";
 import { useWishlist } from "../context/WishlistContext";
 import { userHistory } from "../lib/userHistory";
@@ -48,6 +56,11 @@ export default function ProductDetail() {
     return () => pageContext.setCurrentProduct(null);
   }, [product?.id]);
 
+  // Scroll to top on product change (when navigating between related products)
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [slug]);
+
   if (!product) {
     return (
       <div className="rounded-[2px] bg-white p-10 text-center shadow-fk-card">
@@ -59,7 +72,7 @@ export default function ProductDetail() {
     );
   }
 
-  const { price, rating, offers, delivery, highlights, emi } = product;
+  const { price, rating, offers, delivery, highlights, emi, stock } = product;
 
   // Every product renders full detail — hand-authored data wins where it
   // exists, everything else falls back to the deterministic generator so no
@@ -70,6 +83,7 @@ export default function ProductDetail() {
   const ratingDistribution = getRatingDistribution(product);
   const reviews = getReviews(product);
   const totalRatings = ratingDistribution.reduce((sum, r) => sum + r.count, 0);
+  const compareProducts = getCompareProducts(product);
 
   const priceInline = useInlineTarget("pdp-price-block");
   const deliveryInline = useInlineTarget("pdp-delivery");
@@ -105,6 +119,14 @@ export default function ProductDetail() {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Breadcrumb Navigation */}
+      <ProductBreadcrumb
+        category={product.category}
+        subCategory={product.subCategory}
+        title={product.title}
+      />
+
+      {/* Main Product Section */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_3fr]">
         <ImageGallery
           productId={product.id}
@@ -140,8 +162,18 @@ export default function ProductDetail() {
             priceBlock
           )}
 
+          {/* Stock Urgency */}
+          <div className="mt-3">
+            <StockUrgency inStock={stock.inStock} quantityLeft={stock.quantityLeft} />
+          </div>
+
           <div className="mt-4">
             <OffersList offers={offers} emi={emi} />
+          </div>
+
+          {/* EMI Calculator */}
+          <div className="mt-4">
+            <EMICalculator sellingPrice={price.sellingPrice} emi={emi} />
           </div>
 
           <div className="mt-5 border-t border-fk-border pt-4">
@@ -173,11 +205,9 @@ export default function ProductDetail() {
             )}
           </div>
 
-          <div className="mt-4 flex items-center gap-2 border-t border-fk-border pt-4 text-fk-base text-fk-ink">
-            <span>
-              Sold by <span className="font-medium">{seller.name}</span>
-            </span>
-            <RatingStars variant="pill" size="sm" value={seller.rating} />
+          {/* Expanded Seller Info */}
+          <div className="mt-4 border-t border-fk-border pt-4">
+            <SellerInfo seller={seller} delivery={delivery} />
           </div>
 
           {highlights.length > 0 && (
@@ -200,7 +230,22 @@ export default function ProductDetail() {
         <p className="text-fk-base text-fk-ink">{description}</p>
       </section>
 
+      {/* Product Comparison Table */}
+      {compareProducts.length > 0 && (
+        <ProductComparison products={compareProducts} currentProduct={product} />
+      )}
+
+      {/* Questions & Answers */}
+      <QuestionsAndAnswers
+        productTitle={product.title}
+        brand={product.brand}
+        category={product.category}
+      />
+
       <RatingsAndReviews productId={product.id} ratingDistribution={ratingDistribution} reviews={reviews} />
+
+      {/* Related Product Rails */}
+      <RelatedProductsRail product={product} />
     </div>
   );
 }

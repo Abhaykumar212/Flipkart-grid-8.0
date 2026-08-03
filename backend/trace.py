@@ -28,6 +28,8 @@ class Stage:
     RISK_GATE = "risk_gate"
     ROOT_CAUSE_AGENT = "root_cause_agent"
     INTERVENTION_RANKING = "intervention_ranking"
+    CRITIC_VERDICT = "critic_verdict"
+    EXPLANATION_SCORED = "explanation_scored"
 
 
 class Status:

@@ -7,10 +7,12 @@ import {
   CircleAlert,
   Clock,
   Cpu,
+  FileCheck,
   Filter,
   GitBranch,
   Layers,
   ListChecks,
+  ShieldCheck,
   Sparkles,
   Timer,
 } from "lucide-react";
@@ -25,6 +27,8 @@ const STAGE_ICONS: Record<string, typeof Activity> = {
   risk_gate: Timer,
   root_cause_agent: Sparkles,
   intervention_ranking: ListChecks,
+  critic_verdict: ShieldCheck,
+  explanation_scored: FileCheck,
   delivery_decision: GitBranch,
 };
 

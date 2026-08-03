@@ -15,6 +15,7 @@ import { InterventionLedgerPanel } from "../components/pipeline/InterventionLedg
 const STATUS_CHIP: Record<string, string> = {
   success: "bg-emerald-100 text-emerald-700",
   gate_not_met: "bg-slate-100 text-slate-600",
+  critic_blocked: "bg-slate-100 text-slate-600",
   rate_limited: "bg-amber-100 text-amber-700",
   not_configured: "bg-amber-100 text-amber-700",
   error: "bg-red-100 text-red-700",
@@ -24,6 +25,7 @@ const STATUS_CHIP: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   success: "analysed",
   gate_not_met: "gate held",
+  critic_blocked: "critic held",
   rate_limited: "rate limited",
   not_configured: "not configured",
   error: "error",

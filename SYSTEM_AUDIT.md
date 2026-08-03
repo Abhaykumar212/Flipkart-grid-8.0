@@ -2,9 +2,12 @@
 
 Read-only snapshot of the repository as it stands on `main` (commit range through
 `d974240`, "Implement persistent AI Shopping Companion with proactive
-interventions"). No code was changed to produce this document. Where something
-was planned but built differently, or not built at all, that is called out
-explicitly rather than smoothed over.
+interventions"), with targeted updates layered on top for the SQLite persistence
+layer (`backend/db.py`, `backend/ledger.py`) added afterward — those sections are
+current as of the working tree, not commit `d974240`; the rest of the document was
+not re-verified against `d974240` and may have drifted further. No code was changed
+to produce this document. Where something was planned but built differently, or not
+built at all, that is called out explicitly rather than smoothed over.
 
 ---
 
@@ -25,13 +28,16 @@ FlipkartGridd/
 │   ├── config.py                env vars, thresholds, model config
 │   ├── schemas.py               shared pydantic models
 │   ├── trace.py                 span recorder for the pipeline console
+│   ├── db.py                    SQLite connection + schema (see §9a — new)
+│   ├── ledger.py                delivery-decision write/read path (see §9a — new)
+│   ├── data/                    gitignored; app.db lives here at runtime (new)
 │   └── agents/
-│       ├── gate.py              RCA trigger policy (pure, unit-tested)
+│       ├── gate.py              RCA trigger policy (pure, unit-tested; now SQLite-backed)
 │       ├── root_cause.py        prompt assembly + Groq call for RCA
 │       ├── intervention.py      deterministic lever scoring/ranking
 │       ├── companion_chat.py    prompt assembly + Groq call for the chat widget
 │       ├── levers.py            closed catalog of 14 intervention levers
-│       ├── memory.py            per-session intervention feedback memory
+│       ├── memory.py            per-session intervention feedback memory (now SQLite-backed)
 │       └── README.md            Phase 2 design writeup (see §9)
 ├── ml/
 │   ├── generate_dataset.py      synthetic dataset generator
@@ -49,7 +55,9 @@ FlipkartGridd/
 │   │                            demoScenarios.ts, session.ts (unused — see §2)
 │   ├── lib/                     tracker.ts, pipelineTrace.ts, pageContext.ts,
 │   │                            userHistory.ts, companionChat.ts, cartTotals.ts,
-│   │                            format.ts, productDetails.ts
+│   │                            format.ts, productDetails.ts, fatigueBudget.ts (new),
+│   │                            interventionLedger.ts (new), interventionPolicy.ts (new),
+│   │                            interventionTargets.ts (new), targetRegistry.ts (new)
 │   ├── routes/                  Home, ProductDetail, CartPage, CheckoutPage,
 │   │                            SearchResultsPage, PipelineConsole
 │   └── types/product.ts
@@ -256,6 +264,7 @@ Three layers, not one.
 | `CartContext` | `src/context/CartContext.tsx` | `fk-cart-v1` | `CartItem`, `CartState`, `CartAction`, `cartReducer`, `CartProvider`, `useCart()` → `{ items, addItem(productId, quantity?, addedAt?), updateQuantity, removeItem, clearCart, count }`. The `addedAt` override on `addItem` exists only for the demo-scenario loader to backdate cart age. |
 | `WishlistContext` | `src/context/WishlistContext.tsx` | `fk-wishlist-v1` | `WishlistState`, `WishlistAction`, `wishlistReducer`, `WishlistProvider`, `useWishlist()` → `{ productIds, has(id), toggle(id), add(id), remove(id) }`. |
 | `TrackerContext` | `src/context/TrackerContext.tsx` | (delegates to `sessionTracker`, no key of its own) | Wraps `sessionTracker` in React state; exposes `recordProductVisit`, `recordSearch`, `recordPincodeCheck`, `runRootCauseAnalysis`, `buildShopperProfile()`, etc. Uses refs (`itemsRef`, `totalsRef`, `routeRef`, `wishlistRef`) to avoid stale closures in callbacks that read cart/wishlist state. |
+| `InterventionContext` **(new)** | `src/context/InterventionContext.tsx` | (delegates to `fatigueBudget`/`interventionLedger`) | The **delivery layer**, sitting downstream of `TrackerContext.rootCause`. Decides whether the Phase 3 ranked plan is worth showing, at what intensity (`interventionPolicy.ts`'s `selectSurface`), and on which surface (`inline`/`ambient`/`spotlight`/`companion`) — entirely client-side and synchronous. Reports the outcome to the backend after the fact via `sendDeliveryDecision` (fire-and-forget); never blocks on the network to decide. Exposes `active`, `surface`, `intensity`, `alternatives`, `decisionReason`, `accept()`, `dismiss()`. |
 
 Provider nesting in `src/App.tsx`: `CartProvider > WishlistProvider >
 TrackerProvider`, wrapping all six routes under one `<Layout>`.
@@ -268,14 +277,21 @@ TrackerProvider`, wrapping all six routes under one `<Layout>`.
 | `pageContext` (`PageContextStore`) | `src/lib/pageContext.ts` | **Not persisted** — in-memory, session-scoped only | Current product, recent visits, search history, review-dwell tracking; feeds the companion widget's proactive triggers. |
 | `userHistory` (`UserHistoryStore`) | `src/lib/userHistory.ts` | `localStorage` key `fk-user-history-v1` | Recently-viewed and past-purchase product ids (max 20 recent views). |
 | `pipelineTrace` (`PipelineTraceStore`) | `src/lib/pipelineTrace.ts` | **Not persisted** — in-memory ring buffer, max 25 runs | Powers the `/pipeline` console. |
-| `memory_store` (`InterventionMemoryStore`, backend) | `backend/agents/memory.py` | **Not persisted** — in-process dict | Tracks which interventions were shown/dismissed per session, used as a repetition penalty in scoring. |
+| `fatigueBudget` (`FatigueBudgetStore`) **(new)** | `src/lib/fatigueBudget.ts` | `sessionStorage`, same session scope as `tracker.ts` | The delivery layer's "should we interrupt right now" state — a decaying exposure budget (half-life decay, not a hard counter) plus a terminal per-lever dismissal list. **Remains entirely client-authoritative**: this is a synchronous, sessionStorage-backed check with no server round-trip in the decision path itself. The backend never decides fatigue; `POST /api/delivery-decision` only records what the client already decided, after the fact. |
+| `interventionLedger` (`InterventionLedger`) **(new)** | `src/lib/interventionLedger.ts` | `sessionStorage`, rehydrated from the backend on load | Session-scoped record of *held* (no-intervention) decisions and *suppressed* rung-3 (costly) levers — the delivery layer's audit trail, feeding the `/pipeline` ledger panel's "promotional spend avoided" figure. Unlike `fatigueBudget`, this one is **not** purely client-authoritative: on construction it fire-and-forgets a `hydrate()` call to `GET /api/session-ledger/:id`, which replaces local state with the SQLite-backed durable copy — so a fresh tab or cleared sessionStorage still shows the session's real history. sessionStorage is the fast/optimistic path; the DB is the source of truth. |
+| `memory_store` (`InterventionMemoryStore`, backend) | `backend/agents/memory.py` | **SQLite-backed** (`intervention_events` table, `source` column) — was an in-process dict, migrated (see §9a) | Tracks which interventions were shown/dismissed per session, used as a repetition penalty in scoring. Survives a backend restart now; previously this reset every restart. |
 
 ### Summary of storage keys actually in use
 
 - `localStorage`: `fk-cart-v1`, `fk-wishlist-v1`, `fk-user-history-v1`
-- `sessionStorage`: `fk-pipeline-session-id`
-- Everything else (page context, pipeline trace runs, backend gate/memory
-  state) is in-memory only and resets on reload or backend restart.
+- `sessionStorage`: `fk-pipeline-session-id`, `fk-intervention-ledger-v1` (new),
+  plus `fatigueBudget.ts`'s own key
+- Backend `gate_state`/`intervention_events`/`decisions` are **now SQLite-backed**
+  (see §9a) and survive a restart — this supersedes the "in-memory, resets on
+  restart" characterization that used to apply to `agents/gate.py` and
+  `agents/memory.py`.
+- Everything else (page context, pipeline trace runs) is still in-memory only and
+  resets on reload or backend restart — that part of the original claim still holds.
 
 ---
 
@@ -341,7 +357,7 @@ route/page.
 
 **`src/components/pipeline/`** (PipelineConsole-only)
 - `ScenarioPicker.tsx` — renders the 6 `DEMO_SCENARIOS` as clickable cards, each showing label/intent/expected-outcome/accent color — confirms scenario type **is** visible in the UI as intended.
-- `TraceWaterfall.tsx` — renders a run's `TraceSpan[]` as a latency waterfall; `STAGE_ICONS` map has no entry for the newer `"intervention_ranking"` stage, silently falling back to a default icon (see §10).
+- `TraceWaterfall.tsx` — renders a run's `TraceSpan[]` as a latency waterfall; `STAGE_ICONS` covers every stage the backend emits, including `"intervention_ranking"` and `"critic_verdict"`.
 - `RcaReport.tsx` — renders root cause, evidence (SHAP bars), shopper narrative, confidence, recommended/avoided levers, and (newer) an `InterventionPlanPanel` showing ranked interventions with score bars and agent-endorsed badges.
 
 **`src/components/companion/`**
@@ -477,8 +493,72 @@ a stub.
 | POST | `/api/predict-abandonment` | Phase 1: 22-feature vector → XGBoost probability + SHAP impacts |
 | GET | `/api/pipeline-config` | Config the frontend needs (thresholds etc.) |
 | POST | `/api/root-cause-analysis` | Phase 2: runs prediction + gate + (if fired) Groq RCA + Phase-3 intervention ranking, all as one traced pipeline run |
-| POST | `/api/intervention-feedback` | Records accept/dismiss/convert feedback into `memory_store` |
+| POST | `/api/intervention-feedback` | Records accept/dismiss/convert feedback into `memory_store`; also annotates the matching `intervention_events` row with delivery context (rung/surface/root cause) via `ledger.annotate_latest_event` |
+| POST | `/api/delivery-decision` **(new)** | Delivery layer's write path — one call per pipeline run reporting what `InterventionContext.tsx` decided (deliver-or-hold), plus any suppressed rung-3 levers. The decision itself is made client-side beforehand; this only records it (see §9a). |
+| GET | `/api/session-ledger/{session_id}` **(new)** | Rebuilds `SessionLedgerResponse` (shown-by-rung, accepted/dismissed/ignored, held decisions, suppressed rung-3 levers, spend avoided) from `intervention_events` + `decisions`. Returns an empty-but-valid ledger for an unknown session rather than 404. |
 | POST | `/api/companion-chat` | Companion widget's reactive Q&A endpoint |
+
+### 9a. Persistence layer (`backend/db.py`, `backend/ledger.py`) — new
+
+Previously, `agents/gate.py`'s `GateStore` and `agents/memory.py`'s
+`InterventionMemoryStore` were process-local Python dicts, called out in Known
+Issues (§10, item 12) as not surviving a restart. **That is now only half true.**
+`backend/db.py` adds a stdlib-`sqlite3` (no ORM) persistence layer at
+`backend/data/app.db` (WAL mode, one connection per thread via `threading.local()`,
+gitignored — `backend/data/` exists as a directory with a `.gitkeep` but the `.db`
+file itself is never committed), and both stores now read/write through it. A
+backend restart no longer resets RCA cooldowns, the per-session analysis cap, or the
+repetition-penalty history. `pageContext`/`userHistory`/`pipelineTrace` (frontend,
+in-memory) and `pipelineTrace`-style backend state are unaffected — the migration
+was scoped to gate/memory only.
+
+Five tables (`backend/db.py`'s `SCHEMA`):
+
+| Table | Purpose |
+|---|---|
+| `sessions` | One row per session id, touched (`db.touch_session`) by every other write path — a complete list of sessions the other tables reference, without a foreign-key ordering constraint. |
+| `gate_state` | One row per session; mirrors the old in-memory `SessionState` field-for-field (`fire_count`, `root_cause_signature`, `last_fired_at`). Backs `GateStore`. |
+| `intervention_events` | **Append-only.** One row per lever-related event — ranking exposure, shopper feedback, delivered render, or suppressed rung-3 lever. See the `source` column below; this is the table both `memory_store`'s repetition penalty and `ledger.py`'s session-ledger read from. |
+| `decisions` | One row per pipeline run's delivery verdict — `intervene` or `do_nothing`. "Do nothing" is recorded exactly like "intervene": an absent row would be indistinguishable from a run that never happened, so every run writes one. |
+| `reservations` | Written by `backend/reservations.py`. When a run clears the RCA threshold **and** diagnoses `cost_friction` or `product_uncertainty`, one unit of the cart's highest-value in-stock line is held for 10 minutes (`HOLD_SECONDS`). Released early by `POST /api/cart-add` (the shopper committed, so the cart is the claim now) or left to lapse — expiry is evaluated at read time in `active_count`, so there is no sweeper. `GET /api/product-availability/{id}?quantity_left=N` returns `N` minus the active holds; `quantity_left` is supplied by the caller because the catalog lives in `src/data/products.ts` and a server-side copy would be a second thing to keep in step. A session never stacks holds on the same product — the gate allows 10 analyses per session, and one hesitating shopper is still one unit of demand. Nothing customer-facing announces any of this. |
+
+**The `intervention_events.source` column** (`ranked` / `delivered` / `suppressed`,
+`CHECK`-constrained) is what stops the ledger from triple-counting. Three different
+things all used to plausibly be called "shown":
+
+- `source='ranked'` — the top-3 (or top-N) levers `agents/intervention.py`'s
+  ranking actually scored for a run. This is what `InterventionMemoryStore.get()`
+  reads for the repetition penalty — it deliberately excludes `'delivered'` rows
+  (see next) so a lever that was ranked-and-shown-to-the-shopper isn't counted twice
+  toward its own penalty.
+- `source='delivered'` — the *one* lever `InterventionContext.tsx` actually rendered
+  on screen, written by `ledger.record_decision` when `outcome == "delivered"`. This
+  is the only `source` the ledger's `shownByRung`/`spendAvoided`-adjacent counts read
+  for "what did the shopper actually see."
+- `source='suppressed'` — rung-3 (margin-spending) levers the ranking offered that
+  policy (`interventionPolicy.ts`'s `findSuppressedRung3Levers`) withheld, whether or
+  not something else was delivered instead. Feeds the ledger's "promotional spend
+  avoided" total via `RUNG3_ASSUMED_VALUE_INR` (duplicated — deliberately — between
+  `backend/agents/levers.py` and `src/lib/interventionPolicy.ts`; `tests/test_persistence.py`
+  pins the Python side).
+
+Without this column, summing "shown" across ranking exposure, actual render, and
+policy-suppressed-but-considered would overstate every ledger metric derived from
+it. `build_session_ledger` in `backend/ledger.py` is the one place all three get
+read back out and reassembled into the shape `InterventionLedgerPanel` (frontend)
+renders.
+
+**What stays client-authoritative vs. what the DB now owns:** the *decision* of
+whether to interrupt the shopper right now (fatigue budget, intensity ladder,
+surface selection) is still made entirely in the browser —
+`src/lib/fatigueBudget.ts` is sessionStorage-backed and synchronous, with no server
+round-trip in the decision path itself, exactly as before this migration. What
+changed is that the *record* of what was decided is no longer sessionStorage-only:
+`InterventionContext.tsx` fire-and-forgets that record to
+`POST /api/delivery-decision` after deciding, and `interventionLedger.ts` rehydrates
+from `GET /api/session-ledger/:id` on load so a fresh tab or cleared storage still
+shows the session's real history. The backend is a durable mirror of a client
+decision, not a participant in making it.
 
 ### Dataset and training — has this actually been run?
 
@@ -592,9 +672,8 @@ Ranked roughly by how much they'd surprise someone designing the next phase:
    - `PipelineConsole.tsx`'s header subtitle doesn't mention the newer
      "intervention ranking" stage even though it renders in every completed
      run's trace and report.
-   - `TraceWaterfall.tsx`'s `STAGE_ICONS` map has no entry for
-     `"intervention_ranking"`, so that stage silently falls back to a generic
-     icon instead of a purpose-picked one.
+   - *(Resolved: `TraceWaterfall.tsx`'s `STAGE_ICONS` now covers
+     `"intervention_ranking"` and `"critic_verdict"`.)*
 
 8. **`data-testid` coverage is uneven.** Cart and checkout are well covered;
    the Navbar (search, wishlist, cart badge is the only exception), category
@@ -624,11 +703,14 @@ Ranked roughly by how much they'd surprise someone designing the next phase:
     could support a real serviceability or payment feature without further
     backend work.
 
-12. **`GateStore` (RCA dedup/budget) and `InterventionMemoryStore` are both
-    process-local, in-memory Python dicts** — acknowledged as a known
-    limitation in `backend/agents/README.md`. Any backend restart or
-    multi-instance deployment loses all session gating/memory state; this is
-    fine for a single-process demo, not for anything resembling production.
+12. **Resolved since the original pass: `GateStore` and `InterventionMemoryStore`
+    are no longer process-local in-memory dicts.** `backend/db.py` /
+    `backend/ledger.py` (see §9a) migrated both onto SQLite (`backend/data/app.db`),
+    so a backend restart no longer loses RCA dedup/budget state or intervention
+    feedback history. What's still true: this is a **single-file SQLite DB**, so it
+    does not solve multi-instance deployment (still fine for a single-process demo,
+    not for anything resembling horizontally-scaled production). The
+    `reservations` table is now read and written (§9a).
 
 13. **A Gemini API key was pasted into a chat session during this project's
     development** (unrelated to code in this repo) and was not committed

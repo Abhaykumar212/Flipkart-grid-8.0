@@ -463,22 +463,30 @@ def _strip_for_gemini(schema: Any) -> Any:
     return schema
 
 
-def call_gemini(prompt: str, model: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def call_gemini(
+    prompt: str,
+    model: str,
+    system_prompt: Optional[str] = None,
+    schema: Optional[Dict[str, Any]] = None,
+    max_tokens: Optional[int] = None,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Call Gemini with structured JSON output. Returns (parsed, usage)."""
     import google.generativeai as genai
     from google.api_core import exceptions as google_exceptions
 
     genai.configure(api_key=config.GEMINI_API_KEY)
-    gen_model = genai.GenerativeModel(model_name=model, system_instruction=SYSTEM_PROMPT)
+    gen_model = genai.GenerativeModel(
+        model_name=model, system_instruction=system_prompt or SYSTEM_PROMPT
+    )
 
     try:
         response = gen_model.generate_content(
             prompt,
             generation_config=genai.GenerationConfig(
                 temperature=config.RCA_TEMPERATURE,
-                max_output_tokens=config.RCA_MAX_TOKENS,
+                max_output_tokens=max_tokens or config.RCA_MAX_TOKENS,
                 response_mime_type="application/json",
-                response_schema=_strip_for_gemini(_response_schema()),
+                response_schema=schema if schema is not None else _strip_for_gemini(_response_schema()),
             ),
             request_options={"timeout": config.RCA_TIMEOUT_SECONDS},
         )
@@ -495,27 +503,51 @@ def call_gemini(prompt: str, model: str) -> Tuple[Dict[str, Any], Dict[str, Any]
     return json.loads(response.text), usage
 
 
-def call_llm(prompt: str, model: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """Dispatches to whichever provider `config.LLM_PROVIDER` selects."""
+def call_llm(
+    prompt: str,
+    model: str,
+    system_prompt: Optional[str] = None,
+    schema: Optional[Dict[str, Any]] = None,
+    schema_name: str = "root_cause_analysis",
+    max_tokens: Optional[int] = None,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Dispatches to whichever provider `config.LLM_PROVIDER` selects.
+
+    The optional arguments exist so `agents/critic.py` can borrow this
+    provider dispatch — and its rate-limit handling — for a different prompt and
+    schema. Omitted, every one of them falls back to the RCA call this function
+    was written for, so existing callers are untouched.
+    """
     if config.LLM_PROVIDER == "gemini":
-        return call_gemini(prompt, model)
-    return call_groq(prompt, model)
+        return call_gemini(prompt, model, system_prompt, schema, max_tokens)
+    return call_groq(prompt, model, system_prompt, schema, schema_name, max_tokens)
 
 
-def call_groq(prompt: str, model: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def call_groq(
+    prompt: str,
+    model: str,
+    system_prompt: Optional[str] = None,
+    schema: Optional[Dict[str, Any]] = None,
+    schema_name: str = "root_cause_analysis",
+    max_tokens: Optional[int] = None,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """POST to Groq with strict schema enforcement. Returns (parsed, usage)."""
     body = {
         "model": model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
         "temperature": config.RCA_TEMPERATURE,
-        "max_tokens": config.RCA_MAX_TOKENS,
+        "max_tokens": max_tokens or config.RCA_MAX_TOKENS,
         "reasoning_effort": config.RCA_REASONING_EFFORT,
         "response_format": {
             "type": "json_schema",
-            "json_schema": {"name": "root_cause_analysis", "strict": True, "schema": _response_schema()},
+            "json_schema": {
+                "name": schema_name,
+                "strict": True,
+                "schema": schema if schema is not None else _response_schema(),
+            },
         },
     }
     request = urllib.request.Request(

@@ -19,6 +19,8 @@ export type PipelineStage =
   | "risk_gate"
   | "root_cause_agent"
   | "intervention_ranking"
+  | "critic_verdict"
+  | "explanation_scored"
   | "delivery_decision";
 
 export type SpanStatus = "ok" | "running" | "skipped" | "error" | "rate_limited";
@@ -38,6 +40,7 @@ export interface TraceSpan {
 export type RunStatus =
   | "success"
   | "gate_not_met"
+  | "critic_blocked"
   | "rate_limited"
   | "not_configured"
   | "error"
@@ -326,5 +329,7 @@ export const STAGE_LABELS: Record<string, string> = {
   risk_gate: "Risk gate",
   root_cause_agent: "Root cause agent",
   intervention_ranking: "Intervention ranking",
+  critic_verdict: "Critic review",
+  explanation_scored: "Explanation grounding",
   delivery_decision: "Delivery decision",
 };

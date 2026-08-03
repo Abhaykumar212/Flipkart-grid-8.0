@@ -10,11 +10,15 @@
  *
  * State lives in sessionStorage, matching `fatigueBudget.ts` and `tracker.ts`'s
  * session id — a reload mid-demo shouldn't zero out the ledger judges are
- * reading.
+ * reading. sessionStorage alone can't survive a fresh tab or a cleared store,
+ * though, so on construction the ledger also rehydrates from
+ * `/api/session-ledger/:id`, which is backed by the `intervention_events` and
+ * `decisions` tables and is the durable source of truth.
  */
 
 import type { NoInterventionReason } from "./pipelineTrace";
 import { RUNG3_ASSUMED_VALUE_INR } from "./interventionPolicy";
+import { SESSION_ID, SESSION_LEDGER_URL } from "./tracker";
 
 export interface HeldDecisionRecord {
   reason: NoInterventionReason;
@@ -144,6 +148,33 @@ class InterventionLedger {
     this.commit();
   }
 
+  /**
+   * Rebuild from the backend, which holds every decision this session has made.
+   *
+   * Replaces local state outright rather than merging: the server has the same
+   * records sessionStorage does (both are written on every run), so merging
+   * would double every entry. Best-effort — with the backend down the ledger
+   * simply keeps whatever sessionStorage had.
+   */
+  async hydrate(): Promise<void> {
+    if (typeof window === "undefined") return;
+    try {
+      const response = await fetch(`${SESSION_LEDGER_URL}/${encodeURIComponent(SESSION_ID)}`);
+      if (!response.ok) return;
+      const payload = (await response.json()) as {
+        held?: HeldDecisionRecord[];
+        suppressedRung3?: SuppressedLeverRecord[];
+      };
+      this.state = {
+        held: payload.held ?? [],
+        suppressedRung3: payload.suppressedRung3 ?? [],
+      };
+      this.commit();
+    } catch {
+      // Backend unreachable — sessionStorage stays authoritative for this tab.
+    }
+  }
+
   /** Demo control — mirrors `fatigueBudget.reset()` for a fresh run-through. */
   reset(): void {
     this.state = { ...EMPTY_STATE };
@@ -152,3 +183,7 @@ class InterventionLedger {
 }
 
 export const interventionLedger = new InterventionLedger();
+
+// Fire-and-forget on module load, so a fresh tab shows the session's real
+// history instead of an empty panel.
+void interventionLedger.hydrate();

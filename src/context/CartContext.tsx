@@ -6,6 +6,7 @@ import {
   useReducer,
   type ReactNode,
 } from "react";
+import { sendCartAdd } from "../lib/tracker";
 
 const STORAGE_KEY = "fk-cart-v1";
 
@@ -141,8 +142,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     () => ({
       items: state.items,
       count: state.items.reduce((sum, i) => sum + i.quantity, 0),
-      addItem: (productId, quantity, addedAt) =>
-        dispatch({ type: "ADD_ITEM", productId, quantity, addedAt }),
+      addItem: (productId, quantity, addedAt) => {
+        dispatch({ type: "ADD_ITEM", productId, quantity, addedAt });
+        // Fire-and-forget, outside the reducer so that stays pure. Releases the
+        // inventory hold the pipeline may have placed on this product.
+        void sendCartAdd(productId);
+      },
       removeItem: (productId) => dispatch({ type: "REMOVE_ITEM", productId }),
       updateQuantity: (productId, quantity) =>
         dispatch({ type: "UPDATE_QUANTITY", productId, quantity }),

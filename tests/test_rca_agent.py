@@ -85,7 +85,9 @@ def valid_analysis_dict():
 
 class GatePolicyTests(unittest.TestCase):
     def setUp(self):
-        self.store = gate.GateStore()
+        # Each test gets its own database, so the store's new SQLite backing
+        # can't leak state between cases the way a shared file would.
+        self.store = gate.GateStore(db_path=":memory:")
 
     def test_fires_at_or_above_threshold(self):
         result = gate.evaluate(0.94, 400, "sig-a", "s1", self.store)

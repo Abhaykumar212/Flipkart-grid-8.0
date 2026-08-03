@@ -6,12 +6,12 @@ import json
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, Literal, Tuple
+from typing import Any, Dict, Literal, Optional, Tuple
 
 import joblib
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -33,15 +33,20 @@ from ml.feature_engineering import (  # noqa: E402
     engineer_features,
 )
 
-from . import config  # noqa: E402
-from .agents import companion_chat, gate, intervention, root_cause  # noqa: E402
+from . import config, db, ledger, reservations  # noqa: E402
+from .agents import companion_chat, critic, explanation_scorer, gate, intervention, root_cause  # noqa: E402
 from .agents.memory import memory_store  # noqa: E402
 from .schemas import (  # noqa: E402
+    CartAddRequest,
     CartContext,
     CompanionChatRequest,
     CompanionChatResponse,
+    DeliveryDecisionRequest,
     GateDecision,
+    InterventionPlan,
+    ProductAvailability,
     RootCauseResponse,
+    SessionLedgerResponse,
     ShopperProfile,
     TraceSpan,
 )
@@ -119,6 +124,13 @@ class InterventionFeedback(BaseModel):
     session_id: str
     lever_id: str
     action: Literal["accepted", "dismissed", "converted"]
+    # Delivery-layer context, optional so older clients still validate. Recorded
+    # alongside the response so the ledger can attribute an outcome to the rung
+    # and surface it was actually spent on.
+    intensity_rung: Optional[int] = None
+    surface: Optional[str] = None
+    root_cause: Optional[str] = None
+    confidence: Optional[str] = None
 
 
 class FeatureContribution(BaseModel):
@@ -167,6 +179,9 @@ def _load_artifacts() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _load_artifacts()
+    # Eager, so a fresh clone with an unwritable backend/data/ fails at boot
+    # rather than on the first gate evaluation.
+    db.init_schema(db.get_db())
     yield
 
 
@@ -437,9 +452,104 @@ def root_cause_analysis(payload: RootCauseRequest) -> RootCauseResponse:
             "top_scores": [item.score for item in plan.top_interventions],
             "fallback_lever_id": plan.fallback_intervention.lever_id if plan.fallback_intervention else None,
             "excluded_lever_ids": plan.excluded_lever_ids,
+            "reservation": _hold_stock(payload, prediction.abandonment_probability, analysis),
         }
 
-    return envelope("success", analysis=analysis, plan=plan, meta=meta)
+    verdict = critic.review(analysis, plan, recorder)
+    connection = db.get_db()
+    for lever_id, reason in verdict.rejected:
+        ledger.record_critic_rejection(
+            connection,
+            session_id=payload.session_id,
+            lever_id=lever_id,
+            reason=reason,
+            root_cause=analysis.primary_root_cause.category,
+        )
+
+    if verdict.approved_lever_id is None:
+        # No lever survived, so this run's verdict is "do nothing" — written
+        # through the same path as every other hold, because the delivery layer
+        # never sees this run and will not report one of its own.
+        detail = "; ".join(f"{lever_id}: {reason}" for lever_id, reason in verdict.rejected)
+        ledger.record_decision(
+            connection,
+            DeliveryDecisionRequest(
+                session_id=payload.session_id,
+                outcome="held",
+                reason="critic_rejected",
+                detail=detail,
+                root_cause=analysis.primary_root_cause.category,
+                probability=prediction.abandonment_probability,
+            ),
+        )
+        return envelope(
+            "critic_blocked",
+            analysis=analysis,
+            meta=meta,
+            message="Critic rejected every ranked lever as misaligned with the diagnosed cause.",
+        )
+
+    evidence = root_cause.build_evidence(feature_values, prediction.feature_impacts)
+    explanation_result = explanation_scorer.score(analysis, evidence, recorder)
+    ledger.annotate_latest_event(
+        connection,
+        session_id=payload.session_id,
+        lever_id=verdict.approved_lever_id,
+        action="shown",
+        explanation_verdict=explanation_result.verdict,
+    )
+
+    return envelope(
+        "success",
+        analysis=analysis,
+        plan=_approved_plan(plan, verdict.approved_lever_id),
+        meta=meta,
+    )
+
+
+def _approved_plan(plan: InterventionPlan, approved_lever_id: str) -> InterventionPlan:
+    """Drop everything the critic rejected, keeping ranked order below it.
+
+    Removed rather than reordered: the delivery layer delivers the first entry
+    it can, so a rejected lever left in the list would still reach the shopper.
+    """
+    kept = [item for item in plan.top_interventions]
+    approved_index = next(i for i, item in enumerate(kept) if item.lever_id == approved_lever_id)
+    kept = kept[approved_index:]
+    rejected_ids = {item.lever_id for item in plan.top_interventions[:approved_index]}
+    fallback = plan.fallback_intervention
+    return InterventionPlan(
+        top_interventions=kept,
+        fallback_intervention=None if fallback and fallback.lever_id in rejected_ids else fallback,
+        excluded_lever_ids=plan.excluded_lever_ids + sorted(rejected_ids),
+    )
+
+
+def _hold_stock(
+    payload: RootCauseRequest, probability: float, analysis
+) -> Optional[Dict[str, Any]]:
+    """Reserve a unit of the cart's most valuable line while the shopper decides.
+
+    Only for the two diagnoses a hold can actually serve, and only above the RCA
+    threshold — checked here rather than inferred from the gate, because a
+    forced re-run fires the gate at any probability.
+    """
+    category = analysis.primary_root_cause.category
+    if probability < config.RCA_PROBABILITY_THRESHOLD or category not in reservations.RESERVING_CAUSES:
+        return None
+
+    in_stock = [line for line in payload.cart_context.lines if line.in_stock]
+    if not in_stock:
+        return None
+
+    line = max(in_stock, key=lambda item: item.selling_price * item.quantity)
+    created = reservations.reserve(db.get_db(), payload.session_id, line.product_id)
+    return {
+        "product_id": line.product_id,
+        "created": created,
+        "hold_seconds": reservations.HOLD_SECONDS,
+        "root_cause": category,
+    }
 
 
 @app.post("/api/intervention-feedback")
@@ -449,7 +559,68 @@ def intervention_feedback(payload: InterventionFeedback) -> dict:
     the (state, action, reward) trail a future RL policy would train on.
     """
     memory_store.record(payload.session_id, payload.lever_id, payload.action)
+    ledger.annotate_latest_event(
+        db.get_db(),
+        session_id=payload.session_id,
+        lever_id=payload.lever_id,
+        action=payload.action,
+        intensity_rung=payload.intensity_rung,
+        surface=payload.surface,
+        root_cause=payload.root_cause,
+        confidence=payload.confidence,
+    )
     return {"status": "recorded"}
+
+
+@app.post("/api/delivery-decision")
+def delivery_decision(payload: DeliveryDecisionRequest) -> dict:
+    """Delivery-layer write path — what was shown, or what was deliberately not.
+
+    The client decides this (fatigue budget and intensity ladder are synchronous,
+    client-side checks) and reports it here. "Do nothing" is recorded exactly
+    like "intervene": the whole point of the ledger is that a held decision is
+    evidence of judgement, not an absence of one.
+    """
+    ledger.record_decision(db.get_db(), payload)
+    return {"status": "recorded"}
+
+
+@app.get("/api/session-ledger/{session_id}", response_model=SessionLedgerResponse)
+def session_ledger(session_id: str) -> SessionLedgerResponse:
+    """Rebuild a session's ledger from `intervention_events` + `decisions`.
+
+    Lets the panel survive a reload or a fresh tab, which sessionStorage alone
+    cannot. Returns an empty ledger rather than 404 for an unknown session — a
+    session that has made no decisions yet is a legitimate, uninteresting state,
+    not an error.
+    """
+    return ledger.build_session_ledger(db.get_db(), session_id)
+
+
+@app.get("/api/product-availability/{product_id}", response_model=ProductAvailability)
+def product_availability(
+    product_id: str, quantity_left: int = Query(0, ge=0)
+) -> ProductAvailability:
+    """On-hand units minus the ones currently held for hesitating shoppers.
+
+    `quantity_left` comes from the caller because the catalog lives on the
+    frontend (`src/data/products.ts`) — see `ProductAvailability`. Expired holds
+    fall out of the count here, at read time, so nothing has to sweep them.
+    """
+    reserved = reservations.active_count(db.get_db(), product_id)
+    return ProductAvailability(
+        product_id=product_id,
+        quantity_left=quantity_left,
+        reserved=reserved,
+        available=max(0, quantity_left - reserved),
+    )
+
+
+@app.post("/api/cart-add")
+def cart_add(payload: CartAddRequest) -> dict:
+    """The shopper committed — the cart is the claim now, so drop the hold."""
+    released = reservations.release(db.get_db(), payload.session_id, payload.product_id)
+    return {"status": "released", "released": released}
 
 
 @app.post("/api/companion-chat", response_model=CompanionChatResponse)

@@ -223,6 +223,111 @@ class CompanionChatResponse(BaseModel):
     message: Optional[str] = None
 
 
+# --- Delivery decisions + session ledger ------------------------------------
+#
+# The delivery layer (`src/context/InterventionContext.tsx`) decides whether the
+# ranked plan is worth the shopper's attention, at what intensity, on which
+# surface. That decision used to live only in sessionStorage; these models are
+# its write path and read-back, so the ledger survives a reload or a fresh tab.
+
+
+class SuppressedLever(BaseModel):
+    """A rung-3 lever the ranking offered and policy withheld."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lever_id: str
+    reason: str
+
+
+class DeliveryDecisionRequest(BaseModel):
+    """One per pipeline run — mirrors `selectSurface`'s deliver/hold union."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    outcome: Literal["delivered", "held"]
+    reason: Optional[str] = None
+    detail: Optional[str] = None
+    root_cause: Optional[str] = None
+    probability: Optional[float] = None
+    # Present only when `outcome == "delivered"`.
+    lever_id: Optional[str] = None
+    intensity_rung: Optional[int] = None
+    surface: Optional[str] = None
+    confidence: Optional[str] = None
+    suppressed: List[SuppressedLever] = Field(default_factory=list)
+
+
+class HeldDecisionRecord(BaseModel):
+    reason: Optional[str] = None
+    rootCause: Optional[str] = None
+    detail: Optional[str] = None
+    at: float
+
+
+class SuppressedLeverRecord(BaseModel):
+    leverId: str
+    reason: str
+    at: float
+
+
+class SpendAvoidedEntry(BaseModel):
+    count: int
+    assumedUnitValueInr: int
+    totalInr: int
+
+
+class LedgerOutcomes(BaseModel):
+    accepted: int = 0
+    dismissed: int = 0
+    ignored: int = 0
+
+
+class SessionLedgerResponse(BaseModel):
+    """Field names are camelCase to match the panel's existing snapshot shape
+    (`LedgerSnapshot` in `src/lib/interventionLedger.ts`), so the client can
+    hydrate from this without a translation layer."""
+
+    session_id: str
+    shownByRung: List[int] = Field(default_factory=lambda: [0, 0, 0, 0])
+    # do_nothing / (do_nothing + intervene) across this session's runs.
+    silenceRate: float = 0.0
+    outcomes: LedgerOutcomes = Field(default_factory=LedgerOutcomes)
+    held: List[HeldDecisionRecord] = Field(default_factory=list)
+    heldByReason: Dict[str, int] = Field(default_factory=dict)
+    suppressedRung3: List[SuppressedLeverRecord] = Field(default_factory=list)
+    spendAvoidedInr: int = 0
+    spendAvoidedByLever: Dict[str, SpendAvoidedEntry] = Field(default_factory=dict)
+
+
+# --- Inventory holds --------------------------------------------------------
+
+
+class CartAddRequest(BaseModel):
+    """A shopper committed to a product — releases any hold this session had."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    product_id: str
+
+
+class ProductAvailability(BaseModel):
+    """`quantity_left` is supplied by the caller, not stored server-side.
+
+    The catalog lives in `src/data/products.ts`; a second copy on this side
+    would be one more thing to keep in step for no gain. The backend owns the
+    holds and nothing else, so it answers what it actually knows: how many of
+    the caller's units are currently spoken for.
+    """
+
+    product_id: str
+    quantity_left: int
+    reserved: int
+    available: int
+
+
 # --- Gate + envelope -------------------------------------------------------
 
 
@@ -249,6 +354,7 @@ class RootCauseResponse(BaseModel):
     status: Literal[
         "success",
         "gate_not_met",
+        "critic_blocked",
         "rate_limited",
         "not_configured",
         "error",

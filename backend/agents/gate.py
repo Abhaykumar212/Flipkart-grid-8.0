@@ -1,7 +1,8 @@
 """Trigger policy for the root-cause agent.
 
-Pure logic, no I/O, so the decision is unit-testable and identical whether it
-runs in a request or a test.
+`evaluate` is pure logic over a state snapshot, so the decision is unit-testable
+and identical whether it runs in a request or a test. Only `GateStore` touches
+the database, and it takes a `db_path` so tests can point it at `":memory:"`.
 
 Why gate at all: the storefront polls the model every 5 seconds. Without a gate
 every poll on a risky cart would fire an LLM call — thousands per demo, blowing
@@ -11,16 +12,21 @@ agent run roughly **once per risk episode**.
 
 from __future__ import annotations
 
+import sqlite3
 import time
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
-from .. import config
+from .. import config, db
 
 
 @dataclass
 class SessionState:
-    """Per-session memory used for deduplication and budgeting."""
+    """Per-session memory used for deduplication and budgeting.
+
+    A detached read snapshot since the migration to SQLite — mutating one no
+    longer writes anything back. `record_run` is the write path.
+    """
 
     analyses_run: int = 0
     last_signature: Optional[str] = None
@@ -28,30 +34,67 @@ class SessionState:
 
 
 class GateStore:
-    """In-memory session store.
+    """SQLite-backed session store (`gate_state`, one row per session).
 
-    Process-local by design: this is a demo service with a single backend
-    instance. A production deployment would back this with Redis so the state
-    survives restarts and is shared across replicas.
+    Persisted so a backend restart doesn't hand every live session a fresh
+    cooldown and a fresh analysis budget — which, on a demo where the storefront
+    polls every 5 seconds, meant a restart could re-fire the LLM on every cart
+    that was already diagnosed.
     """
 
-    def __init__(self) -> None:
-        self._sessions: Dict[str, SessionState] = {}
+    def __init__(self, db_path: Optional[str] = None) -> None:
+        # Resolved lazily so importing this module never touches the filesystem
+        # and the module-level `gate_store` below stays free to construct.
+        self._db_path = db_path
+        self._owned: Optional[sqlite3.Connection] = None
+
+    @property
+    def _db(self) -> sqlite3.Connection:
+        if self._db_path is None:
+            return db.get_db()
+        if self._owned is None:
+            self._owned = db.get_db(self._db_path)
+        return self._owned
 
     def get(self, session_id: str) -> SessionState:
-        return self._sessions.setdefault(session_id, SessionState())
+        row = self._db.execute(
+            "SELECT root_cause_signature, last_fired_at, fire_count "
+            "FROM gate_state WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            return SessionState()
+        return SessionState(
+            analyses_run=row["fire_count"],
+            last_signature=row["root_cause_signature"],
+            last_run_at=row["last_fired_at"],
+        )
 
     def record_run(self, session_id: str, signature: str, at: Optional[float] = None) -> None:
-        state = self.get(session_id)
-        state.analyses_run += 1
-        state.last_signature = signature
-        state.last_run_at = at if at is not None else time.time()
+        at = at if at is not None else time.time()
+        connection = self._db
+        with connection:
+            db.touch_session(connection, session_id, at)
+            connection.execute(
+                """
+                INSERT INTO gate_state
+                    (session_id, root_cause_signature, last_fired_at, fire_count)
+                VALUES (?, ?, ?, 1)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    root_cause_signature = excluded.root_cause_signature,
+                    last_fired_at        = excluded.last_fired_at,
+                    fire_count           = gate_state.fire_count + 1
+                """,
+                (session_id, signature, at),
+            )
 
     def reset(self, session_id: Optional[str] = None) -> None:
-        if session_id is None:
-            self._sessions.clear()
-        else:
-            self._sessions.pop(session_id, None)
+        connection = self._db
+        with connection:
+            if session_id is None:
+                connection.execute("DELETE FROM gate_state")
+            else:
+                connection.execute("DELETE FROM gate_state WHERE session_id = ?", (session_id,))
 
 
 @dataclass

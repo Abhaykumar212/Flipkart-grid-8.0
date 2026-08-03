@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useLocation } from "react-router-dom";
 import { useTracker } from "./TrackerContext";
-import { sendInterventionFeedback } from "../lib/tracker";
+import { sendDeliveryDecision, sendInterventionFeedback } from "../lib/tracker";
 import { fatigueBudget } from "../lib/fatigueBudget";
 import {
   assertPolicyCoverage,
@@ -96,6 +96,13 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
         };
         pipelineTrace.attachDecision(rootCause.pipeline_run_id, decision);
         interventionLedger.recordHeld({ reason: "gate_held", rootCause: null, detail: rootCause.gate.reason });
+        void sendDeliveryDecision({
+          outcome: "held",
+          reason: "gate_held",
+          detail: rootCause.gate.reason,
+          root_cause: null,
+          probability,
+        });
       }
       return;
     }
@@ -136,6 +143,15 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
     );
     if (suppressedRung3.length > 0) interventionLedger.recordSuppressedRung3(suppressedRung3);
 
+    // Reported on the same POST as the decision itself — a suppressed lever that
+    // landed without its decision (or vice versa) would skew the ledger's
+    // spend-avoided total against a run that never happened.
+    const suppressedForServer = suppressedRung3.map((item) => ({
+      lever_id: item.leverId,
+      reason: item.reason,
+    }));
+    const probability = rootCause.prediction.abandonment_probability;
+
     if (outcome.decision === "hold") {
       // Deliberately leaves whatever is already on screen alone: it was paid
       // for, the shopper may be mid-read, and yanking it would spend the
@@ -151,6 +167,15 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
         reason: outcome.reason,
         rootCause: outcome.rootCause,
         detail: outcome.detail,
+      });
+      void sendDeliveryDecision({
+        outcome: "held",
+        reason: outcome.reason,
+        detail: outcome.detail,
+        root_cause: outcome.rootCause,
+        probability,
+        confidence: analysis.confidence,
+        suppressed: suppressedForServer,
       });
       return;
     }
@@ -186,6 +211,18 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
       intensity: delivered.intensity,
       surface: delivered.surface,
     });
+    void sendDeliveryDecision({
+      outcome: "delivered",
+      reason: delivered.reason,
+      detail: delivered.reason,
+      root_cause: delivered.rootCause,
+      probability,
+      lever_id: delivered.intervention.lever_id,
+      intensity_rung: delivered.intensity,
+      surface: delivered.surface,
+      confidence: analysis.confidence,
+      suppressed: suppressedForServer,
+    });
     setSelected(delivered);
     setAlternatives(ranked.filter((item) => item.lever_id !== delivered.intervention.lever_id));
   }, [rootCause]);
@@ -193,10 +230,16 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
   const resolve = useCallback(
     (action: "accepted" | "dismissed") => {
       const leverId = selected?.intervention.lever_id;
-      if (!leverId) return;
+      if (!leverId || !selected) return;
       // Single feedback path — `sendInterventionFeedback` in lib/tracker.ts is
-      // the only writer to /api/intervention-feedback.
-      void sendInterventionFeedback(leverId, action);
+      // the only writer to /api/intervention-feedback. The delivery context rides
+      // along so the ledger can attribute the outcome to the rung it was spent on.
+      void sendInterventionFeedback(leverId, action, {
+        intensity_rung: selected.intensity,
+        surface: selected.surface,
+        root_cause: selected.rootCause,
+        confidence: selected.intervention.confidence,
+      });
       if (action === "accepted") fatigueBudget.recordAccepted(leverId);
       else fatigueBudget.recordDismissed(leverId);
       setSelected(null);

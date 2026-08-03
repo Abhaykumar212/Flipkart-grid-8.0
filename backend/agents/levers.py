@@ -153,6 +153,22 @@ CATEGORY_DESCRIPTIONS: Dict[str, str] = {
 }
 
 
+# Nominal assumed give-away value per rung-3 (margin-spending) lever, INR. Same
+# hackathon caveat as `expected_conversion_gain` above: an assumption, not a
+# measured cost. Used only to make the session ledger's "promotional spend
+# avoided" arithmetic visible.
+#
+# Deliberately duplicated from `RUNG3_ASSUMED_VALUE_INR` in
+# `src/lib/interventionPolicy.ts` — the client needs it to render the panel live,
+# the server needs it to rebuild the same numbers after a reload. Keep the two
+# in step; `tests/test_persistence.py` pins the values on this side.
+RUNG3_ASSUMED_VALUE_INR: Dict[str, int] = {
+    "targeted_discount_code": 200,
+    "free_delivery_waiver": 40,
+    "delivery_speed_upgrade": 60,
+}
+
+
 def catalog_for_prompt() -> str:
     """Compact rendering of the catalog for inclusion in the agent prompt."""
     lines = []

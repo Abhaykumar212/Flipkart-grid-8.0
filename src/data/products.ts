@@ -2155,3 +2155,11 @@ export const productBySlug = new Map(products.map((p) => [p.slug, p]));
 export function productsByCategory(category: Product["category"]): Product[] {
   return products.filter((p) => p.category === category);
 }
+
+export function productsBySubCategory(subCategory: string): Product[] {
+  return products.filter((p) => p.subCategory === subCategory);
+}
+
+export function productsByBrand(brand: string): Product[] {
+  return products.filter((p) => p.brand === brand);
+}

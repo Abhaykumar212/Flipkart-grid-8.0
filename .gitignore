@@ -74,6 +74,14 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
+# SQLite session state (see backend/db.py). Local runtime data, never committed —
+# but the directory itself must exist on a fresh clone, hence the tracked
+# .gitkeep. Ignoring the *contents* rather than the directory: git does not
+# descend into an ignored directory, so `backend/data/` would make the negation
+# below unreachable.
+backend/data/*
+!backend/data/.gitkeep
+
 # Node
 node_modules/
 dist/

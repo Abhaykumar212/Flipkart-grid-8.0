@@ -82,6 +82,10 @@ class UserHistoryStore {
     this.state = { ...this.state, pastPurchaseProductIds: merged };
     this.persist();
   }
+
+  getRecentlyViewedIds(limit = 12): string[] {
+    return this.state.recentViewProductIds.slice(0, limit);
+  }
 }
 
 export const userHistory = new UserHistoryStore();

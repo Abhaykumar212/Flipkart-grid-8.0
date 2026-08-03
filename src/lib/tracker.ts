@@ -177,6 +177,9 @@ const API_BASE = "http://localhost:8000";
 const PREDICTION_URL = `${API_BASE}/api/predict-abandonment`;
 const ROOT_CAUSE_URL = `${API_BASE}/api/root-cause-analysis`;
 const INTERVENTION_FEEDBACK_URL = `${API_BASE}/api/intervention-feedback`;
+const DELIVERY_DECISION_URL = `${API_BASE}/api/delivery-decision`;
+const CART_ADD_URL = `${API_BASE}/api/cart-add`;
+export const SESSION_LEDGER_URL = `${API_BASE}/api/session-ledger`;
 
 /** Stable per-browser-tab id so the backend can dedupe and budget per session. */
 function resolveSessionId(): string {
@@ -240,19 +243,78 @@ function checkoutStepFromRoute(pathname: string): number {
 
 export type InterventionFeedbackAction = "accepted" | "dismissed" | "converted";
 
+/** Delivery context for an outcome, so the ledger can attribute it to a rung. */
+export interface InterventionFeedbackContext {
+  intensity_rung?: number;
+  surface?: string;
+  root_cause?: string;
+  confidence?: string;
+}
+
 /** Feedback Agent write path — the companion widget's accept/dismiss actions. */
 export async function sendInterventionFeedback(
   leverId: string,
   action: InterventionFeedbackAction,
+  context: InterventionFeedbackContext = {},
 ): Promise<void> {
   try {
     await fetch(INTERVENTION_FEEDBACK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: SESSION_ID, lever_id: leverId, action }),
+      body: JSON.stringify({ session_id: SESSION_ID, lever_id: leverId, action, ...context }),
     });
   } catch {
     // Best-effort telemetry — a dropped feedback POST shouldn't disrupt shopping.
+  }
+}
+
+/**
+ * Tells the backend the shopper committed to a product, so any inventory hold
+ * it placed while they hesitated can be released early instead of waiting out
+ * its ten minutes. Silent by design — nothing about the hold is ever shown.
+ */
+export async function sendCartAdd(productId: string): Promise<void> {
+  try {
+    await fetch(CART_ADD_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: SESSION_ID, product_id: productId }),
+    });
+  } catch {
+    // Best-effort — a dropped release just lets the hold lapse at expiry.
+  }
+}
+
+export interface DeliveryDecisionPayload {
+  outcome: "delivered" | "held";
+  reason?: string;
+  detail?: string;
+  root_cause?: string | null;
+  probability?: number;
+  lever_id?: string;
+  intensity_rung?: number;
+  surface?: string;
+  confidence?: string;
+  suppressed?: Array<{ lever_id: string; reason: string }>;
+}
+
+/**
+ * Delivery-layer write path — one call per pipeline run, reporting what was
+ * shown or deliberately withheld.
+ *
+ * The decision itself stays client-side (the fatigue budget and intensity ladder
+ * are synchronous checks that must not wait on a network round-trip); this only
+ * mirrors the outcome so the ledger survives a reload or a fresh tab.
+ */
+export async function sendDeliveryDecision(payload: DeliveryDecisionPayload): Promise<void> {
+  try {
+    await fetch(DELIVERY_DECISION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: SESSION_ID, ...payload }),
+    });
+  } catch {
+    // Best-effort telemetry — a dropped decision POST shouldn't disrupt shopping.
   }
 }
 

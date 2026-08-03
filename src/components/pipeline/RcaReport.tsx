@@ -1,5 +1,24 @@
-import { AlertTriangle, Ban, GitBranch, ListTree, Quote, Sparkles, Target, TrendingUp } from "lucide-react";
+import { AlertTriangle, Ban, FileCheck, GitBranch, ListTree, Quote, Sparkles, Target, TrendingUp } from "lucide-react";
 import type { PipelineRun, RecommendedIntervention } from "../../lib/pipelineTrace";
+
+const EXPLANATION_VERDICT_STYLE: Record<string, { label: string; chip: string; subtext?: string }> = {
+  grounded: {
+    label: "grounded in evidence",
+    chip: "bg-emerald-100 text-emerald-700",
+  },
+  regenerated: {
+    label: "rewritten for grounding",
+    chip: "bg-amber-100 text-amber-700",
+    subtext:
+      "The original explanation cited an unsupported claim; this text was rewritten to quote the model's SHAP evidence directly.",
+  },
+  template_fallback: {
+    label: "evidence-only summary",
+    chip: "bg-slate-100 text-slate-600",
+    subtext:
+      "The generated explanation couldn't be verified against the evidence, so it was replaced with a plain listing of the model's SHAP attribution.",
+  },
+};
 
 const CATEGORY_STYLE: Record<string, { label: string; chip: string }> = {
   cost_friction: { label: "Cost friction", chip: "bg-rose-100 text-rose-700" },
@@ -83,6 +102,9 @@ export function RcaReport({ run }: { run: PipelineRun }) {
   const { analysis } = run;
   const cause = analysis.primary_root_cause;
   const style = CATEGORY_STYLE[cause.category] ?? CATEGORY_STYLE.low_intent;
+  const explanationSpan = run.spans.find((s) => s.stage === "explanation_scored");
+  const explanationVerdict = explanationSpan?.detail?.verdict as string | undefined;
+  const explanationStyle = explanationVerdict ? EXPLANATION_VERDICT_STYLE[explanationVerdict] : undefined;
   const maxShap = Math.max(
     ...cause.supporting_evidence.map((e) => Math.abs(e.shap_contribution)),
     0.0001,
@@ -110,6 +132,19 @@ export function RcaReport({ run }: { run: PipelineRun }) {
 
         <h2 className="mt-3 text-lg font-bold text-slate-900">{cause.headline}</h2>
         <p className="mt-1.5 text-sm leading-relaxed text-slate-700">{cause.explanation}</p>
+        {explanationStyle && (
+          <div className="mt-1.5">
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${explanationStyle.chip}`}
+            >
+              <FileCheck className="h-3 w-3" />
+              {explanationStyle.label}
+            </span>
+            {explanationStyle.subtext && (
+              <p className="mt-1 text-[11px] italic text-slate-500">{explanationStyle.subtext}</p>
+            )}
+          </div>
+        )}
         <p className="mt-2 text-xs italic text-slate-500">{analysis.confidence_reasoning}</p>
       </section>
 
