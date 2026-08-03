@@ -19,6 +19,16 @@ Current synthetic holdout results are ROC-AUC **0.7938**, PR-AUC **0.9254**, ECE
 
 Requirements: Python 3.13, Node.js 22, and PowerShell 7+.
 
+For judging or a live demo, one command does everything (install, train if
+needed, reset, launch, open the browser tabs):
+
+```powershell
+./scripts/showcase.ps1
+```
+
+See [HACKATHON_SHOWCASE.md](HACKATHON_SHOWCASE.md) for flags, the run-of-show,
+and troubleshooting. For manual step-by-step setup instead:
+
 ```powershell
 python -m venv .venv
 ./.venv/Scripts/python.exe -m pip install -r requirements-dev.txt
