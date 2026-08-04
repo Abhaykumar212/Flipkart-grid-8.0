@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { Sparkles, X } from "lucide-react";
 import { apiGet } from "../../lib/api";
 import type { InterventionSurfaceProps } from "./surfaceTypes";
+import { InterventionWhy } from "./InterventionWhy";
 
-export function InlineCartCard({ intervention, onClick, onDismiss }: InterventionSurfaceProps) {
+export function InlineCartCard({ intervention, reasons, onClick, onDismiss }: InterventionSurfaceProps) {
   const [summary, setSummary] = useState<{ pros: string[]; cons: string[] } | null>(null);
   useEffect(() => {
     if (intervention.type !== "REVIEW_SUMMARY" || !intervention.review_product_id) return;
@@ -22,6 +23,7 @@ export function InlineCartCard({ intervention, onClick, onDismiss }: Interventio
             <div><p className="font-medium text-emerald-700">Pros</p><ul className="mt-1 list-disc space-y-1 pl-4 text-fk-muted">{summary.pros.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul></div>
             <div><p className="font-medium text-rose-700">Cons</p><ul className="mt-1 list-disc space-y-1 pl-4 text-fk-muted">{summary.cons.slice(0, 2).map((item) => <li key={item}>{item}</li>)}</ul></div>
           </div>}
+          <InterventionWhy reasons={reasons} />
           <button type="button" onClick={onClick} className="mt-3 min-h-11 text-fk-md font-medium text-fk-blue">
             {intervention.cta_label ?? "See details"}
           </button>

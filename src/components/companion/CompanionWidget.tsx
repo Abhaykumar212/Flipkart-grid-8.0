@@ -10,6 +10,9 @@ import {
   findComparisonCandidates,
   shoppingContext,
 } from "../../lib/shoppingContext";
+import { useIntervention, type AuthorizedIntervention } from "../../context/InterventionContext";
+import { customerExplanation } from "../../lib/interventionPresentation";
+import { InterventionWhy } from "../intervention/InterventionWhy";
 
 interface Message {
   id: number;
@@ -17,6 +20,9 @@ interface Message {
   text: string;
   offerPrompt?: string;
   resolved?: boolean;
+  intervention?: AuthorizedIntervention;
+  reasons?: string[];
+  interventionAction?: "accepted" | "dismissed";
 }
 
 function assistantMessage(id: number, text: string, offerPrompt?: string): Message {
@@ -24,6 +30,13 @@ function assistantMessage(id: number, text: string, offerPrompt?: string): Messa
 }
 
 export function CompanionWidget() {
+  const {
+    intervention,
+    explanation,
+    shown,
+    click: acceptIntervention,
+    dismiss: dismissIntervention,
+  } = useIntervention();
   const context = useSyncExternalStore(
     shoppingContext.subscribe,
     shoppingContext.getSnapshot,
@@ -37,6 +50,7 @@ export function CompanionWidget() {
   const handledReviewDwell = useRef<string | null>(null);
   const handledComparison = useRef<string | null>(null);
   const handledRequest = useRef<number | null>(null);
+  const handledDecision = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const product = context.currentProductId
@@ -113,6 +127,27 @@ export function CompanionWidget() {
   }, [context.companionRequest, send]);
 
   useEffect(() => {
+    if (
+      !intervention
+      || intervention.channel !== "ASSISTANT_PANEL"
+      || handledDecision.current === intervention.decision_id
+    ) return;
+    handledDecision.current = intervention.decision_id;
+    shown("companion:ASSISTANT_PANEL");
+    setMessages((current) => [
+      ...current,
+      {
+        id: nextMessageId.current++,
+        role: "assistant",
+        text: `${intervention.headline ?? intervention.display_name ?? "A recommendation for you"}\n${intervention.body ?? intervention.reason}`,
+        intervention,
+        reasons: customerExplanation(explanation, intervention.reason),
+      },
+    ]);
+    setOpen(true);
+  }, [explanation, intervention, shown]);
+
+  useEffect(() => {
     if (open) setUnseen(0);
   }, [open]);
 
@@ -179,6 +214,43 @@ export function CompanionWidget() {
                   }`}
                 >
                   <p>{message.text}</p>
+                  {message.intervention && (
+                    <>
+                      <InterventionWhy reasons={message.reasons ?? [message.intervention.reason]} />
+                      {!message.interventionAction ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              acceptIntervention();
+                              setMessages((current) => current.map((item) => (
+                                item.id === message.id ? { ...item, interventionAction: "accepted" } : item
+                              )));
+                            }}
+                            className="min-h-9 rounded-full bg-fk-blue px-3 font-medium text-white"
+                          >
+                            {message.intervention.cta_label ?? "Show me"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              dismissIntervention();
+                              setMessages((current) => current.map((item) => (
+                                item.id === message.id ? { ...item, interventionAction: "dismissed" } : item
+                              )));
+                            }}
+                            className="min-h-9 rounded-full border border-fk-border bg-white px-3 text-fk-muted"
+                          >
+                            Not now
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-fk-xs italic text-fk-muted">
+                          {message.interventionAction === "accepted" ? "Marked as helpful." : "Dismissed for this session."}
+                        </p>
+                      )}
+                    </>
+                  )}
                   {message.offerPrompt && !message.resolved && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button

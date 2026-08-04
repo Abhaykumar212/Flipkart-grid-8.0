@@ -8,12 +8,13 @@ const mocks = vi.hoisted(() => ({
   click: vi.fn(),
   dismiss: vi.fn(),
   intervention: null as AuthorizedIntervention | null,
+  explanation: null as Record<string, unknown> | null,
 }));
 
 vi.mock("../../context/InterventionContext", () => ({
   useIntervention: () => ({
     intervention: mocks.intervention,
-    explanation: null,
+    explanation: mocks.explanation,
     shown: mocks.shown,
     click: mocks.click,
     dismiss: mocks.dismiss,
@@ -24,6 +25,7 @@ describe("InterventionRenderer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.intervention = null;
+    mocks.explanation = null;
   });
 
   it("renders only a backend-authorized decision and emits lifecycle actions", () => {
@@ -37,6 +39,9 @@ describe("InterventionRenderer", () => {
       confidence: 0.82,
       cta_label: "See highlights",
     };
+    mocks.explanation = {
+      observations: [{ statement: "You opened reviews more than once." }],
+    };
     render(<InterventionRenderer surface="cart" />);
 
     expect(screen.getByTestId("intervention-inline-card")).toBeInTheDocument();
@@ -45,6 +50,7 @@ describe("InterventionRenderer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Dismiss recommendation" }));
     expect(mocks.click).toHaveBeenCalledOnce();
     expect(mocks.dismiss).toHaveBeenCalledOnce();
+    expect(screen.getByText("Why this recommendation?")).toBeInTheDocument();
   });
 
   it("renders nothing when the backend decision id is missing", () => {
@@ -55,6 +61,19 @@ describe("InterventionRenderer", () => {
       confidence: 0.82,
     } as AuthorizedIntervention;
     const { container } = render(<InterventionRenderer surface="cart" />);
+    expect(container).toBeEmptyDOMElement();
+    expect(mocks.shown).not.toHaveBeenCalled();
+  });
+
+  it("leaves assistant-panel decisions to the persistent companion", () => {
+    mocks.intervention = {
+      decision_id: "D-303",
+      type: "CHECKOUT_ASSISTANCE",
+      channel: "ASSISTANT_PANEL",
+      reason: "Checkout support",
+      confidence: 0.8,
+    };
+    const { container } = render(<InterventionRenderer surface="global" />);
     expect(container).toBeEmptyDOMElement();
     expect(mocks.shown).not.toHaveBeenCalled();
   });
