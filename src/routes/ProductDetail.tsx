@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { RotateCcw, ShieldCheck, Truck } from "lucide-react";
-import { productBySlug, products } from "../data/products";
+import { productBySlug } from "../data/products";
 import { formatDeliveryDate } from "../lib/format";
 import {
   getSpecifications,
@@ -16,14 +16,18 @@ import { PriceBlock } from "../components/ui/PriceBlock";
 import { ImageGallery } from "../components/pdp/ImageGallery";
 import { SpecificationsTable } from "../components/pdp/SpecificationsTable";
 import { RatingsAndReviews } from "../components/pdp/RatingsAndReviews";
-import { ProductRail } from "../components/home/ProductRail";
 import { OffersList } from "../components/pdp/OffersList";
 import { useSession } from "../context/SessionContext";
 import { productVariantOptions } from "../lib/productPresentation";
 import { categoryBySlug } from "../data/categories";
 import { shoppingContext } from "../lib/shoppingContext";
-
-const FALLBACK_SELLER = { name: "RetailNet", rating: 4.2 };
+import { comparableProducts } from "../lib/productRecommendations";
+import { EMICalculator } from "../components/pdp/EMICalculator";
+import { ProductComparison } from "../components/pdp/ProductComparison";
+import { ProductQuestions } from "../components/pdp/ProductQuestions";
+import { RelatedProductsRail } from "../components/pdp/RelatedProductsRail";
+import { SellerPanel } from "../components/pdp/SellerPanel";
+import { StockStatus } from "../components/pdp/StockStatus";
 
 export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -72,12 +76,9 @@ export default function ProductDetail() {
   const specifications = getSpecifications(product);
   const description = getDescription(product);
   const totalRatings = ratingDistribution.reduce((sum, item) => sum + item.count, 0);
-  const resolvedSeller = getSeller(product) ?? FALLBACK_SELLER;
+  const resolvedSeller = getSeller(product);
   const category = categoryBySlug.get(product.category);
-  const related = products
-    .filter((candidate) => candidate.id !== product.id && candidate.category === product.category)
-    .sort((a, b) => Number(b.subCategory === product.subCategory) - Number(a.subCategory === product.subCategory) || b.rating.value - a.rating.value)
-    .slice(0, 10);
+  const comparisonAlternatives = comparableProducts(product);
   const schema = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -110,10 +111,12 @@ export default function ProductDetail() {
           </div>
           <p className="mt-3 text-fk-sm font-medium text-fk-green">Special price</p>
           <PriceBlock mrp={price.mrp} sellingPrice={price.sellingPrice} size="lg" className="mt-1" />
+          <StockStatus stock={stock} />
 
           <div className="mt-4">
             <OffersList offers={offers} emi={emi} />
           </div>
+          <EMICalculator sellingPrice={price.sellingPrice} emi={emi} />
 
           {variants.length > 0 && (
             <fieldset className="mt-5 border-t border-fk-border pt-4">
@@ -140,7 +143,7 @@ export default function ProductDetail() {
             <span className="flex items-center gap-2 text-fk-base text-fk-ink"><ShieldCheck className="h-5 w-5 text-fk-blue" />Secure payments</span>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-fk-base text-fk-ink"><span>Sold by <span className="font-medium text-fk-blue">{resolvedSeller.name}</span></span><RatingStars variant="pill" size="sm" value={resolvedSeller.rating} /><span className={stock.quantityLeft <= 5 ? "text-fk-flame" : "text-fk-green"}>{stock.inStock ? (stock.quantityLeft <= 5 ? `Only ${stock.quantityLeft} left` : "In stock") : "Out of stock"}</span></div>
+          <SellerPanel seller={resolvedSeller} delivery={delivery} />
 
           {highlights.length > 0 && <section className="mt-4 border-t border-fk-border pt-4"><h2 className="text-fk-md font-medium text-fk-ink">Highlights</h2><ul className="mt-2 grid list-disc gap-1 pl-5 text-fk-base text-fk-ink sm:grid-cols-2">{highlights.map((highlight) => <li key={highlight}>{highlight}</li>)}</ul></section>}
         </div>
@@ -148,8 +151,10 @@ export default function ProductDetail() {
 
       <SpecificationsTable sections={specifications} />
       <section className="rounded-[2px] bg-white p-4 sm:p-6"><h2 className="mb-2 text-fk-xl font-medium text-fk-ink">Product Description</h2><p className="max-w-4xl text-fk-base leading-6 text-fk-ink">{description}</p></section>
+      <ProductComparison current={product} alternatives={comparisonAlternatives} />
+      <ProductQuestions product={product} />
       <div id="ratings"><RatingsAndReviews productId={product.id} ratingDistribution={ratingDistribution} reviews={reviews} /></div>
-      {related.length > 0 && <ProductRail title="Similar Products" subtitle={`More in ${product.subCategory}`} products={related} viewAllHref={`/category/${product.category}`} originProductId={product.id} />}
+      <RelatedProductsRail product={product} />
     </div>
   );
 }
