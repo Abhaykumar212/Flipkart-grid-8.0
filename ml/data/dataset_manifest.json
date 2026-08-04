@@ -1,0 +1,87 @@
+{
+  "artifacts_sha256": {
+    "counterfactuals.parquet": "cc3832543af710bc51c182d35419750f2e7af4a5eeacc2578906852fcfb0abe9",
+    "decision_points.parquet": "d20603b20c6c43c9edf510735ad2a83eb7b4cf8b03b9192ab5353cb93eedefe6",
+    "events.parquet": "966509063cf2c6ca7623e6ea5d80e16e3c136deb44b0b022f0e30e3abfff2b99",
+    "ground_truth.parquet": "7d337279cb9b93e00306d491e7dbd9bd9fd0e9e477f34613905f60b59474b0e6",
+    "sessions.parquet": "f71760cdc667e934b5501c01f436c23975b0e8e29c88df966540e2be8bf856db",
+    "users.parquet": "b5de999a179a1d4043de7ea4e3e101ba53a994b8a36c39315f1300d9caa8edfc"
+  },
+  "counts": {
+    "counterfactuals": 336612,
+    "decision_points": 103029,
+    "events": 681047,
+    "ground_truth": 40000,
+    "sessions": 40000,
+    "users": 12000
+  },
+  "dataset_version": "sim-v1",
+  "feature_schema_version": "fs-v1",
+  "git_sha": "e74d5f939904e858edd6f07e711cb06642249e15",
+  "realism_checks": [
+    {
+      "detail": "rate=0.7013, expected [0.62, 0.74]",
+      "name": "overall abandonment",
+      "number": 1,
+      "passed": true
+    },
+    {
+      "detail": "max deviation=0.0253; PRICE_SENSITIVE=0.710, QUALITY_CONSCIOUS=0.662, URGENT_DELIVERY=0.695, COMPARISON_HEAVY=0.738, CASUAL_BROWSER=0.875, PAYMENT_CONSTRAINED=0.715, HIGH_INTENT_REPEAT=0.139, DISTRACTED_MOBILE=0.774",
+      "name": "persona abandonment calibration",
+      "number": 2,
+      "passed": true
+    },
+    {
+      "detail": "minimum=2261, required=2000 (2000 at full scale)",
+      "name": "cause support",
+      "number": 3,
+      "passed": true
+    },
+    {
+      "detail": "median=16.0, expected [8, 60]",
+      "name": "session event length",
+      "number": 4,
+      "passed": true
+    },
+    {
+      "detail": "persona=5.168, population=1.174, ratio=4.40",
+      "name": "quality review signature",
+      "number": 5,
+      "passed": true
+    },
+    {
+      "detail": "persona=4.222, population=0.634, ratio=6.66",
+      "name": "delivery-check signature",
+      "number": 6,
+      "passed": true
+    },
+    {
+      "detail": "persona=0.572, population=0.069, ratio=8.30",
+      "name": "payment-failure signature",
+      "number": 7,
+      "passed": true
+    },
+    {
+      "detail": "violations=0",
+      "name": "ORDER_COMPLETED is terminal",
+      "number": 8,
+      "passed": true
+    },
+    {
+      "detail": "violations=0",
+      "name": "gapless increasing sequence numbers",
+      "number": 9,
+      "passed": true
+    },
+    {
+      "detail": "maximum |r|=0.6229",
+      "name": "cause separability",
+      "number": 10,
+      "passed": true
+    }
+  ],
+  "scale": "full",
+  "seed": 42,
+  "sessions": 40000,
+  "users": 12000
+}
