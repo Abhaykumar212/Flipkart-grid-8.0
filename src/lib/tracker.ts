@@ -407,8 +407,9 @@ export class SessionTracker {
     this.emit();
   }
 
-  recordReviewVisibility(at = Date.now()): void {
-    this.reviewsExpandedCount = Math.min(8, this.reviewsExpandedCount + 1);
+  recordReviewVisibility(count?: number, at = Date.now()): void {
+    const increment = count && count > 0 ? count : 1;
+    this.reviewsExpandedCount = Math.min(15, this.reviewsExpandedCount + increment);
     this.markActivity(at);
     this.emit();
   }

@@ -45,7 +45,7 @@ interface TrackerContextValue {
   rootCause: RootCauseResponse | null;
   rootCauseLoading: boolean;
   recordProductVisit: (productId: string) => void;
-  recordReviewVisibility: () => void;
+  recordReviewVisibility: (count?: number) => void;
   recordSearch: (query: string) => void;
   recordPincodeCheck: (pincode: string) => void;
   requestPrediction: () => void;
@@ -335,7 +335,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
     rootCause,
     rootCauseLoading,
     recordProductVisit: (productId) => sessionTracker.recordProductVisit(productId),
-    recordReviewVisibility: () => sessionTracker.recordReviewVisibility(),
+    recordReviewVisibility: (count) => sessionTracker.recordReviewVisibility(count),
     recordSearch: (query) => sessionTracker.recordSearch(query),
     recordPincodeCheck: (pincode) => sessionTracker.recordPincodeCheck(pincode),
     requestPrediction,

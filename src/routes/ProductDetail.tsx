@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Heart } from "lucide-react";
 import { productBySlug } from "../data/products";
@@ -130,6 +130,35 @@ export default function ProductDetail() {
     </p>
   );
 
+  const descRef = useRef<HTMLDivElement>(null);
+  const [showDescTakeaways, setShowDescTakeaways] = useState(false);
+  const sessionViews = userHistory.getSnapshot().recentViewProductIds;
+  const showComparison = compareProducts.length > 0 && sessionViews.length >= 2;
+
+  useEffect(() => {
+    const el = descRef.current;
+    if (!el) return;
+    let timer: number | null = null;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          timer = window.setTimeout(() => {
+            setShowDescTakeaways(true);
+          }, 1500);
+        } else if (timer !== null) {
+          window.clearTimeout(timer);
+          timer = null;
+        }
+      },
+      { threshold: 0.3 },
+    );
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [product?.id]);
+
   return (
     <div className="flex flex-col gap-3">
       {/* Breadcrumb Navigation */}
@@ -192,11 +221,11 @@ export default function ProductDetail() {
           </div>
 
           {/* EMI Calculator */}
-          <div className="mt-4">
+          <div className="mt-4" id="emi-options">
             <EMICalculator sellingPrice={price.sellingPrice} emi={emi} />
           </div>
 
-          <div className="mt-5 border-t border-fk-border pt-4">
+          <div className="mt-5 border-t border-fk-border pt-4" id="delivery-pincode">
             <h2 className="text-fk-md font-medium text-fk-ink">Delivery</h2>
             <form
               onSubmit={(event) => {
@@ -245,35 +274,37 @@ export default function ProductDetail() {
 
       <SpecificationsTable productId={product.id} sections={specifications} />
 
-      <section className="rounded-[2px] bg-white p-6">
+      <section ref={descRef} className="rounded-[2px] bg-white p-6">
         <h2 className="mb-2 text-fk-xl font-medium text-fk-ink">Product Description</h2>
-        <div className="mb-4 rounded-2xl border-2 border-fk-blue/40 bg-gradient-to-r from-blue-50/90 to-indigo-50/90 p-4 shadow-md backdrop-blur-md">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
-              ✨ AI Intervention: Summarized Key Takeaways
-            </span>
-            <span className="text-[11px] font-bold text-fk-blue">Instant AI PDP Overview</span>
+        {showDescTakeaways && (
+          <div className="mb-4 rounded-2xl border-2 border-fk-blue/40 bg-gradient-to-r from-blue-50/90 to-indigo-50/90 p-4 shadow-md backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-500">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
+                ✨ AI Intervention: Summarized Key Takeaways
+              </span>
+              <span className="text-[11px] font-bold text-fk-blue">Pattern Dwell Triggered (1.5s)</span>
+            </div>
+            <p className="text-fk-sm font-semibold text-fk-ink">
+              {product.title} combines flagship hardware with top-rated buyer feedback. Features {product.highlights.slice(0, 3).join(", ")}.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2 text-fk-xs">
+              <span className="rounded-md bg-emerald-100 px-2 py-1 font-bold text-emerald-800">✓ 1-Year Brand Warranty</span>
+              <span className="rounded-md bg-blue-100 px-2 py-1 font-bold text-blue-800">✓ 7-Day Replacement</span>
+              <span className="rounded-md bg-purple-100 px-2 py-1 font-bold text-purple-800">✓ No-Cost EMI Eligible</span>
+            </div>
           </div>
-          <p className="text-fk-sm font-semibold text-fk-ink">
-            {product.title} combines flagship hardware with top-rated buyer feedback. Features {product.highlights.slice(0, 3).join(", ")}.
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2 text-fk-xs">
-            <span className="rounded-md bg-emerald-100 px-2 py-1 font-bold text-emerald-800">✓ 1-Year Brand Warranty</span>
-            <span className="rounded-md bg-blue-100 px-2 py-1 font-bold text-blue-800">✓ 7-Day Replacement</span>
-            <span className="rounded-md bg-purple-100 px-2 py-1 font-bold text-purple-800">✓ No-Cost EMI Eligible</span>
-          </div>
-        </div>
+        )}
         <p className="text-fk-base text-fk-ink">{description}</p>
       </section>
 
-      {/* Product Comparison Table */}
-      {compareProducts.length > 0 && (
-        <section id="similar-products" className="relative rounded-2xl border-2 border-fk-blue/50 bg-white p-6 shadow-fk-glow">
+      {/* Product Comparison Table — shown if user viewed multiple products in session */}
+      {showComparison && (
+        <section id="similar-products" className="relative rounded-2xl border-2 border-fk-blue/50 bg-white p-6 shadow-fk-glow animate-in fade-in duration-500">
           <div className="mb-3 flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
               ✨ AI Intervention: Intelligent Model Comparison
             </span>
-            <span className="text-[11px] font-semibold text-fk-blue">Side-by-side feature comparison</span>
+            <span className="text-[11px] font-semibold text-fk-blue">Session history triggered ({sessionViews.length} products viewed)</span>
           </div>
           <ProductComparison products={compareProducts} currentProduct={product} />
         </section>

@@ -163,6 +163,7 @@ export function CompanionWidget() {
       },
     ]);
     setUnseenCount((n) => n + 1);
+    setIsOpen(true);
   }
 
   useEffect(() => {

@@ -78,7 +78,7 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
       ([entry]) => {
         if (entry.isIntersecting && !recorded.current) {
           recorded.current = true;
-          recordReviewVisibility();
+          recordReviewVisibility(reviews.length);
           observer.disconnect();
         }
       },

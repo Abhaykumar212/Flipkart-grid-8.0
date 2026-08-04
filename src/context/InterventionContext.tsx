@@ -292,6 +292,13 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
         } else if (leverId === "stock_scarcity_nudge") {
           const similarEl = document.getElementById("similar-products") || document.querySelector("[data-section='similar']");
           if (similarEl) similarEl.scrollIntoView({ behavior: "smooth" });
+        } else if (leverId === "delivery_speed_upgrade" || leverId === "free_delivery_waiver") {
+          const deliveryEl = document.getElementById("delivery-pincode");
+          if (deliveryEl) {
+            deliveryEl.scrollIntoView({ behavior: "smooth" });
+            const input = deliveryEl.querySelector("input");
+            if (input) input.focus();
+          }
         }
       } else {
         fatigueBudget.recordDismissed(leverId);
