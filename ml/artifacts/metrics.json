@@ -1,19 +1,19 @@
 {
-  "roc_auc": 0.8072274597453606,
+  "roc_auc": 0.8071147466023606,
   "roc_auc_ci95": [
-    0.8037,
-    0.8122
+    0.8036,
+    0.8117
   ],
-  "pr_auc": 0.8956252465272252,
-  "accuracy": 0.7609,
-  "f1_score": 0.8339179661723336,
-  "log_loss": 0.487366259098053,
-  "brier_score": 0.16126935184001923,
-  "expected_calibration_error": 0.007001449119579049,
+  "pr_auc": 0.8957938978586986,
+  "accuracy": 0.761,
+  "f1_score": 0.8338778063529575,
+  "log_loss": 0.4872676134109497,
+  "brier_score": 0.16128665208816528,
+  "expected_calibration_error": 0.007632309481501579,
   "isotonic_calibration_applied": false,
-  "log_loss_uncalibrated": 0.487366259098053,
-  "brier_uncalibrated": 0.16126935184001923,
-  "ece_uncalibrated": 0.007001449119579049,
+  "log_loss_uncalibrated": 0.4872676134109497,
+  "brier_uncalibrated": 0.16128665208816528,
+  "ece_uncalibrated": 0.007632309481501579,
   "bayes_optimal": {
     "roc_auc": 0.810707,
     "pr_auc": 0.898188,
@@ -21,9 +21,9 @@
     "brier": 0.159967,
     "accuracy": 0.763125
   },
-  "auc_efficiency_vs_bayes": 0.9957,
-  "logloss_excess_vs_bayes": 0.003816,
-  "best_iteration": 240,
+  "auc_efficiency_vs_bayes": 0.9956,
+  "logloss_excess_vs_bayes": 0.003717,
+  "best_iteration": 253,
   "train_rows": 120000,
   "calibration_rows": 40000,
   "test_rows": 40000,
@@ -32,59 +32,59 @@
   "decision_thresholds": [
     {
       "threshold": 0.5,
-      "coverage": 0.7587,
-      "precision": 0.7912,
-      "recall": 0.8816,
+      "coverage": 0.7578,
+      "precision": 0.7916,
+      "recall": 0.8809,
       "f1": 0.8339,
-      "lift_over_base_rate": 1.1619
+      "lift_over_base_rate": 1.1625
     },
     {
       "threshold": 0.6,
-      "coverage": 0.6616,
-      "precision": 0.8273,
-      "recall": 0.8039,
-      "f1": 0.8154,
-      "lift_over_base_rate": 1.2149
+      "coverage": 0.6625,
+      "precision": 0.8266,
+      "recall": 0.8042,
+      "f1": 0.8152,
+      "lift_over_base_rate": 1.2139
     },
     {
       "threshold": 0.7,
       "coverage": 0.5456,
-      "precision": 0.8649,
-      "recall": 0.693,
-      "f1": 0.7695,
-      "lift_over_base_rate": 1.2701
+      "precision": 0.8645,
+      "recall": 0.6927,
+      "f1": 0.7691,
+      "lift_over_base_rate": 1.2696
     },
     {
       "threshold": 0.75,
-      "coverage": 0.4783,
-      "precision": 0.8847,
-      "recall": 0.6214,
-      "f1": 0.73,
-      "lift_over_base_rate": 1.2993
+      "coverage": 0.4784,
+      "precision": 0.8836,
+      "recall": 0.6208,
+      "f1": 0.7293,
+      "lift_over_base_rate": 1.2977
     },
     {
       "threshold": 0.8,
-      "coverage": 0.4017,
-      "precision": 0.904,
-      "recall": 0.5332,
-      "f1": 0.6708,
-      "lift_over_base_rate": 1.3275
+      "coverage": 0.4029,
+      "precision": 0.9035,
+      "recall": 0.5346,
+      "f1": 0.6718,
+      "lift_over_base_rate": 1.3269
     },
     {
       "threshold": 0.85,
-      "coverage": 0.3147,
-      "precision": 0.9264,
-      "recall": 0.4281,
-      "f1": 0.5856,
-      "lift_over_base_rate": 1.3604
+      "coverage": 0.3185,
+      "precision": 0.9258,
+      "recall": 0.433,
+      "f1": 0.59,
+      "lift_over_base_rate": 1.3596
     },
     {
       "threshold": 0.9,
-      "coverage": 0.2149,
-      "precision": 0.9509,
-      "recall": 0.3001,
-      "f1": 0.4563,
-      "lift_over_base_rate": 1.3965
+      "coverage": 0.2172,
+      "precision": 0.95,
+      "recall": 0.303,
+      "f1": 0.4595,
+      "lift_over_base_rate": 1.3952
     }
   ]
 }

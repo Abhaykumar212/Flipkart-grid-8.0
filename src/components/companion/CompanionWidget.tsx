@@ -11,6 +11,7 @@ import {
   type ChatMessagePayload,
 } from "../../lib/companionChat";
 import type { RecommendedIntervention } from "../../lib/pipelineTrace";
+import { VoiceButton } from "./VoiceButton";
 
 /**
  * The AI Shopping Companion — persistent across the entire journey, not just
@@ -101,6 +102,7 @@ export function CompanionWidget() {
   const injectedOfferTriggerRef = useRef<string | null>(null);
   const injectedComparisonKeyRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isEliciting || injectedElicitationRef.current) return;
@@ -341,6 +343,15 @@ export function CompanionWidget() {
     await submitElicitationResponse(chip);
   }
 
+  // The voice layer's only job: hand the recognized text to the exact same
+  // submission path typed input uses, then return focus to the text field —
+  // nothing here talks to the backend, a product, or an LLM directly.
+  function handleVoiceTranscript(transcript: string) {
+    void sendText(transcript);
+    textInputRef.current?.focus();
+  }
+  }
+
   return (
     // Docked to the right edge, vertically centered — a persistent companion
     // rail rather than a corner action button, and deliberately clear of
@@ -413,12 +424,14 @@ export function CompanionWidget() {
             }}
           >
             <input
+              ref={textInputRef}
               type="text"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder={pageCtx.currentProductId ? "Ask about this product…" : "Ask me anything…"}
               className="h-9 flex-1 rounded-full border border-slate-200 px-3.5 text-xs focus:border-emerald-400 focus:outline-none"
             />
+            <VoiceButton onTranscript={handleVoiceTranscript} disabled={sending} />
             <button
               type="submit"
               disabled={sending || !draft.trim()}
