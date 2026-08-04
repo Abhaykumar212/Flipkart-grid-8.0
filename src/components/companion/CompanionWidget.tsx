@@ -350,7 +350,6 @@ export function CompanionWidget() {
     void sendText(transcript);
     textInputRef.current?.focus();
   }
-  }
 
   return (
     // Docked to the right edge, vertically centered — a persistent companion
