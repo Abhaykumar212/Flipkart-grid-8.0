@@ -43,6 +43,7 @@ export interface FatigueState {
   /** Identifies the current route *visit*, not the route. */
   routeVisitId: string;
   shownInCurrentVisit: boolean;
+  hasElicited: boolean;
 }
 
 export type BlockReason = "session_cap" | "cooldown" | "route_cap" | "dismissed_type";
@@ -61,21 +62,20 @@ export interface FatigueSnapshot {
   nextEligibleAt: number | null;
   dismissedLeverIds: string[];
   shownInCurrentVisit: boolean;
+  hasElicited: boolean;
   exposures: Exposure[];
 }
 
 const STORAGE_KEY = "fk-intervention-fatigue-v1";
 
-/** Hard caps, per the delivery policy. */
-export const MAX_SESSION_EXPOSURE = 3;
-export const MIN_GAP_MS = 45_000;
+/** Hard caps, tuned for live demo responsiveness. */
+export const MAX_SESSION_EXPOSURE = 20;
+export const MIN_GAP_MS = 3_000;
 
 /**
- * 4 minutes. Long enough that a burst of interruptions is genuinely spent, short
- * enough that a shopper who has moved on to a different part of the journey is
- * reachable again within a realistic session.
+ * 2 minutes decay half-life for demo.
  */
-export const HALF_LIFE_MS = 240_000;
+export const HALF_LIFE_MS = 120_000;
 
 const EMPTY_STATE: FatigueState = {
   exposures: [],
@@ -83,6 +83,7 @@ const EMPTY_STATE: FatigueState = {
   lastShownAt: 0,
   routeVisitId: "",
   shownInCurrentVisit: false,
+  hasElicited: false,
 };
 
 function newVisitId(pathname: string): string {
@@ -106,6 +107,7 @@ class FatigueBudget {
         ...parsed,
         exposures: parsed.exposures ?? [],
         dismissedLeverIds: parsed.dismissedLeverIds ?? [],
+        hasElicited: parsed.hasElicited ?? false,
       };
     } catch {
       // Corrupt or unavailable storage should never break shopping.
@@ -158,8 +160,18 @@ class FatigueBudget {
       nextEligibleAt: this.state.lastShownAt > 0 ? this.state.lastShownAt + MIN_GAP_MS : null,
       dismissedLeverIds: [...this.state.dismissedLeverIds],
       shownInCurrentVisit: this.state.shownInCurrentVisit,
+      hasElicited: this.state.hasElicited,
       exposures: [...this.state.exposures],
     };
+  }
+
+  hasElicitedThisSession(): boolean {
+    return this.state.hasElicited;
+  }
+
+  recordElicited(now = Date.now()): void {
+    this.state.hasElicited = true;
+    this.recordShown("elicitation_prompt", { rootCause: "unknown", intensity: 1 }, now);
   }
 
   /**
@@ -178,9 +190,6 @@ class FatigueBudget {
     }
     if (this.state.lastShownAt > 0 && now - this.state.lastShownAt < MIN_GAP_MS) {
       return { allowed: false, reason: "cooldown" };
-    }
-    if (this.state.shownInCurrentVisit) {
-      return { allowed: false, reason: "route_cap" };
     }
     return { allowed: true };
   }

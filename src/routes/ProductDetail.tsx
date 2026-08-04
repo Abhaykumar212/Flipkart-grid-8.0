@@ -31,6 +31,7 @@ import { userHistory } from "../lib/userHistory";
 import { pageContext } from "../lib/pageContext";
 import { InlineHighlight } from "../components/intervention/InlineHighlight";
 import { useInlineTarget } from "../components/intervention/useInlineTarget";
+import { isLowestPriceInDays } from "../lib/priceHistory";
 
 export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -98,6 +99,7 @@ export default function ProductDetail() {
   // takes no such prop, so the history summary is appended to the caption here,
   // where the product's `signals` are already in scope.
   const priceHistory = product.signals?.priceHistory;
+  const isLowestPrice = isLowestPriceInDays(priceHistory, price.sellingPrice, 90);
   const priceContent =
     priceInline.isActive && priceInline.content && priceHistory && priceHistory.length > 0
       ? {
@@ -129,9 +131,8 @@ export default function ProductDetail() {
       {/* Main Product Section */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_3fr]">
         <ImageGallery
-          productId={product.id}
-          images={product.images}
-          title={product.title}
+          product={product}
+          seller={seller}
         />
 
         <div className="rounded-[2px] bg-white p-6">
@@ -161,6 +162,14 @@ export default function ProductDetail() {
           ) : (
             priceBlock
           )}
+          {isLowestPrice && (
+            <span
+              className="mt-2 inline-flex rounded-[2px] bg-fk-green/10 px-2 py-1 text-fk-sm font-medium text-fk-green"
+              data-testid="lowest-price-badge"
+            >
+              Lowest price in 90 days
+            </span>
+          )}
 
           {/* Stock Urgency */}
           <div className="mt-3">
@@ -168,7 +177,7 @@ export default function ProductDetail() {
           </div>
 
           <div className="mt-4">
-            <OffersList offers={offers} emi={emi} />
+            <OffersList offers={offers} emi={emi} sellingPrice={price.sellingPrice} />
           </div>
 
           {/* EMI Calculator */}
@@ -223,7 +232,7 @@ export default function ProductDetail() {
         </div>
       </div>
 
-      <SpecificationsTable sections={specifications} />
+      <SpecificationsTable productId={product.id} sections={specifications} />
 
       <section className="rounded-[2px] bg-white p-6">
         <h2 className="mb-2 text-fk-xl font-medium text-fk-ink">Product Description</h2>

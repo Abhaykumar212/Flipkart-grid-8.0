@@ -2,20 +2,29 @@ import { useState } from "react";
 import { Heart, Share2 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { useCart } from "../../context/CartContext";
+import { useIntervention } from "../../context/InterventionContext";
+import { getAddToCartLabel } from "../../lib/pdpMicrocopy";
+import type { Product, Seller } from "../../types/product";
 
 const FALLBACK = "/fallback-product.svg";
 
 interface ImageGalleryProps {
-  productId: string;
-  images: string[];
-  title: string;
+  product: Product;
+  seller: Seller;
 }
 
-export function ImageGallery({ productId, images, title }: ImageGalleryProps) {
+export function ImageGallery({ product, seller }: ImageGalleryProps) {
+  const { id: productId, images, title } = product;
   const gallery = images.length > 0 ? images : [FALLBACK];
   const [activeIndex, setActiveIndex] = useState(0);
   const [mainSrc, setMainSrc] = useState(gallery[0]);
   const { addItem } = useCart();
+  const { diagnosis } = useIntervention();
+  const cause = diagnosis?.productId === productId
+    ? diagnosis.analysis.primary_root_cause.category
+    : null;
+
+  const addToCartLabel = getAddToCartLabel(product, seller, cause);
 
   const select = (index: number) => {
     setActiveIndex(index);
@@ -80,7 +89,7 @@ export function ImageGallery({ productId, images, title }: ImageGalleryProps) {
           data-testid="add-to-cart-button"
           onClick={() => addItem(productId)}
         >
-          Add to Cart
+          {addToCartLabel}
         </Button>
         {/* Buy Now stays inert until the checkout flow lands. */}
         <Button variant="buy" className="w-full" data-testid="buy-now-button">

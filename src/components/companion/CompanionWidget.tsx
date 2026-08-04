@@ -63,7 +63,12 @@ interface PromptOfferMessage extends BaseMessage {
   comparisonProductIds?: string[];
 }
 
-type CompanionMessage = TextMessage | InterventionMessage | PromptOfferMessage;
+interface ElicitationMessage extends BaseMessage {
+  kind: "elicitation";
+  resolvedChip?: string;
+}
+
+type CompanionMessage = TextMessage | InterventionMessage | PromptOfferMessage | ElicitationMessage;
 
 function newId(): string {
   return `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -77,6 +82,8 @@ export function CompanionWidget() {
     alternatives: policyAlternatives,
     accept: acceptPolicyIntervention,
     dismiss: dismissPolicyIntervention,
+    isEliciting,
+    submitElicitationResponse,
   } = useIntervention();
   const pageCtx = useSyncExternalStore(pageContext.subscribe, pageContext.getSnapshot);
 
@@ -88,11 +95,29 @@ export function CompanionWidget() {
   const [showAlternativesFor, setShowAlternativesFor] = useState<string | null>(null);
 
   const injectedLeverIdRef = useRef<string | null>(null);
+  const injectedElicitationRef = useRef(false);
   const injectedDwellProductIdRef = useRef<string | null>(null);
   const injectedDeliveryTriggerRef = useRef<string | null>(null);
   const injectedOfferTriggerRef = useRef<string | null>(null);
   const injectedComparisonKeyRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isEliciting || injectedElicitationRef.current) return;
+    injectedElicitationRef.current = true;
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: newId(),
+        role: "companion",
+        kind: "elicitation",
+        text: "What's holding you back?",
+      },
+    ]);
+    setUnseenCount((n) => n + 1);
+    setIsOpen(true);
+  }, [isEliciting]);
 
   // The widget no longer decides for itself whether an RCA is worth showing.
   // InterventionContext owns that call for every surface, so a conversational
@@ -306,6 +331,16 @@ export function CompanionWidget() {
     void sendText(message.followUpQuestion, message.comparisonProductIds);
   }
 
+  async function handleElicitationChip(
+    message: ElicitationMessage,
+    chip: "Price" | "Trust or quality" | "Still comparing",
+  ) {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === message.id && m.kind === "elicitation" ? { ...m, resolvedChip: chip } : m)),
+    );
+    await submitElicitationResponse(chip);
+  }
+
   return (
     // Docked to the right edge, vertically centered — a persistent companion
     // rail rather than a corner action button, and deliberately clear of
@@ -357,6 +392,7 @@ export function CompanionWidget() {
                   onDismiss={(m) => respondToIntervention(m, "dismissed")}
                   onAcceptPromptOffer={acceptPromptOffer}
                   onDeclinePromptOffer={resolvePromptOffer}
+                  onSelectElicitationChip={handleElicitationChip}
                 />
               ))}
               {sending && (
@@ -428,6 +464,7 @@ function MessageBubble({
   onDismiss,
   onAcceptPromptOffer,
   onDeclinePromptOffer,
+  onSelectElicitationChip,
 }: {
   message: CompanionMessage;
   showAlternatives: boolean;
@@ -437,6 +474,10 @@ function MessageBubble({
   onDismiss: (m: InterventionMessage) => void;
   onAcceptPromptOffer: (m: PromptOfferMessage) => void;
   onDeclinePromptOffer: (m: PromptOfferMessage) => void;
+  onSelectElicitationChip: (
+    m: ElicitationMessage,
+    chip: "Price" | "Trust or quality" | "Still comparing",
+  ) => void;
 }) {
   const isShopper = message.role === "shopper";
 
@@ -448,6 +489,31 @@ function MessageBubble({
         }`}
       >
         {message.text}
+      </div>
+    );
+  }
+
+  if (message.kind === "elicitation") {
+    return (
+      <div className="max-w-[90%] self-start rounded-xl bg-slate-100 px-3 py-2.5 text-xs text-slate-800">
+        <p className="font-semibold text-slate-900">{message.text}</p>
+        {!message.resolvedChip ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {(["Price", "Trust or quality", "Still comparing"] as const).map((chip) => (
+              <button
+                key={chip}
+                onClick={() => onSelectElicitationChip(message, chip)}
+                className="rounded-full border border-emerald-600 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-50"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-1.5 text-[10px] italic text-slate-500">
+            Selected: <span className="font-medium text-slate-700">{message.resolvedChip}</span>
+          </p>
+        )}
       </div>
     );
   }

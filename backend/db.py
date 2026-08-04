@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS intervention_events (
 CREATE TABLE IF NOT EXISTS decisions (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id    TEXT NOT NULL,
-    decision_type TEXT NOT NULL CHECK (decision_type IN ('intervene', 'do_nothing')),
+    decision_type TEXT NOT NULL CHECK (decision_type IN ('intervene', 'do_nothing', 'elicited')),
     reason        TEXT,
     detail        TEXT,
     root_cause    TEXT,
@@ -104,6 +104,37 @@ CREATE INDEX IF NOT EXISTS idx_events_session ON intervention_events (session_id
 CREATE INDEX IF NOT EXISTS idx_decisions_session ON decisions (session_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_session ON reservations (session_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_product ON reservations (product_id);
+CREATE TABLE IF NOT EXISTS session_emails (
+    session_id TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    captured_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS session_timelines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    event_data TEXT NOT NULL,
+    timestamp REAL NOT NULL,
+    duration_seconds REAL,
+    page TEXT
+);
+
+CREATE TABLE IF NOT EXISTS reengagement_emails (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    email_to TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    body_html TEXT NOT NULL,
+    analysis_summary TEXT,
+    behavioral_signals TEXT,
+    generated_at REAL NOT NULL,
+    sent_at REAL,
+    status TEXT NOT NULL DEFAULT 'pending'
+);
+
+CREATE INDEX IF NOT EXISTS idx_timeline_session ON session_timelines (session_id);
+CREATE INDEX IF NOT EXISTS idx_reengagement_session ON reengagement_emails (session_id);
 """
 
 

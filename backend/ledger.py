@@ -47,7 +47,14 @@ def record_decision(
     this table exists to defend.
     """
     at = at if at is not None else time.time()
-    delivered = payload.outcome == "delivered"
+    if payload.outcome == "elicited":
+        decision_type = "elicited"
+    elif payload.outcome == "delivered":
+        decision_type = "intervene"
+    else:
+        decision_type = "do_nothing"
+
+    delivered = payload.outcome in ("delivered", "elicited")
 
     with connection:
         db.touch_session(connection, payload.session_id, at)
@@ -59,7 +66,7 @@ def record_decision(
             """,
             (
                 payload.session_id,
-                "intervene" if delivered else "do_nothing",
+                decision_type,
                 payload.reason,
                 payload.detail,
                 payload.root_cause,
@@ -292,7 +299,9 @@ def build_session_ledger(
     ).fetchall()
     counts = {row["decision_type"]: row["n"] for row in verdicts}
     held_count = counts.get("do_nothing", 0)
-    total_decisions = held_count + counts.get("intervene", 0)
+    inferred_count = counts.get("intervene", 0)
+    elicitation_count = counts.get("elicited", 0)
+    total_decisions = held_count + inferred_count + elicitation_count
 
     return SessionLedgerResponse(
         session_id=session_id,
@@ -304,4 +313,6 @@ def build_session_ledger(
         suppressedRung3=suppressed,
         spendAvoidedInr=sum(entry.totalInr for entry in spend_by_lever.values()),
         spendAvoidedByLever=spend_by_lever,
+        elicitation_count=elicitation_count,
+        inferred_count=inferred_count,
     )

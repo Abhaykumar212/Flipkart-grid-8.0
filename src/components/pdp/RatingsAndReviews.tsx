@@ -7,6 +7,8 @@ import { useTracker } from "../../context/TrackerContext";
 import { pageContext } from "../../lib/pageContext";
 import { InlineHighlight } from "../intervention/InlineHighlight";
 import { useInlineTarget } from "../intervention/useInlineTarget";
+import { useIntervention } from "../../context/InterventionContext";
+import { rankReviewsForDiagnosis } from "../../lib/adaptiveContent";
 
 /** Continuous time the reviews section must stay in view before the companion offers to summarize. */
 const REVIEW_DWELL_THRESHOLD_MS = 15_000;
@@ -67,6 +69,7 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
   const sectionRef = useRef<HTMLElement>(null);
   const recorded = useRef(false);
   const { recordReviewVisibility } = useTracker();
+  const { diagnosis } = useIntervention();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   // A second, dedicated ref — `sectionRef` above is already committed to the
   // dwell-tracking IntersectionObservers.
@@ -120,8 +123,14 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
     };
   }, [productId]);
 
-  const visibleReviews = reviews.slice(0, visibleCount);
-  const remaining = reviews.length - visibleReviews.length;
+  // Passive content ordering only: no new intervention surface and no fatigue
+  // budget spend, including when delivery selected do_nothing.
+  const orderedReviews = rankReviewsForDiagnosis(
+    reviews,
+    diagnosis?.productId === productId ? diagnosis.analysis : null,
+  );
+  const visibleReviews = orderedReviews.slice(0, visibleCount);
+  const remaining = orderedReviews.length - visibleReviews.length;
 
   const showMore = () => {
     setVisibleCount((v) => Math.min(reviews.length, v + PAGE_SIZE));

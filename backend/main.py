@@ -34,7 +34,7 @@ from ml.feature_engineering import (  # noqa: E402
 )
 
 from . import config, db, ledger, reservations  # noqa: E402
-from .agents import companion_chat, critic, explanation_scorer, gate, intervention, root_cause  # noqa: E402
+from .agents import browsing_intent, companion_chat, critic, explanation_scorer, gate, intervention, reengagement, root_cause  # noqa: E402
 from .agents.memory import memory_store  # noqa: E402
 from .schemas import (  # noqa: E402
     CartAddRequest,
@@ -42,9 +42,12 @@ from .schemas import (  # noqa: E402
     CompanionChatRequest,
     CompanionChatResponse,
     DeliveryDecisionRequest,
+    ElicitationResponseRequest,
     GateDecision,
     InterventionPlan,
+    PrimaryRootCause,
     ProductAvailability,
+    RootCauseAnalysis,
     RootCauseResponse,
     SessionLedgerResponse,
     ShopperProfile,
@@ -507,6 +510,126 @@ def root_cause_analysis(payload: RootCauseRequest) -> RootCauseResponse:
     )
 
 
+CHIP_TO_ROOT_CAUSE: Dict[str, str] = {
+    "Price": "cost_friction",
+    "Trust or quality": "trust_friction",
+    "Still comparing": "product_uncertainty",
+}
+
+
+@app.post("/api/elicitation-response", response_model=RootCauseResponse)
+def elicitation_response(payload: ElicitationResponseRequest) -> RootCauseResponse:
+    """Handle user response to elicitation prompt ("What's holding you back?").
+
+    Skips LLM RCA agent for this turn because the shopper explicitly told us
+    the cause, maps the chip to a root cause, runs Phase 3 ranking, passes through
+    critic and explanation scorer, and records decision as user-elicited.
+    """
+    recorder = TraceRecorder()
+    category = CHIP_TO_ROOT_CAUSE.get(payload.chip, "cost_friction")
+    probability = payload.probability if payload.probability is not None else 0.85
+
+    analysis = RootCauseAnalysis(
+        primary_root_cause=PrimaryRootCause(
+            category=category,
+            headline=f"User-elicited friction: {payload.chip}",
+            explanation=f"Shopper selected '{payload.chip}' when asked what was holding them back.",
+            supporting_evidence=[],
+        ),
+        contributing_factors=[],
+        shopper_narrative=f"User explicitly indicated '{payload.chip}'.",
+        confidence="high",
+        confidence_reasoning="Direct user declaration via elicitation prompt.",
+        recommended_levers=[],
+        levers_to_avoid=[],
+    )
+
+    with recorder.span(Stage.INTERVENTION_RANKING, "Rank interventions (elicited)") as span:
+        plan = intervention.build_intervention_plan(
+            analysis=analysis,
+            probability=probability,
+            shopper_profile=payload.shopper_profile,
+            session_id=payload.session_id,
+            memory=memory_store,
+        )
+        span["detail"] = {
+            "top_lever_ids": [item.lever_id for item in plan.top_interventions],
+            "top_scores": [item.score for item in plan.top_interventions],
+            "fallback_lever_id": plan.fallback_intervention.lever_id if plan.fallback_intervention else None,
+            "excluded_lever_ids": plan.excluded_lever_ids,
+            "elicited": True,
+            "chip": payload.chip,
+        }
+
+    verdict = critic.review(analysis, plan, recorder)
+    connection = db.get_db()
+    for lever_id, reason in verdict.rejected:
+        ledger.record_critic_rejection(
+            connection,
+            session_id=payload.session_id,
+            lever_id=lever_id,
+            reason=reason,
+            root_cause=category,
+        )
+
+    if verdict.approved_lever_id is None:
+        detail = "; ".join(f"{lever_id}: {reason}" for lever_id, reason in verdict.rejected)
+        ledger.record_decision(
+            connection,
+            DeliveryDecisionRequest(
+                session_id=payload.session_id,
+                outcome="held",
+                reason="critic_rejected",
+                detail=detail,
+                root_cause=category,
+                probability=probability,
+            ),
+        )
+        return RootCauseResponse(
+            pipeline_run_id=recorder.run_id,
+            status="critic_blocked",
+            prediction={"abandonment_probability": probability, "risk_tier": _risk_tier(probability)},
+            gate=GateDecision(fired=True, threshold=0.80, reason="user_elicited"),
+            analysis=analysis,
+            message="Critic rejected every ranked lever.",
+            trace=[TraceSpan(**span) for span in recorder.spans],
+        )
+
+    explanation_result = explanation_scorer.score(analysis, [], recorder)
+    ledger.annotate_latest_event(
+        connection,
+        session_id=payload.session_id,
+        lever_id=verdict.approved_lever_id,
+        action="shown",
+        explanation_verdict=explanation_result.verdict,
+    )
+
+    ledger.record_decision(
+        connection,
+        DeliveryDecisionRequest(
+            session_id=payload.session_id,
+            outcome="elicited",
+            reason="user_elicited",
+            detail=f"User selected '{payload.chip}' chip",
+            root_cause=category,
+            probability=probability,
+            lever_id=verdict.approved_lever_id,
+            confidence="high",
+        ),
+    )
+
+    return RootCauseResponse(
+        pipeline_run_id=recorder.run_id,
+        status="success",
+        prediction={"abandonment_probability": probability, "risk_tier": _risk_tier(probability)},
+        gate=GateDecision(fired=True, threshold=0.80, reason="user_elicited"),
+        analysis=analysis,
+        intervention_plan=_approved_plan(plan, verdict.approved_lever_id),
+        trace=[TraceSpan(**span) for span in recorder.spans],
+    )
+
+
+
 def _approved_plan(plan: InterventionPlan, approved_lever_id: str) -> InterventionPlan:
     """Drop everything the critic rejected, keeping ranked order below it.
 
@@ -654,3 +777,406 @@ def companion_chat_endpoint(payload: CompanionChatRequest) -> CompanionChatRespo
         model_used=meta.get("model_used"),
         latency_ms=meta.get("latency_ms", 0.0),
     )
+
+
+# ============================================================================
+# Re-engagement email system
+# ============================================================================
+
+from .agents import reengagement as reengagement_agent  # noqa: E402
+from . import email_service  # noqa: E402
+
+
+class EmailCaptureRequest(BaseModel):
+    """Capture the shopper's email for re-engagement."""
+
+    model_config = ConfigDict(extra="forbid")
+    session_id: str
+    email: str
+
+
+class TimelineEventPayload(BaseModel):
+    """A single behavioral event from the frontend timeline tracker."""
+
+    model_config = ConfigDict(extra="forbid")
+    type: str
+    timestamp: float
+    data: Dict[str, Any] = Field(default_factory=dict)
+    duration_seconds: Optional[float] = None
+    page: Optional[str] = None
+
+
+class TimelineSyncRequest(BaseModel):
+    """Batch of timeline events sent by the frontend periodic sync."""
+
+    model_config = ConfigDict(extra="forbid")
+    session_id: str
+    events: list[TimelineEventPayload]
+
+
+class SessionEndRequest(BaseModel):
+    """Fired when the frontend detects session end (tab close / idle)."""
+
+    model_config = ConfigDict(extra="forbid")
+    session_id: str
+    events: list[TimelineEventPayload] = Field(default_factory=list)
+    converted: bool = False
+
+
+def _store_timeline_events(
+    connection, session_id: str, events: list[TimelineEventPayload]
+) -> int:
+    """Persist timeline events to SQLite. Returns count inserted."""
+    import time as _time
+
+    db.touch_session(connection, session_id, _time.time())
+    inserted = 0
+    for event in events:
+        connection.execute(
+            """
+            INSERT INTO session_timelines
+                (session_id, event_type, event_data, timestamp, duration_seconds, page)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session_id,
+                event.type,
+                json.dumps(event.data),
+                event.timestamp,
+                event.duration_seconds,
+                event.page,
+            ),
+        )
+        inserted += 1
+    connection.commit()
+    return inserted
+
+
+def _load_timeline(connection, session_id: str) -> list[dict]:
+    """Load all timeline events for a session, oldest first."""
+    rows = connection.execute(
+        """
+        SELECT event_type, event_data, timestamp, duration_seconds, page
+        FROM session_timelines
+        WHERE session_id = ?
+        ORDER BY timestamp ASC
+        """,
+        (session_id,),
+    ).fetchall()
+    return [
+        {
+            "type": row["event_type"],
+            "data": json.loads(row["event_data"]),
+            "timestamp": row["timestamp"],
+            "duration_seconds": row["duration_seconds"],
+            "page": row["page"],
+        }
+        for row in rows
+    ]
+
+
+def _build_product_catalog_from_timeline(events: list[dict]) -> dict:
+    """Extract product IDs from timeline and build a catalog stub.
+
+    The real product catalog lives on the frontend (src/data/products.ts).
+    We reconstruct what we can from the event data the frontend sent us.
+    """
+    catalog: Dict[str, Any] = {}
+    for event in events:
+        data = event.get("data", {})
+        product_id = data.get("productId") or data.get("product_id")
+        if product_id and product_id not in catalog:
+            catalog[product_id] = {
+                "id": product_id,
+                "name": data.get("productName", data.get("product_name", product_id)),
+                "price": data.get("price"),
+                "category": data.get("category"),
+            }
+    return catalog
+
+
+@app.post("/api/capture-email")
+def capture_email(payload: EmailCaptureRequest) -> dict:
+    """Store the shopper's email so we can send re-engagement messages."""
+    import time as _time
+
+    connection = db.get_db()
+    db.touch_session(connection, payload.session_id, _time.time())
+    connection.execute(
+        """
+        INSERT INTO session_emails (session_id, email, captured_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET email = excluded.email
+        """,
+        (payload.session_id, payload.email, _time.time()),
+    )
+    connection.commit()
+    return {"status": "captured", "session_id": payload.session_id}
+
+
+@app.post("/api/sync-timeline")
+def sync_timeline(payload: TimelineSyncRequest) -> dict:
+    """Receive a batch of behavioral events from the frontend."""
+    connection = db.get_db()
+    count = _store_timeline_events(connection, payload.session_id, payload.events)
+    return {"status": "synced", "events_stored": count}
+
+
+@app.post("/api/session-end")
+def session_end(payload: SessionEndRequest) -> dict:
+    """Session ended — store final events and trigger re-engagement if abandoned."""
+    connection = db.get_db()
+
+    # Store any remaining events
+    if payload.events:
+        _store_timeline_events(connection, payload.session_id, payload.events)
+
+    # If they converted, no re-engagement needed
+    if payload.converted:
+        return {"status": "converted", "reengagement": False}
+
+    # Check if we have an email for this session
+    row = connection.execute(
+        "SELECT email FROM session_emails WHERE session_id = ?",
+        (payload.session_id,),
+    ).fetchone()
+
+    if not row:
+        return {"status": "no_email", "reengagement": False}
+
+    email = row["email"]
+
+    # Load the full timeline
+    events = _load_timeline(connection, payload.session_id)
+    if len(events) < 3:
+        return {"status": "insufficient_data", "reengagement": False}
+
+    # Build product catalog from events
+    catalog = _build_product_catalog_from_timeline(events)
+
+    # Check if Groq is configured
+    if not config.groq_is_configured():
+        return {"status": "llm_not_configured", "reengagement": False}
+
+    # Run the re-engagement pipeline
+    result = reengagement_agent.run_reengagement_pipeline(
+        session_id=payload.session_id,
+        timeline_events=events,
+        user_email=email,
+        product_catalog=catalog,
+    )
+
+    if result.get("status") != "generated":
+        return {"status": "generation_failed", "error": result.get("error", "Unknown")}
+
+    import time as _time
+
+    # Store the generated email
+    connection.execute(
+        """
+        INSERT INTO reengagement_emails
+            (session_id, email_to, subject, body_html, analysis_summary,
+             behavioral_signals, generated_at, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'generated')
+        """,
+        (
+            payload.session_id,
+            email,
+            result["subject"],
+            result["body_html"],
+            result.get("analysis_summary", ""),
+            result.get("behavioral_signals", ""),
+            _time.time(),
+        ),
+    )
+    connection.commit()
+
+    # Try to send the email
+    sent = email_service.send_email(email, result["subject"], result["body_html"])
+    if sent:
+        connection.execute(
+            """
+            UPDATE reengagement_emails
+            SET status = 'sent', sent_at = ?
+            WHERE session_id = ?
+            ORDER BY id DESC LIMIT 1
+            """,
+            (_time.time(), payload.session_id),
+        )
+        connection.commit()
+
+    return {
+        "status": "success",
+        "reengagement": True,
+        "email_sent": sent,
+        "subject": result["subject"],
+        "analysis_summary": result.get("analysis_summary"),
+    }
+
+
+@app.post("/api/trigger-reengagement/{session_id}")
+def trigger_reengagement(session_id: str) -> dict:
+    """Manual trigger for demo — generate and optionally send re-engagement email."""
+    connection = db.get_db()
+
+    # Load timeline
+    events = _load_timeline(connection, session_id)
+    if not events:
+        raise HTTPException(status_code=404, detail="No timeline data for this session")
+
+    # Get email (optional for preview)
+    row = connection.execute(
+        "SELECT email FROM session_emails WHERE session_id = ?",
+        (session_id,),
+    ).fetchone()
+    email = row["email"] if row else "demo@example.com"
+
+    # Build catalog from events
+    catalog = _build_product_catalog_from_timeline(events)
+
+    if not config.groq_is_configured():
+        raise HTTPException(status_code=503, detail="GROQ_API_KEY not configured")
+
+    # Run pipeline
+    result = reengagement_agent.run_reengagement_pipeline(
+        session_id=session_id,
+        timeline_events=events,
+        user_email=email,
+        product_catalog=catalog,
+    )
+
+    if result.get("status") != "generated":
+        raise HTTPException(
+            status_code=500,
+            detail=f"Re-engagement generation failed: {result.get('error', 'Unknown')}",
+        )
+
+    import time as _time
+
+    # Store the email
+    connection.execute(
+        """
+        INSERT INTO reengagement_emails
+            (session_id, email_to, subject, body_html, analysis_summary,
+             behavioral_signals, generated_at, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'generated')
+        """,
+        (
+            session_id,
+            email,
+            result["subject"],
+            result["body_html"],
+            result.get("analysis_summary", ""),
+            result.get("behavioral_signals", ""),
+            _time.time(),
+        ),
+    )
+    connection.commit()
+
+    # Attempt to send
+    sent = email_service.send_email(email, result["subject"], result["body_html"])
+    if sent and email != "demo@example.com":
+        connection.execute(
+            """
+            UPDATE reengagement_emails SET status = 'sent', sent_at = ?
+            WHERE session_id = ? ORDER BY id DESC LIMIT 1
+            """,
+            (_time.time(), session_id),
+        )
+        connection.commit()
+
+    return {
+        "status": "success",
+        "subject": result["subject"],
+        "body_html": result["body_html"],
+        "analysis_summary": result.get("analysis_summary"),
+        "behavioral_signals": result.get("behavioral_signals"),
+        "email_sent": sent and email != "demo@example.com",
+        "model_used": result.get("model_used"),
+        "latency_ms": result.get("latency_ms"),
+    }
+
+
+@app.get("/api/reengagement-preview/{session_id}")
+def reengagement_preview(session_id: str) -> dict:
+    """Preview the most recent re-engagement email for a session."""
+    connection = db.get_db()
+    row = connection.execute(
+        """
+        SELECT subject, body_html, analysis_summary, behavioral_signals,
+               email_to, status, generated_at, sent_at
+        FROM reengagement_emails
+        WHERE session_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (session_id,),
+    ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="No re-engagement email found for this session")
+
+    return {
+        "session_id": session_id,
+        "subject": row["subject"],
+        "body_html": row["body_html"],
+        "analysis_summary": row["analysis_summary"],
+        "behavioral_signals": row["behavioral_signals"],
+        "email_to": row["email_to"],
+        "status": row["status"],
+        "generated_at": row["generated_at"],
+        "sent_at": row["sent_at"],
+    }
+
+
+@app.get("/api/reengagement-sessions")
+def reengagement_sessions() -> dict:
+    """List all sessions with timeline data for the dashboard."""
+    connection = db.get_db()
+
+    rows = connection.execute(
+        """
+        SELECT
+            t.session_id,
+            e.email,
+            COUNT(t.id) AS event_count,
+            MIN(t.timestamp) AS first_event,
+            MAX(t.timestamp) AS last_event,
+            r.status AS email_status,
+            r.subject AS email_subject
+        FROM session_timelines t
+        LEFT JOIN session_emails e ON t.session_id = e.session_id
+        LEFT JOIN (
+            SELECT session_id, status, subject,
+                   ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY id DESC) AS rn
+            FROM reengagement_emails
+        ) r ON t.session_id = r.session_id AND r.rn = 1
+        GROUP BY t.session_id
+        ORDER BY MAX(t.timestamp) DESC
+        """
+    ).fetchall()
+
+    sessions = [
+        {
+            "session_id": row["session_id"],
+            "email": row["email"],
+            "event_count": row["event_count"],
+            "first_event": row["first_event"],
+            "last_event": row["last_event"],
+            "email_status": row["email_status"],
+            "email_subject": row["email_subject"],
+        }
+        for row in rows
+    ]
+
+    return {"sessions": sessions, "total": len(sessions)}
+
+
+@app.post("/api/browsing-intent")
+def handle_browsing_intent(payload: Dict[str, Any]) -> dict:
+    """Analyze real-time browsing intent cues via dedicated BROWSING_AGENT_GROQ_API_KEY."""
+    return browsing_intent.analyze_browsing_intent(payload)
+
+
+
+

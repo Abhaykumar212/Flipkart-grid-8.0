@@ -39,6 +39,13 @@ GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").rst
 # key if unset, so a single-key setup still works.
 COMPANION_GROQ_API_KEY = os.getenv("COMPANION_GROQ_API_KEY", "").strip() or GROQ_API_KEY
 
+# Dedicated key for the post-session re-engagement email drafting agent.
+REENGAGEMENT_GROQ_API_KEY = os.getenv("REENGAGEMENT_GROQ_API_KEY", "").strip() or GROQ_API_KEY
+
+# Dedicated key for the real-time Browsing & Search Intent Agent.
+BROWSING_AGENT_GROQ_API_KEY = os.getenv("BROWSING_AGENT_GROQ_API_KEY", "").strip() or GROQ_API_KEY
+BROWSING_AGENT_MODEL = os.getenv("BROWSING_AGENT_MODEL", "llama-3.3-70b-versatile").strip()
+
 # Benchmarked against the real RCA payload and schema before selection:
 #   gpt-oss-120b  strict json_schema, effort=low,  4000 tok -> OK, ~3.8s
 #   gpt-oss-120b  strict json_schema, effort=med,  6000 tok -> HTTP 413 (free-tier TPM)
@@ -150,18 +157,14 @@ EXPLANATION_SCORER_REGENERATE_MAX_TOKENS = int(
 
 # --- Trigger policy ---------------------------------------------------------
 
-# Matches the "high" tier in main._risk_tier. Chosen from the model's own
-# holdout threshold table: at 0.80 precision is 0.904 and coverage 40.2%, so
-# roughly 9 in 10 analysed sessions genuinely abandon.
-RCA_PROBABILITY_THRESHOLD = float(os.getenv("RCA_PROBABILITY_THRESHOLD", "0.80"))
+# Matches the trigger policy. Lowered to 0.40 for live demo responsiveness.
+RCA_PROBABILITY_THRESHOLD = float(os.getenv("RCA_PROBABILITY_THRESHOLD", "0.40"))
 
-# Cart must be at least this old before analysis; features are unstable before
-# then. Mirrors EVIDENCE_WARMUP_MS in the frontend TrackerContext.
-RCA_MIN_CART_AGE_SECONDS = float(os.getenv("RCA_MIN_CART_AGE_SECONDS", "10"))
+# Cart minimum age before analysis. Set to 0.0 for instant demo feedback.
+RCA_MIN_CART_AGE_SECONDS = float(os.getenv("RCA_MIN_CART_AGE_SECONDS", "0.0"))
 
-# Re-analyse only when the material feature signature changes, or after this
-# cooldown. Without it the 5s frontend poll would fire an LLM call every poll.
-RCA_COOLDOWN_SECONDS = float(os.getenv("RCA_COOLDOWN_SECONDS", "90"))
+# Re-analyse cooldown. Set to 5.0s for demo.
+RCA_COOLDOWN_SECONDS = float(os.getenv("RCA_COOLDOWN_SECONDS", "5.0"))
 
 # Hard per-session budget, independent of the cooldown.
 RCA_MAX_PER_SESSION = int(os.getenv("RCA_MAX_PER_SESSION", "10"))

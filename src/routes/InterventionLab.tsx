@@ -66,24 +66,43 @@ export default function InterventionLab() {
         <section className="flex flex-col gap-3">
           <h2 className="text-fk-md font-semibold text-fk-ink">InlineHighlight — rung 0</h2>
           <p className="text-fk-sm text-fk-muted">
-            Wraps an existing page element. Toggle it to confirm the glow pulse never shifts the layout around it.
+            Two variants side by side: <strong>glow</strong> (animated gradient + caption) and <strong>quiet</strong> (subtle tint + bolder text, no animation).
           </p>
-          <div className="rounded-xl border border-fk-border bg-white p-5">
-            <div className="flex items-center gap-2 text-fk-lg font-semibold text-fk-ink">
-              <span>Price:</span>
-              <InlineHighlight
-                active={inlineActive}
-                title="Price drop highlight"
-                body="Price dropped 8% in the last 3 hours."
-                actionLabel="See history"
-                onAction={() => console.log("[lab] inline action")}
-                onDismiss={() => setInlineActive(false)}
-                reasonText="Price dropped 8% — shown because you viewed this item twice."
-              >
-                <span className="rounded-md bg-fk-bg px-2 py-1">₹24,999</span>
-              </InlineHighlight>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            {/* ── glow (default) ───────────────────────────────────── */}
+            <div className="rounded-xl border border-fk-border bg-white p-5">
+              <p className="mb-2 text-fk-xs font-semibold uppercase tracking-wider text-fk-muted">variant=&quot;glow&quot;</p>
+              <div className="flex items-center gap-2 text-fk-lg font-semibold text-fk-ink">
+                <span>Price:</span>
+                <InlineHighlight
+                  variant="glow"
+                  active={inlineActive}
+                  title="Price drop highlight"
+                  body="Price dropped 8% in the last 3 hours."
+                  actionLabel="See history"
+                  onAction={() => console.log("[lab] inline action")}
+                  onDismiss={() => setInlineActive(false)}
+                  reasonText="Price dropped 8% — shown because you viewed this item twice."
+                >
+                  <span className="rounded-md bg-fk-bg px-2 py-1">₹24,999</span>
+                </InlineHighlight>
+              </div>
+              <p className="mt-3 text-fk-sm text-fk-ink/70">Free delivery by Thu, Aug 6 · 4.3★ (12,204 ratings)</p>
             </div>
-            <p className="mt-3 text-fk-sm text-fk-ink/70">Free delivery by Thu, Aug 6 · 4.3★ (12,204 ratings)</p>
+            {/* ── quiet ─────────────────────────────────────────────── */}
+            <div className="rounded-xl border border-fk-border bg-white p-5">
+              <p className="mb-2 text-fk-xs font-semibold uppercase tracking-wider text-fk-muted">variant=&quot;quiet&quot;</p>
+              <div className="flex items-center gap-2 text-fk-lg font-semibold text-fk-ink">
+                <span>Price:</span>
+                <InlineHighlight
+                  variant="quiet"
+                  title="Relevant specification"
+                >
+                  <span className="rounded-md bg-fk-bg px-2 py-1">₹24,999</span>
+                </InlineHighlight>
+              </div>
+              <p className="mt-3 text-fk-sm text-fk-ink/70">Free delivery by Thu, Aug 6 · 4.3★ (12,204 ratings)</p>
+            </div>
           </div>
           <div>
             <button
@@ -91,7 +110,7 @@ export default function InterventionLab() {
               onClick={() => setInlineActive((v) => !v)}
               className="rounded-full border border-fk-border bg-white px-4 py-2 text-fk-sm font-medium text-fk-ink transition hover:bg-fk-bg"
             >
-              Toggle inline highlight ({inlineActive ? "on" : "off"})
+              Toggle glow variant ({inlineActive ? "on" : "off"})
             </button>
           </div>
         </section>

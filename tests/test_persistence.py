@@ -30,7 +30,13 @@ class TempDatabaseCase(unittest.TestCase):
     def setUp(self) -> None:
         self._dir = tempfile.TemporaryDirectory()
         self.db_path = os.path.join(self._dir.name, "test.db")
-        self.addCleanup(self._dir.cleanup)
+
+    def tearDown(self) -> None:
+        db.reset_thread_connection()
+        try:
+            self._dir.cleanup()
+        except Exception:
+            pass
 
     def connect(self) -> sqlite3.Connection:
         connection = db.get_db(self.db_path)

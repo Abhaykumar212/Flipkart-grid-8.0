@@ -110,7 +110,7 @@ export function QuestionsAndAnswers({
         <div className="flex gap-2">
           <input
             type="text"
-            placeholder="Type your question here..."
+            placeholder={`Ask about ${productTitle} by ${brand}...`}
             value={questionText}
             onChange={(e) => setQuestionText(e.target.value)}
             className="flex-1 border border-fk-border rounded-[2px] px-4 py-2 text-fk-base focus:outline-none focus:border-fk-blue"

@@ -128,7 +128,7 @@ export type NoInterventionReason =
  * like any backend-produced stage.
  */
 export interface DeliveryDecision {
-  outcome: "delivered" | "held";
+  outcome: "delivered" | "held" | "elicited";
   /** Demo-facing summary line, e.g. "Decision: no intervention — user likely to convert unaided (p=0.019)". */
   headline: string;
   /** Supporting detail — the specific check or gate reason behind the headline. */

@@ -241,12 +241,12 @@ class SuppressedLever(BaseModel):
 
 
 class DeliveryDecisionRequest(BaseModel):
-    """One per pipeline run — mirrors `selectSurface`'s deliver/hold union."""
+    """One per pipeline run — mirrors `selectSurface`'s deliver/hold/elicit union."""
 
     model_config = ConfigDict(extra="forbid")
 
     session_id: str
-    outcome: Literal["delivered", "held"]
+    outcome: Literal["delivered", "held", "elicited"]
     reason: Optional[str] = None
     detail: Optional[str] = None
     root_cause: Optional[str] = None
@@ -299,6 +299,21 @@ class SessionLedgerResponse(BaseModel):
     suppressedRung3: List[SuppressedLeverRecord] = Field(default_factory=list)
     spendAvoidedInr: int = 0
     spendAvoidedByLever: Dict[str, SpendAvoidedEntry] = Field(default_factory=dict)
+    elicitation_count: int = 0
+    inferred_count: int = 0
+
+
+class ElicitationResponseRequest(BaseModel):
+    """Payload for user-selected elicitation chip."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    chip: Literal["Price", "Trust or quality", "Still comparing"]
+    probability: Optional[float] = None
+    cart_context: CartContext = Field(default_factory=CartContext)
+    shopper_profile: ShopperProfile = Field(default_factory=ShopperProfile)
+
 
 
 # --- Inventory holds --------------------------------------------------------

@@ -10,11 +10,12 @@ import {
 } from "react";
 import { useLocation } from "react-router-dom";
 import { useTracker } from "./TrackerContext";
-import { sendDeliveryDecision, sendInterventionFeedback } from "../lib/tracker";
+import { sendDeliveryDecision, sendElicitationResponse, sendInterventionFeedback } from "../lib/tracker";
 import { fatigueBudget } from "../lib/fatigueBudget";
 import {
   assertPolicyCoverage,
   findSuppressedRung3Levers,
+  LEVER_POLICY,
   resolveMarginApproval,
   selectSurface,
   type Intensity,
@@ -26,6 +27,9 @@ import { LEVER_TARGET_KEYS } from "../lib/interventionTargets";
 import { getAllMounted } from "../lib/targetRegistry";
 import { pipelineTrace, type DeliveryDecision, type RecommendedIntervention } from "../lib/pipelineTrace";
 import { interventionLedger } from "../lib/interventionLedger";
+import { pageContext } from "../lib/pageContext";
+import type { RootCauseAnalysis } from "../lib/pipelineTrace";
+import { useCart } from "./CartContext";
 
 /**
  * Delivery layer between the Phase 3 intervention plan and the screen.
@@ -45,6 +49,15 @@ interface InterventionContextValue {
   alternatives: RecommendedIntervention[];
   /** Why the policy landed where it did — for the pipeline console. */
   decisionReason: string | null;
+  /**
+   * Diagnosis bound to the product being analysed. Passive content adaptation
+   * reads this even when delivery deliberately chose do_nothing; it is not an
+   * intervention and never consumes the intensity/fatigue budget.
+   */
+  diagnosis: { productId: string; analysis: RootCauseAnalysis } | null;
+  isEliciting: boolean;
+  submitElicitationResponse: (chip: "Price" | "Trust or quality" | "Still comparing") => Promise<void>;
+  dismissElicitation: () => void;
   accept: () => void;
   dismiss: () => void;
 }
@@ -53,10 +66,13 @@ const InterventionContext = createContext<InterventionContextValue | null>(null)
 
 export function InterventionProvider({ children }: { children: ReactNode }) {
   const { rootCause } = useTracker();
+  const { items } = useCart();
   const location = useLocation();
 
   const [selected, setSelected] = useState<SelectedIntervention | null>(null);
   const [alternatives, setAlternatives] = useState<RecommendedIntervention[]>([]);
+  const [diagnosis, setDiagnosis] = useState<InterventionContextValue["diagnosis"]>(null);
+  const [isEliciting, setIsEliciting] = useState(false);
   const handledRunId = useRef<string | null>(null);
 
   // A navigation opens a fresh attention window and retires whatever was on
@@ -79,6 +95,16 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
     // a decision, just one made a stage earlier than selectSurface. Only
     // gate_not_met is a business decision; rate_limited/not_configured/error
     // are operational failures, not a deliberate "do nothing" call.
+    const analysis = rootCause.analysis;
+    if (analysis) {
+      // Passive diagnosis consumers are updated independently of delivery.
+      // This includes critic-blocked/do_nothing outcomes and spends no budget.
+      const productId = pageContext.getSnapshot().currentProductId ?? items[0]?.productId;
+      setDiagnosis(productId ? { productId, analysis } : null);
+    } else {
+      setDiagnosis(null);
+    }
+
     if (rootCause.status !== "success") {
       if (rootCause.status === "gate_not_met") {
         const probability = rootCause.prediction.abandonment_probability;
@@ -108,7 +134,6 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
     }
 
     const plan = rootCause.intervention_plan;
-    const analysis = rootCause.analysis;
     if (!plan || !analysis) return;
 
     const ranked = [
@@ -127,6 +152,8 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
     const surfaceOptions: SelectSurfaceOptions = {
       rootCause: analysis.primary_root_cause.category,
       marginApproved: resolveMarginApproval(),
+      probability: rootCause.prediction.abandonment_probability,
+      hasElicited: fatigueBudget.hasElicitedThisSession(),
     };
     const outcome = selectSurface(ranked, analysis.confidence, fatigueBudget.getState(), surfaceOptions);
 
@@ -151,6 +178,27 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
       reason: item.reason,
     }));
     const probability = rootCause.prediction.abandonment_probability;
+
+    if (outcome.decision === "elicit") {
+      fatigueBudget.recordElicited();
+      pipelineTrace.attachDecision(rootCause.pipeline_run_id, {
+        outcome: "delivered",
+        headline: "Decision: elicit shopper intent (Rung 1, Companion)",
+        detail: outcome.detail,
+        rootCause: outcome.rootCause,
+      });
+      void sendDeliveryDecision({
+        outcome: "elicited",
+        reason: outcome.reason,
+        detail: outcome.detail,
+        root_cause: outcome.rootCause,
+        probability,
+        confidence: analysis.confidence,
+        suppressed: suppressedForServer,
+      });
+      setIsEliciting(true);
+      return;
+    }
 
     if (outcome.decision === "hold") {
       // Deliberately leaves whatever is already on screen alone: it was paid
@@ -225,28 +273,74 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
     });
     setSelected(delivered);
     setAlternatives(ranked.filter((item) => item.lever_id !== delivered.intervention.lever_id));
-  }, [rootCause]);
+  }, [rootCause, items]);
 
   const resolve = useCallback(
     (action: "accepted" | "dismissed") => {
       const leverId = selected?.intervention.lever_id;
       if (!leverId || !selected) return;
-      // Single feedback path — `sendInterventionFeedback` in lib/tracker.ts is
-      // the only writer to /api/intervention-feedback. The delivery context rides
-      // along so the ledger can attribute the outcome to the rung it was spent on.
+
+      if (action === "accepted") {
+        fatigueBudget.recordAccepted(leverId);
+        // Actionable DOM navigation & modal triggers
+        if (leverId === "emi_plan_highlight") {
+          const emiEl = document.getElementById("emi-options") || document.querySelector("[data-section='emi']");
+          if (emiEl) emiEl.scrollIntoView({ behavior: "smooth" });
+        } else if (leverId === "review_summary_surface") {
+          const reviewsEl = document.getElementById("customer-reviews") || document.querySelector("[data-section='reviews']");
+          if (reviewsEl) reviewsEl.scrollIntoView({ behavior: "smooth" });
+        } else if (leverId === "stock_scarcity_nudge") {
+          const similarEl = document.getElementById("similar-products") || document.querySelector("[data-section='similar']");
+          if (similarEl) similarEl.scrollIntoView({ behavior: "smooth" });
+        }
+      } else {
+        fatigueBudget.recordDismissed(leverId);
+      }
+
       void sendInterventionFeedback(leverId, action, {
         intensity_rung: selected.intensity,
         surface: selected.surface,
         root_cause: selected.rootCause,
         confidence: selected.intervention.confidence,
       });
-      if (action === "accepted") fatigueBudget.recordAccepted(leverId);
-      else fatigueBudget.recordDismissed(leverId);
       setSelected(null);
       setAlternatives([]);
     },
     [selected],
   );
+
+  const submitElicitationResponse = useCallback(
+    async (chip: "Price" | "Trust or quality" | "Still comparing") => {
+      setIsEliciting(false);
+      const probability = rootCause?.prediction?.abandonment_probability;
+      const res = await sendElicitationResponse(chip, probability);
+      if (res && res.status === "success" && res.intervention_plan) {
+        const plan = res.intervention_plan;
+        const top = plan.top_interventions[0];
+        if (top) {
+          const policy = LEVER_POLICY[top.lever_id];
+          const picked: SelectedIntervention = {
+            intervention: top,
+            surface: policy?.surface ?? "companion",
+            intensity: policy?.intensity ?? 1,
+            rootCause: res.analysis?.primary_root_cause?.category ?? "cost_friction",
+            reason: `User-elicited (${chip})`,
+          };
+          fatigueBudget.recordShown(top.lever_id, {
+            rootCause: picked.rootCause,
+            intensity: picked.intensity,
+          });
+          setSelected(picked);
+          setAlternatives(plan.top_interventions.slice(1));
+        }
+      }
+    },
+    [rootCause],
+  );
+
+  const dismissElicitation = useCallback(() => {
+    setIsEliciting(false);
+  }, []);
 
   const value = useMemo<InterventionContextValue>(
     () => ({
@@ -255,10 +349,14 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
       intensity: selected?.intensity ?? null,
       alternatives,
       decisionReason: selected?.reason ?? null,
+      diagnosis,
+      isEliciting,
+      submitElicitationResponse,
+      dismissElicitation,
       accept: () => resolve("accepted"),
       dismiss: () => resolve("dismissed"),
     }),
-    [selected, alternatives, resolve],
+    [selected, alternatives, diagnosis, isEliciting, submitElicitationResponse, dismissElicitation, resolve],
   );
 
   return <InterventionContext.Provider value={value}>{children}</InterventionContext.Provider>;

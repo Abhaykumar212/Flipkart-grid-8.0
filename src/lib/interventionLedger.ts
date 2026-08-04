@@ -45,6 +45,8 @@ export interface LedgerSnapshot {
   suppressedRung3: SuppressedLeverRecord[];
   spendAvoidedInr: number;
   spendAvoidedByLever: Record<string, SpendAvoidedEntry>;
+  elicitationCount?: number;
+  inferredCount?: number;
 }
 
 interface LedgerState {

@@ -118,11 +118,15 @@ export interface SelectedIntervention {
   reason: string;
 }
 
+export const ELICITATION_PROBABILITY_THRESHOLD = 0.40;
+
 export interface SelectSurfaceOptions {
   marginApproved?: boolean;
   /** Diagnosed primary root-cause category; escalation is tracked per cause. */
   rootCause?: string;
   now?: number;
+  probability?: number;
+  hasElicited?: boolean;
 }
 
 /**
@@ -134,7 +138,8 @@ export interface SelectSurfaceOptions {
  */
 export type SurfaceDecision =
   | ({ decision: "deliver" } & SelectedIntervention)
-  | { decision: "hold"; reason: NoInterventionReason; detail: string; rootCause: string };
+  | { decision: "hold"; reason: NoInterventionReason; detail: string; rootCause: string }
+  | { decision: "elicit"; reason: string; detail: string; rootCause: string };
 
 export type Rung3SuppressionReason =
   | "confidence_gate"
@@ -304,6 +309,18 @@ export function selectSurface(
     };
   }
   if (confidence === "low") {
+    if (
+      options.probability !== undefined &&
+      options.probability >= ELICITATION_PROBABILITY_THRESHOLD &&
+      !options.hasElicited
+    ) {
+      return {
+        decision: "elicit",
+        reason: "low_confidence_hesitation",
+        detail: `probability (${options.probability.toFixed(3)}) >= ${ELICITATION_PROBABILITY_THRESHOLD} with low diagnostic confidence`,
+        rootCause,
+      };
+    }
     return {
       decision: "hold",
       reason: "low_confidence",

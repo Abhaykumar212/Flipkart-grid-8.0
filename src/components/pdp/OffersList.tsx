@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Landmark, Wallet, Repeat, Gift, Tag, ChevronDown, type LucideIcon } from "lucide-react";
 import type { Emi } from "../../types/product";
 import { formatINR } from "../../lib/format";
+import { compareEmiToCash } from "../../lib/emiMath";
 import { InlineHighlight } from "../intervention/InlineHighlight";
 import { useInlineTarget } from "../intervention/useInlineTarget";
 
@@ -60,14 +61,16 @@ function classify(text: string): OfferType {
  * realistic, non-empty offers block — matching Flipkart's real PDP, which
  * essentially always surfaces at least a bank offer and an EMI line.
  */
-function buildOfferRows(offers: string[], emi: Emi | undefined): OfferRow[] {
+function buildOfferRows(offers: string[], emi: Emi | undefined, sellingPrice: number): OfferRow[] {
   const rows: OfferRow[] = offers.map((text) => ({ type: classify(text), text }));
 
   if (emi && !rows.some((r) => r.type === "emi")) {
-    rows.push({
-      type: "emi",
-      text: `No Cost EMI starting ${formatINR(emi.monthly)}/month for ${emi.months} months`,
-    });
+    let emiText = `No Cost EMI starting ${formatINR(emi.monthly)}/month for ${emi.months} months`;
+    const comparison = compareEmiToCash(sellingPrice, emi);
+    if (comparison?.isMeaningfullyMore) {
+      emiText += ` — ${formatINR(comparison.difference)} more than paying in full`;
+    }
+    rows.push({ type: "emi", text: emiText });
   }
 
   if (rows.length === 0) {
@@ -83,10 +86,11 @@ function buildOfferRows(offers: string[], emi: Emi | undefined): OfferRow[] {
 interface OffersListProps {
   offers: string[];
   emi?: Emi;
+  sellingPrice: number;
 }
 
-export function OffersList({ offers, emi }: OffersListProps) {
-  const rows = buildOfferRows(offers, emi);
+export function OffersList({ offers, emi, sellingPrice }: OffersListProps) {
+  const rows = buildOfferRows(offers, emi, sellingPrice);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const emiInline = useInlineTarget("pdp-emi-row");
   let emiRowClaimed = false;

@@ -111,6 +111,20 @@ export function InterventionLedgerPanel() {
         </div>
 
         <div className="rounded-lg border border-slate-100 p-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Decision source (Asked vs Inferred)</h3>
+          <ul className="mt-2 flex flex-col gap-1.5 text-xs text-slate-700">
+            <li className="flex items-center justify-between">
+              <span>We inferred (model diagnosis)</span>
+              <span className="font-semibold tabular-nums">{ledger.inferredCount ?? 0}</span>
+            </li>
+            <li className="flex items-center justify-between">
+              <span>We asked (user elicitation)</span>
+              <span className="font-semibold tabular-nums">{ledger.elicitationCount ?? 0}</span>
+            </li>
+          </ul>
+        </div>
+
+        <div className="rounded-lg border border-slate-100 p-3">
           <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <Gauge className="h-3.5 w-3.5" />
             Fatigue budget

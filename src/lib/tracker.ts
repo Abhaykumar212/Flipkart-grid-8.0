@@ -286,7 +286,7 @@ export async function sendCartAdd(productId: string): Promise<void> {
 }
 
 export interface DeliveryDecisionPayload {
-  outcome: "delivered" | "held";
+  outcome: "delivered" | "held" | "elicited";
   reason?: string;
   detail?: string;
   root_cause?: string | null;
@@ -645,3 +645,24 @@ export class SessionTracker {
 }
 
 export const sessionTracker = new SessionTracker();
+
+export async function sendElicitationResponse(
+  chip: "Price" | "Trust or quality" | "Still comparing",
+  probability?: number,
+): Promise<any> {
+  try {
+    const response = await fetch("http://localhost:8000/api/elicitation-response", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: SESSION_ID,
+        chip,
+        probability,
+      }),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
