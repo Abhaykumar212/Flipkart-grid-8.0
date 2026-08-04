@@ -143,19 +143,6 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
     : Math.max(0, EVIDENCE_WARMUP_MS - (now - startedAt));
 
   const runPrediction = useCallback(async () => {
-    const current = sessionTracker.getSnapshot();
-    if (!current.signals.cartActive) {
-      requestSequence.current += 1;
-      requestController.current?.abort();
-      setPrediction(null);
-      setLoading(false);
-      setError(null);
-      return;
-    }
-
-    const currentStartedAt = cartStartedAt(items);
-    if (currentStartedAt !== null && Date.now() - currentStartedAt < EVIDENCE_WARMUP_MS) return;
-
     const sequence = ++requestSequence.current;
     requestController.current?.abort();
     const controller = new AbortController();

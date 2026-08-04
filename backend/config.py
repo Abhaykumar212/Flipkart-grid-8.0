@@ -157,8 +157,8 @@ EXPLANATION_SCORER_REGENERATE_MAX_TOKENS = int(
 
 # --- Trigger policy ---------------------------------------------------------
 
-# Matches the trigger policy. Lowered to 0.40 for live demo responsiveness.
-RCA_PROBABILITY_THRESHOLD = float(os.getenv("RCA_PROBABILITY_THRESHOLD", "0.40"))
+# Matches the trigger policy. Set to 0.0 for continuous analysis during demo.
+RCA_PROBABILITY_THRESHOLD = float(os.getenv("RCA_PROBABILITY_THRESHOLD", "0.0"))
 
 # Cart minimum age before analysis. Set to 0.0 for instant demo feedback.
 RCA_MIN_CART_AGE_SECONDS = float(os.getenv("RCA_MIN_CART_AGE_SECONDS", "0.0"))

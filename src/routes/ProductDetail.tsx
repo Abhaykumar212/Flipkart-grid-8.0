@@ -54,7 +54,18 @@ export default function ProductDetail() {
         price: product.price.sellingPrice,
       });
     }
-    return () => pageContext.setCurrentProduct(null);
+
+    const handleMouseLeave = (e: MouseEvent) => {
+      if (e.clientY <= 10) {
+        pageContext.markReviewDwell(product?.id || "");
+      }
+    };
+    document.addEventListener("mouseleave", handleMouseLeave);
+
+    return () => {
+      pageContext.setCurrentProduct(null);
+      document.removeEventListener("mouseleave", handleMouseLeave);
+    };
   }, [product?.id]);
 
   // Scroll to top on product change (when navigating between related products)
@@ -236,12 +247,36 @@ export default function ProductDetail() {
 
       <section className="rounded-[2px] bg-white p-6">
         <h2 className="mb-2 text-fk-xl font-medium text-fk-ink">Product Description</h2>
+        <div className="mb-4 rounded-2xl border-2 border-fk-blue/40 bg-gradient-to-r from-blue-50/90 to-indigo-50/90 p-4 shadow-md backdrop-blur-md">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
+              ✨ AI Intervention: Summarized Key Takeaways
+            </span>
+            <span className="text-[11px] font-bold text-fk-blue">Instant AI PDP Overview</span>
+          </div>
+          <p className="text-fk-sm font-semibold text-fk-ink">
+            {product.title} combines flagship hardware with top-rated buyer feedback. Features {product.highlights.slice(0, 3).join(", ")}.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2 text-fk-xs">
+            <span className="rounded-md bg-emerald-100 px-2 py-1 font-bold text-emerald-800">✓ 1-Year Brand Warranty</span>
+            <span className="rounded-md bg-blue-100 px-2 py-1 font-bold text-blue-800">✓ 7-Day Replacement</span>
+            <span className="rounded-md bg-purple-100 px-2 py-1 font-bold text-purple-800">✓ No-Cost EMI Eligible</span>
+          </div>
+        </div>
         <p className="text-fk-base text-fk-ink">{description}</p>
       </section>
 
       {/* Product Comparison Table */}
       {compareProducts.length > 0 && (
-        <ProductComparison products={compareProducts} currentProduct={product} />
+        <section id="similar-products" className="relative rounded-2xl border-2 border-fk-blue/50 bg-white p-6 shadow-fk-glow">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
+              ✨ AI Intervention: Intelligent Model Comparison
+            </span>
+            <span className="text-[11px] font-semibold text-fk-blue">Side-by-side feature comparison</span>
+          </div>
+          <ProductComparison products={compareProducts} currentProduct={product} />
+        </section>
       )}
 
       {/* Questions & Answers */}

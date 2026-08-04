@@ -118,7 +118,7 @@ export interface SelectedIntervention {
   reason: string;
 }
 
-export const ELICITATION_PROBABILITY_THRESHOLD = 0.40;
+export const ELICITATION_PROBABILITY_THRESHOLD = 0.0;
 
 export interface SelectSurfaceOptions {
   marginApproved?: boolean;
