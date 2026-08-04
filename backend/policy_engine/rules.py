@@ -15,7 +15,7 @@ from backend.risk_model.contracts import RiskPrediction
 from backend.root_cause.contracts import CauseResult
 from backend.session_state.state import SessionState
 
-from .browsing import is_browsing_assist, permits as browsing_permits
+from .browsing import assist_permitted, permits as browsing_permits
 from .reasons import PolicyReason, REQUIREMENT_REASONS
 
 
@@ -54,7 +54,7 @@ def risk_floor(candidate, _state, features, risk, _causes, _now) -> RuleVerdict:
     # A deliberating shopper with an empty cart scores below the floor by
     # construction — the risk model won't extrapolate past a cart it can't see.
     # They can still be answered, but only with something free and quiet.
-    if is_browsing_assist(features) and browsing_permits(candidate):
+    if assist_permitted(features) and browsing_permits(candidate):
         return _pass()
     return RuleVerdict(PolicyReason.RISK_BELOW_INTERVENTION_THRESHOLD)
 

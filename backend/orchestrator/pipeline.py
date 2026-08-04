@@ -16,7 +16,7 @@ from backend.explainability.structured import build_explanation, intervention_pa
 from backend.experimentation.assign import active_experiment, get_or_assign
 from backend.feature_engine.compute import compute_features
 from backend.feature_engine.schema import FEATURE_SCHEMA_VERSION
-from backend.policy_engine.browsing import is_browsing_assist
+from backend.policy_engine.browsing import assist_permitted
 from backend.policy_engine.engine import (
     PolicyResult,
     approved_candidates,
@@ -151,7 +151,7 @@ def _select(
     if risk.probability < config.RISK_INTERVENTION_THRESHOLD:
         # Below the floor the only thing that earns an action is visible
         # deliberation with an empty cart, and then only a quiet one.
-        if features is not None and is_browsing_assist(features):
+        if features is not None and assist_permitted(features):
             helpful = _subtle(ranked)
             return (Decision.INTERVENE, helpful) if helpful else (Decision.NO_ACTION, None)
         return Decision.NO_ACTION, None
@@ -301,7 +301,7 @@ def run_decision(
         # answers when the agent can't — no key, rate limited, budget spent.
         if (
             risk.probability < config.RISK_INTERVENTION_THRESHOLD
-            and not is_browsing_assist(features)
+            and not assist_permitted(features)
         ):
             causes = CauseResult((), "cause-stub-v1", False, 0.0, 0.0)
         else:

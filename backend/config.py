@@ -73,6 +73,11 @@ DECISION_RATE_LIMIT_PER_MINUTE = _integer("DECISION_RATE_LIMIT_PER_MINUTE", 20)
 # already passed its pilot, and still leaves a real control arm to measure.
 EXPERIMENT_TRAFFIC_SPLIT = _integer("EXPERIMENT_TRAFFIC_SPLIT", 80)
 
+# "legacy" is the 22-feature model; "versioned" is the simulator-trained one.
+# Legacy is the default because the versioned model's training classes separate
+# so cleanly that it saturates near 1.0 on real sessions — see risk_model/legacy.py.
+RISK_MODEL_KIND = _text("RISK_MODEL_KIND", "legacy").lower()
+
 RISK_MODEL_VERSION = _text("RISK_MODEL_VERSION", "v1")
 ROOT_CAUSE_MODEL_VERSION = _text("ROOT_CAUSE_MODEL_VERSION", "v1")
 MODEL_ARTIFACT_DIR = Path(_text("MODEL_ARTIFACT_DIR", "./ml/artifacts"))

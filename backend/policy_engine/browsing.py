@@ -44,6 +44,23 @@ def is_browsing_assist(features: dict[str, float]) -> bool:
     )
 
 
+def is_blocked(features: dict[str, float]) -> bool:
+    """The shopper tried to pay and could not.
+
+    Abandonment risk reads *low* here — attempting payment is strong intent —
+    but low risk is not the same as needing no help. They are stuck on a step
+    they already chose to take, and the way out costs nothing to offer.
+    """
+
+    return features.get("pay_failure_count", 0.0) > 0
+
+
+def assist_permitted(features: dict[str, float]) -> bool:
+    """Below the risk floor, only these two situations still earn an action."""
+
+    return is_browsing_assist(features) or is_blocked(features)
+
+
 def permits(candidate: InterventionDefinition) -> bool:
     """Whether this candidate is modest enough to show a browsing shopper."""
 

@@ -5,10 +5,12 @@ from time import perf_counter
 import numpy as np
 import pandas as pd
 
+from backend import config
 from backend.domain.enums import RiskBand
 from backend.feature_engine.schema import RISK_MODEL_FEATURES
 from backend.risk_model.contracts import RiskFactor, RiskPrediction
 from backend.risk_model import loader
+from backend.risk_model.legacy import predict as legacy_predict
 
 
 def _band(probability: float) -> RiskBand:
@@ -20,6 +22,18 @@ def _band(probability: float) -> RiskBand:
 
 
 def predict(features: dict[str, float]) -> RiskPrediction:
+    """Score abandonment risk for a session feature vector.
+
+    Defaults to the 22-feature model: the versioned one is faithful to a
+    simulator whose classes separate almost perfectly, so it saturates on real
+    traffic. See `legacy.py`. Set RISK_MODEL_KIND=versioned to switch back.
+    """
+    if config.RISK_MODEL_KIND == "legacy":
+        try:
+            return legacy_predict(features)
+        except Exception:  # noqa: BLE001 - fall through to the versioned model
+            pass
+
     started = perf_counter()
     try:
         loaded = loader.runtime()
