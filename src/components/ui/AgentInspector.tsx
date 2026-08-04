@@ -138,12 +138,15 @@ export function AgentInspector() {
   // launcher has to sit clear of it.
   const clearsMobileCheckoutBar = pathname === "/cart" || pathname === "/checkout";
 
+  // Stacked above the shopping companion rather than on top of it. The
+  // companion launcher is min-h-12 at bottom-4 (bottom-5 from sm up), so these
+  // offsets are its height plus a gap — keep them in step if it moves.
+  const stackedAboveCompanion = clearsMobileCheckoutBar
+    ? "bottom-[calc(9.75rem+env(safe-area-inset-bottom))] lg:bottom-[5.5rem]"
+    : "bottom-[4.5rem] lg:bottom-[5.5rem]";
+
   return (
-    <div
-      className={`fixed right-3 z-[9999] lg:bottom-5 lg:right-5 ${
-        clearsMobileCheckoutBar ? "bottom-[calc(5.25rem+env(safe-area-inset-bottom))]" : "bottom-3"
-      }`}
-    >
+    <div className={`fixed right-3 z-[9999] lg:right-5 ${stackedAboveCompanion}`}>
       {isOpen && (
         <section className="absolute bottom-16 right-0 flex max-h-[min(76vh,720px)] w-[min(430px,calc(100vw-24px))] flex-col overflow-hidden rounded-[2px] border border-fk-border bg-white shadow-[0_24px_70px_rgba(15,23,42,0.28)]">
           <header className="bg-fk-footer px-5 py-4 text-white">

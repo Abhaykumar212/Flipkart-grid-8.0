@@ -13,7 +13,7 @@ export function InlineCartCard({ intervention, reasons, onClick, onDismiss }: In
       .catch(() => setSummary(null));
   }, [intervention.review_product_id, intervention.type]);
   return (
-    <section className="border-l-4 border-fk-blue bg-white px-4 py-4 shadow-fk-card sm:px-6" role="status" aria-live="polite" data-testid="intervention-inline-card">
+    <section className="fk-intervention rounded-[2px] border border-fk-border bg-white px-4 py-4 pl-5 shadow-fk-card sm:px-6 sm:pl-7" role="status" aria-live="polite" data-testid="intervention-inline-card">
       <div className="flex items-start gap-3">
         <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-fk-blue" aria-hidden="true" />
         <div className="min-w-0 flex-1">

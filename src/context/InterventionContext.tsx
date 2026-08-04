@@ -65,14 +65,28 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
   const [fallback, setFallback] = useState<DecisionResponse | null>(null);
   const shownIds = useRef(new Set<string>());
   const currentDecision = latestDecision ?? fallback;
-  const intervention = authorized(currentDecision);
+  const authorizedNow = authorized(currentDecision);
+
+  // Once something is on screen it stays until the shopper dismisses it or
+  // leaves the page. Decisions re-run on a heartbeat, and a later NO_ACTION
+  // would otherwise yank a card out from under someone mid-sentence.
+  const [displayed, setDisplayed] = useState<AuthorizedIntervention | null>(null);
+  useEffect(() => {
+    if (authorizedNow) setDisplayed(authorizedNow);
+  }, [authorizedNow]);
+  const intervention = authorizedNow ?? displayed;
 
   useEffect(() => {
     let current = true;
     void apiGet<LatestInterventionResponse | undefined>(
       `/api/v1/sessions/${sessionId}/interventions/latest`,
     ).then((response) => {
-      if (!current || !response?.decision_id) return;
+      if (!current) return;
+      if (!response?.decision_id) {
+        // Nothing authorized on this route; drop whatever the last one was.
+        setDisplayed(null);
+        return;
+      }
       setFallback({
         decision_id: response.decision_id,
         session_id: sessionId,
@@ -129,6 +143,7 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
       },
     });
     setFallback(null);
+    setDisplayed(null);
     clearDecision(intervention.decision_id);
   }, [clearDecision, emit, intervention]);
 

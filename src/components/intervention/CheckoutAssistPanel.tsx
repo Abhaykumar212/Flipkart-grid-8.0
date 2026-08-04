@@ -4,7 +4,7 @@ import { InterventionWhy } from "./InterventionWhy";
 
 export function CheckoutAssistPanel({ intervention, reasons, onClick, onDismiss }: InterventionSurfaceProps) {
   return (
-    <section className="border border-fk-border bg-blue-50 px-4 py-4 sm:px-6" role="status" aria-live="polite" data-testid="intervention-checkout-panel">
+    <section className="fk-intervention rounded-[2px] border border-fk-border bg-white px-4 py-4 pl-5 sm:px-6 sm:pl-7" role="status" aria-live="polite" data-testid="intervention-checkout-panel">
       <div className="flex items-start gap-3">
         <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-fk-blue" />
         <div className="min-w-0 flex-1"><p className="text-fk-md font-medium text-fk-ink">{intervention.headline ?? intervention.display_name}</p><p className="mt-1 text-fk-base text-fk-muted">{intervention.body ?? intervention.reason}</p><InterventionWhy reasons={reasons} /><button type="button" onClick={onClick} className="mt-2 min-h-11 font-medium text-fk-blue">{intervention.cta_label ?? "Try another option"}</button></div>
