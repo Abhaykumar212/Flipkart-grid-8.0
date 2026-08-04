@@ -5,6 +5,7 @@ import { RatingStars } from "../ui/RatingStars";
 import { formatIndianNumber } from "../../lib/format";
 import { useSession } from "../../context/SessionContext";
 import { Button } from "../ui/Button";
+import { shoppingContext } from "../../lib/shoppingContext";
 
 interface RatingsAndReviewsProps {
   productId: string;
@@ -15,6 +16,7 @@ interface RatingsAndReviewsProps {
 type ReviewSort = "recent" | "helpful" | "highest" | "lowest";
 
 const PAGE_SIZE = 3;
+const COMPANION_DWELL_MS = 4_000;
 const reviewDateFormat = new Intl.DateTimeFormat("en-IN", {
   day: "numeric",
   month: "short",
@@ -31,6 +33,7 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
   const sectionRef = useRef<HTMLElement>(null);
   const recorded = useRef(false);
   const dwellStartedAt = useRef<number | null>(null);
+  const companionDwellTimer = useRef<number | null>(null);
   const { emit } = useSession();
   const [allReviews, setAllReviews] = useState(reviews);
   const [ratingFilter, setRatingFilter] = useState<number | null>(null);
@@ -49,6 +52,15 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
     recorded.current = false;
     dwellStartedAt.current = null;
     const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && companionDwellTimer.current === null) {
+        companionDwellTimer.current = window.setTimeout(() => {
+          shoppingContext.markReviewDwell(productId);
+          companionDwellTimer.current = null;
+        }, COMPANION_DWELL_MS);
+      } else if (!entry.isIntersecting && companionDwellTimer.current !== null) {
+        window.clearTimeout(companionDwellTimer.current);
+        companionDwellTimer.current = null;
+      }
       if (entry.isIntersecting && !recorded.current) {
         recorded.current = true;
         dwellStartedAt.current = performance.now();
@@ -56,12 +68,15 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
           productId,
           metadata: { source: "PRODUCT_PAGE" },
         });
-        observer.disconnect();
       }
     }, { threshold: 0.35 });
     observer.observe(section);
     return () => {
       observer.disconnect();
+      if (companionDwellTimer.current !== null) {
+        window.clearTimeout(companionDwellTimer.current);
+        companionDwellTimer.current = null;
+      }
       if (dwellStartedAt.current !== null) {
         emit("REVIEW_DWELL_RECORDED", {
           productId,

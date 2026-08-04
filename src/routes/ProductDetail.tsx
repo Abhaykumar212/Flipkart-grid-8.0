@@ -21,6 +21,7 @@ import { OffersList } from "../components/pdp/OffersList";
 import { useSession } from "../context/SessionContext";
 import { productVariantOptions } from "../lib/productPresentation";
 import { categoryBySlug } from "../data/categories";
+import { shoppingContext } from "../lib/shoppingContext";
 
 const FALLBACK_SELLER = { name: "RetailNet", rating: 4.2 };
 
@@ -41,9 +42,17 @@ export default function ProductDetail() {
         productId: product.id,
         metadata: { source: "DIRECT" },
       });
+      shoppingContext.recordVisit({
+        productId: product.id,
+        title: product.title,
+        category: product.category,
+        price: product.price.sellingPrice,
+      });
     }
+    shoppingContext.setCurrentProduct(product?.id ?? null);
     setSelectedVariant("");
     window.scrollTo({ top: 0, behavior: "smooth" });
+    return () => shoppingContext.setCurrentProduct(null);
   }, [emit, product]);
 
   const variants = useMemo(() => product ? productVariantOptions(product) : [], [product]);

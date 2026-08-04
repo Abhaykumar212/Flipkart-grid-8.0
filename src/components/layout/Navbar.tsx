@@ -18,6 +18,7 @@ import { useWishlist } from "../../context/WishlistContext";
 import { useSession } from "../../context/SessionContext";
 import { products } from "../../data/products";
 import { formatINR } from "../../lib/format";
+import { shoppingContext } from "../../lib/shoppingContext";
 
 const accountMenu = [
   { label: "My Profile", icon: User, href: "https://www.flipkart.com/account/login" },
@@ -81,6 +82,7 @@ export function Navbar() {
     emit("SEARCH_PERFORMED", {
       metadata: { query: normalized, result_count: resultCount, sort_order: "RELEVANCE" },
     });
+    shoppingContext.recordSearch(normalized);
     return true;
   };
 
