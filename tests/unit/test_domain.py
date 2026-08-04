@@ -11,10 +11,10 @@ from backend.recommendation.catalogue import INTERVENTION_CATALOGUE
 
 
 def test_frozen_domain_cardinalities():
-    assert len(EventType) == 21
+    assert len(EventType) == 22
     assert len(RootCause) == 11
-    assert len(InterventionId) == 12
-    assert len(INTERVENTION_CATALOGUE) == 12
+    assert len(InterventionId) == 19
+    assert len(INTERVENTION_CATALOGUE) == 19
     assert set(EVIDENCE_FAMILIES) == set(RootCause)
 
 
@@ -54,6 +54,13 @@ def test_catalogue_matches_the_frozen_contract():
         "CHECKOUT_ASSISTANCE": (("CHECKOUT_OR_PAYMENT_FAILURE",), "LOW", 2, 10, ("CHECKOUT_PANEL", "ASSISTANT_PANEL"), ("checkout_started",), 0.22),
         "WISHLIST_REMINDER": (("LOW_PURCHASE_INTENT", "SESSION_INTERRUPTION_OR_DISTRACTION"), "LOW", 1, 30, ("BANNER", "INLINE_CARD"), (), 0.14),
         "LIMITED_TIME_DISCOUNT": (("PRICE_SENSITIVITY",), "HIGH", 3, 60, ("INLINE_CARD", "BANNER"), ("discount_budget_available", "cart_value≥1000"), 0.38),
+        "STOCK_SCARCITY_NUDGE": (("PRODUCT_AVAILABILITY_CONCERN", "LOW_PURCHASE_INTENT"), "ZERO", 1, 20, ("INLINE_CARD", "BANNER"), ("low_stock_confirmed",), 0.16),
+        "EXIT_INTENT_REMINDER": (("LOW_PURCHASE_INTENT", "SESSION_INTERRUPTION_OR_DISTRACTION"), "ZERO", 2, 30, ("BANNER", "INLINE_CARD"), (), 0.15),
+        "TRUST_BADGE_REASSURANCE": (("TRUST_OR_RETURN_POLICY_CONCERN",), "ZERO", 1, 20, ("INLINE_CARD", "CHECKOUT_PANEL"), (), 0.17),
+        "SAVED_PAYMENT_PROMPT": (("CHECKOUT_OR_PAYMENT_FAILURE",), "ZERO", 1, 30, ("CHECKOUT_PANEL", "INLINE_CARD"), ("payment_failure_occurred",), 0.10),
+        "GUEST_ACCOUNT_NUDGE": (("TRUST_OR_RETURN_POLICY_CONCERN",), "ZERO", 1, 45, ("CHECKOUT_PANEL", "INLINE_CARD"), ("guest_session",), 0.14),
+        "DELIVERY_SPEED_UPGRADE": (("DELIVERY_CONCERN",), "MEDIUM", 2, 45, ("INLINE_CARD", "CHECKOUT_PANEL"), ("delivery_data_available",), 0.23),
+        "FREE_DELIVERY_WAIVER": (("DELIVERY_CONCERN", "PRICE_SENSITIVITY"), "HIGH", 2, 60, ("INLINE_CARD", "BANNER"), ("delivery_fee_present", "cart_value≥1000"), 0.30),
         "NO_ACTION": (("*",), "ZERO", 0, 0, (), (), 0.0),
     }
 

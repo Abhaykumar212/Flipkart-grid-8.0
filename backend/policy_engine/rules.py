@@ -6,11 +6,16 @@ from typing import Callable
 
 from backend import config
 from backend.domain.causes import RootCause
-from backend.domain.interventions import InterventionDefinition, InterventionId
+from backend.domain.interventions import (
+    MARGIN_SPENDING,
+    InterventionDefinition,
+    InterventionId,
+)
 from backend.risk_model.contracts import RiskPrediction
 from backend.root_cause.contracts import CauseResult
 from backend.session_state.state import SessionState
 
+from .browsing import is_browsing_assist, permits as browsing_permits
 from .reasons import PolicyReason, REQUIREMENT_REASONS
 
 
@@ -43,10 +48,15 @@ def order_completed(candidate, state, _features, _risk, _causes, _now) -> RuleVe
     return _pass()
 
 
-def risk_floor(candidate, _state, _features, risk, _causes, _now) -> RuleVerdict:
-    if risk.probability < config.RISK_INTERVENTION_THRESHOLD and not _protected(candidate):
-        return RuleVerdict(PolicyReason.RISK_BELOW_INTERVENTION_THRESHOLD)
-    return _pass()
+def risk_floor(candidate, _state, features, risk, _causes, _now) -> RuleVerdict:
+    if risk.probability >= config.RISK_INTERVENTION_THRESHOLD or _protected(candidate):
+        return _pass()
+    # A deliberating shopper with an empty cart scores below the floor by
+    # construction — the risk model won't extrapolate past a cart it can't see.
+    # They can still be answered, but only with something free and quiet.
+    if is_browsing_assist(features) and browsing_permits(candidate):
+        return _pass()
+    return RuleVerdict(PolicyReason.RISK_BELOW_INTERVENTION_THRESHOLD)
 
 
 def session_cap(candidate, _state, features, _risk, _causes, _now) -> RuleVerdict:
@@ -108,6 +118,11 @@ def _requirement_met(name: str, features: dict[str, float]) -> bool:
         "discount_budget_available": features.get("discount_budget_available", 1.0) > 0,
         "cart_value≥5000": features["c_value"] >= config.EMI_MIN_CART_VALUE,
         "cart_value≥1000": features["c_value"] >= config.DISCOUNT_MIN_CART_VALUE,
+        # Scarcity is only honest when the stock signal is real, so this gates
+        # on the catalogue reading rather than on anything inferred.
+        "low_stock_confirmed": features["p_any_low_stock"] > 0,
+        "delivery_fee_present": features["d_fee"] > 0,
+        "guest_session": features["u_is_new_user"] > 0,
     }
     return checks.get(name, False)
 
@@ -157,11 +172,27 @@ def review_grounding(candidate, _state, features, _risk, _causes, _now) -> RuleV
 
 
 def discount_protection(candidate, _state, features, risk, causes, _now) -> RuleVerdict:
-    if candidate.intervention_id != InterventionId.LIMITED_TIME_DISCOUNT:
+    """Every margin-spending lever clears the same bar, not just the discount.
+
+    A waived delivery fee costs real money too. Gating only the headline
+    discount would let the ranker spend margin through the side door whenever
+    a delivery lever happened to outrank it.
+    """
+    if candidate.intervention_id not in MARGIN_SPENDING:
         return _pass()
     if risk.probability < config.RISK_HIGH_THRESHOLD:
         return RuleVerdict(PolicyReason.DISCOUNT_RISK_BELOW_HIGH_THRESHOLD)
-    if causes.probability_for(RootCause.PRICE_SENSITIVITY) < config.DISCOUNT_MIN_PRICE_SENSITIVITY:
+    # Each margin lever answers a different friction, so each is verified
+    # against the cause that would actually justify the spend.
+    justifying = (
+        RootCause.DELIVERY_CONCERN
+        if candidate.intervention_id in (
+            InterventionId.FREE_DELIVERY_WAIVER,
+            InterventionId.DELIVERY_SPEED_UPGRADE,
+        )
+        else RootCause.PRICE_SENSITIVITY
+    )
+    if causes.probability_for(justifying) < config.DISCOUNT_MIN_PRICE_SENSITIVITY:
         return RuleVerdict(PolicyReason.PRICE_SENSITIVITY_NOT_VERIFIED)
     if features["c_value"] < config.DISCOUNT_MIN_CART_VALUE:
         return RuleVerdict(PolicyReason.CART_VALUE_BELOW_DISCOUNT_THRESHOLD)

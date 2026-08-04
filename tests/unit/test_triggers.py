@@ -45,7 +45,8 @@ def test_material_hash_ignores_ticking_features_but_not_counts():
     second.update({
         "s_duration_seconds": 90,
         "c_age_seconds": 90,
-        "s_review_dwell_seconds": 20,
+        # Within the same dwell bucket, so it must not move the hash.
+        "s_review_dwell_seconds": 9,
         "s_idle_seconds_current": 10,
         "s_event_velocity_per_min": 4,
     })
@@ -54,12 +55,22 @@ def test_material_hash_ignores_ticking_features_but_not_counts():
     assert material_feature_hash(first) != material_feature_hash(second)
 
 
+def test_material_hash_tracks_sustained_review_dwell():
+    """Dwell is the whole signal for a browsing shopper, so a sustained read has
+    to register as a new situation even though the value ticks continuously."""
+    first = _features()
+    same_bucket = dict(first, s_review_dwell_seconds=9)
+    later_bucket = dict(first, s_review_dwell_seconds=45)
+    assert material_feature_hash(first) == material_feature_hash(same_bucket)
+    assert material_feature_hash(first) != material_feature_hash(later_bucket)
+
+
 def test_threshold_late_and_terminated_gates():
     review = _state()
     review.recent_events[0]["event_type"] = EventType.REVIEW_OPENED.value
-    review.counters["review_opens"] = 2
+    review.counters["review_opens"] = 1
     assert evaluate(review, "REVIEW_OPENED", _features(), now=NOW).reason == "trigger_threshold_not_met"
-    review.counters["review_opens"] = 3
+    review.counters["review_opens"] = 2
     review.recent_events[0]["is_late"] = True
     assert evaluate(review, "REVIEW_OPENED", _features(), now=NOW).reason == "late_event"
     review.recent_events[0]["is_late"] = False

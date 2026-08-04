@@ -70,8 +70,18 @@ const DECISION_TRIGGER_TYPES = new Set<EventType>([
   "REVIEW_OPENED",
   "SIMILAR_PRODUCT_VIEWED",
   "PRODUCT_COMPARED",
+  // Research behaviour, not just cart activity. Must stay in step with
+  // THRESHOLD_TRIGGERS in backend/orchestrator/triggers.py — the backend
+  // rejects any trigger name this list invents.
+  "REVIEW_DWELL_RECORDED",
+  "PRODUCT_VIEWED",
+  "EXIT_INTENT_DETECTED",
 ]);
 const DECISION_DEBOUNCE_MS = 3_100;
+// A shopper who stops interacting stops emitting, so without a heartbeat a
+// session that goes quiet mid-deliberation is never reconsidered. The backend
+// gate still applies; most of these are answered with `debounce_active`.
+const PERIODIC_DECISION_MS = 45_000;
 
 function safeGet(key: string): string | null {
   try {
@@ -173,7 +183,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       eventClient.emit("SESSION_ENDED", { metadata: { reason: "UNLOAD" } });
       eventClient.flushWithBeacon();
     };
+    // Exit intent, emitted at most once per session: the cursor leaving through
+    // the top of the viewport (heading for the tab bar or address bar), or the
+    // tab being backgrounded. Both are the last moment help can still land.
+    let exitSignalled = false;
+    const signalExit = (signal: "POINTER_EXIT" | "TAB_HIDDEN") => {
+      if (exitSignalled) return;
+      exitSignalled = true;
+      eventClient.emit("EXIT_INTENT_DETECTED", { metadata: { signal } });
+    };
+    const onPointerOut = (event: MouseEvent) => {
+      if (event.relatedTarget === null && event.clientY <= 0) signalExit("POINTER_EXIT");
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") signalExit("TAB_HIDDEN");
+    };
+    document.addEventListener("mouseout", onPointerOut);
+    document.addEventListener("visibilitychange", onVisibility);
+
     window.addEventListener("pagehide", endSession);
+    const heartbeat = window.setInterval(() => {
+      if (document.visibilityState === "visible") void requestDecision("PERIODIC");
+    }, PERIODIC_DECISION_MS);
     const unsubscribe = eventClient.subscribe((events) => {
       if (events.some((event) => (
         event.session_id === identity.sessionId && event.event_type === "SESSION_STARTED"
@@ -195,20 +226,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     });
     return () => {
       window.removeEventListener("pagehide", endSession);
+      document.removeEventListener("mouseout", onPointerOut);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.clearInterval(heartbeat);
       unsubscribe();
       if (decisionTimer.current !== null) window.clearTimeout(decisionTimer.current);
     };
   }, [identity, requestDecision]);
 
+  // Stable across renders. Effects that emit on mount list `emit` as a
+  // dependency, so an identity that changed whenever a decision arrived would
+  // re-run them — re-emitting REVIEW_OPENED, which requests another decision,
+  // which changes the identity again. That loop floods the event buffer.
+  const emit = useCallback<SessionContextValue["emit"]>(
+    (eventType, input) => eventClient.emit(eventType, input),
+    [],
+  );
+
   const value = useMemo<SessionContextValue>(() => ({
     sessionId: identity.sessionId,
-    emit: (eventType, input) => eventClient.emit(eventType, input),
+    emit,
     latestDecision,
     requestDecision,
     clearDecision: (decisionId) => setLatestDecision((current) => (
       !decisionId || current?.decision_id === decisionId ? null : current
     )),
-  }), [identity.sessionId, latestDecision, requestDecision]);
+  }), [emit, identity.sessionId, latestDecision, requestDecision]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

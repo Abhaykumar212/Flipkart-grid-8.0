@@ -27,7 +27,7 @@ def test_seed_is_complete_and_idempotent(migrated_database):
     run_command(command, migrated_database)
     second = _counts(migrated_database)
 
-    assert first == (50, 300, 12)
+    assert first == (50, 300, 19)
     assert second == first
 
 

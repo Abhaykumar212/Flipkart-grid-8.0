@@ -8,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from backend import config
+from backend.agents.reasoning import Diagnosis, diagnose, endorsed_candidates
 from backend.domain.causes import RootCause
 from backend.domain.enums import Channel, CostLevel, Decision, RiskBand
 from backend.domain.interventions import InterventionDefinition, InterventionId
@@ -15,6 +16,7 @@ from backend.explainability.structured import build_explanation, intervention_pa
 from backend.experimentation.assign import active_experiment, get_or_assign
 from backend.feature_engine.compute import compute_features
 from backend.feature_engine.schema import FEATURE_SCHEMA_VERSION
+from backend.policy_engine.browsing import is_browsing_assist
 from backend.policy_engine.engine import (
     PolicyResult,
     approved_candidates,
@@ -22,7 +24,7 @@ from backend.policy_engine.engine import (
     finalize_discount_protection,
 )
 from backend.recommendation.candidates import generate_candidates
-from backend.recommendation.catalogue import CATALOGUE_BY_ID
+from backend.recommendation.catalogue import CATALOGUE_BY_ID, INTERVENTION_CATALOGUE
 from backend.recommendation.ranker import ScoredIntervention, score_all
 from backend.observability.drift import drift_monitor
 from backend.observability.latency import metrics_registry
@@ -57,6 +59,30 @@ class DecisionRun:
     should_persist: bool = True
     experiment_id: str | None = None
     experiment_group: str | None = None
+    diagnosis: Diagnosis | None = None
+
+
+def _top_attributions(
+    risk: RiskPrediction,
+    features: dict[str, float],
+    limit: int = 12,
+) -> list[dict[str, object]]:
+    """Signed SHAP for the strongest drivers, for the live inspector.
+
+    `explanation.observations` carries only what the narrative needed; the UI
+    wants a wider view of what actually moved the score.
+    """
+    ranked = sorted(
+        risk.shap_by_feature.items(), key=lambda item: abs(item[1]), reverse=True
+    )[:limit]
+    return [
+        {
+            "feature": name,
+            "value": round(float(features.get(name, 0.0)), 4),
+            "shap": round(float(shap), 6),
+        }
+        for name, shap in ranked
+    ]
 
 
 def _suppressed(
@@ -93,10 +119,26 @@ def _suppressed(
     )
 
 
+def _subtle(ranked: tuple[ScoredIntervention, ...]) -> ScoredIntervention | None:
+    """Best candidate that is cheap and quiet enough to show unprompted."""
+    return next(
+        (
+            item
+            for item in ranked
+            if item.score >= 0
+            and item.candidate.intervention_id != InterventionId.NO_ACTION
+            and item.candidate.cost_level in (CostLevel.ZERO, CostLevel.LOW)
+            and item.candidate.intrusiveness <= 1
+        ),
+        None,
+    )
+
+
 def _select(
     ranked: tuple[ScoredIntervention, ...],
     causes: CauseResult,
     risk: RiskPrediction | None = None,
+    features: dict[str, float] | None = None,
 ) -> tuple[Decision, ScoredIntervention | None]:
     risk = risk or RiskPrediction(
         config.RISK_HIGH_THRESHOLD,
@@ -107,6 +149,11 @@ def _select(
         0.0,
     )
     if risk.probability < config.RISK_INTERVENTION_THRESHOLD:
+        # Below the floor the only thing that earns an action is visible
+        # deliberation with an empty cart, and then only a quiet one.
+        if features is not None and is_browsing_assist(features):
+            helpful = _subtle(ranked)
+            return (Decision.INTERVENE, helpful) if helpful else (Decision.NO_ACTION, None)
         return Decision.NO_ACTION, None
     top = ranked[0] if ranked else None
     if top is None or top.candidate.intervention_id == InterventionId.NO_ACTION:
@@ -117,17 +164,7 @@ def _select(
     # Medium-risk sessions only receive a subtle inline action, even when the
     # cause is strong. This is the fifth row of the frozen confidence table.
     if risk.probability < config.RISK_HIGH_THRESHOLD:
-        subtle = next(
-            (
-                item
-                for item in ranked
-                if item.score >= 0
-                and item.candidate.intervention_id != InterventionId.NO_ACTION
-                and item.candidate.cost_level in (CostLevel.ZERO, CostLevel.LOW)
-                and item.candidate.intrusiveness <= 1
-            ),
-            None,
-        )
+        subtle = _subtle(ranked)
         return (Decision.INTERVENE, subtle) if subtle else (Decision.NO_ACTION, None)
 
     if (
@@ -232,6 +269,8 @@ def run_decision(
     risk = predict_risk(features)
     drift_monitor.record(features, risk.probability)
     timings["risk"] = risk.latency_ms
+    diagnosis: Diagnosis | None = None
+    reasoning_path = "model:not_attempted"
     experiment_id = None
     experiment_group = None
     experiment = active_experiment(db)
@@ -257,10 +296,24 @@ def run_decision(
         timings["policy_and_rank"] = 0.0
         decision, selected = Decision.ABSTAIN, None
     else:
-        if risk.probability < config.RISK_INTERVENTION_THRESHOLD:
+        # The reasoning agent gets the model's probability and its full SHAP
+        # attribution and decides the cause. The trained cause model is what
+        # answers when the agent can't — no key, rate limited, budget spent.
+        if (
+            risk.probability < config.RISK_INTERVENTION_THRESHOLD
+            and not is_browsing_assist(features)
+        ):
             causes = CauseResult((), "cause-stub-v1", False, 0.0, 0.0)
         else:
-            causes = predict_root_causes(features)
+            diagnosis, reasoning_path = diagnose(
+                session_id,
+                state,
+                features,
+                risk,
+                force=force,
+                now=decision_time.timestamp(),
+            )
+            causes = diagnosis.causes if diagnosis else predict_root_causes(features)
         timings["root_cause"] = causes.latency_ms
 
         policy_started = perf_counter()
@@ -276,6 +329,19 @@ def run_decision(
             summary_available(db, product_ids)
         )
         candidates = generate_candidates(causes, features)
+        if diagnosis is not None:
+            # The agent may back a lever whose catalogue entry doesn't list the
+            # cause it diagnosed. That's a judgement call worth honouring, so the
+            # pick joins the pool — policy still decides whether it may run.
+            wanted = {item.intervention_id for item in candidates}
+            wanted.update(endorsed_candidates(diagnosis.endorsements))
+            candidates = tuple(
+                item
+                for item in INTERVENTION_CATALOGUE
+                if item.is_active and item.intervention_id in wanted
+            )
+        endorsements = diagnosis.endorsements if diagnosis else None
+        avoid = diagnosis.avoid if diagnosis else None
         policy_results = evaluate_all(
             candidates, state, policy_features, risk, causes, now=decision_time
         )
@@ -285,6 +351,8 @@ def run_decision(
             risk,
             causes,
             current_route=state.current_route,
+            endorsements=endorsements,
+            avoid=avoid,
         )
         policy_results = finalize_discount_protection(policy_results, ranked)
         ranked = score_all(
@@ -293,9 +361,11 @@ def run_decision(
             risk,
             causes,
             current_route=state.current_route,
+            endorsements=endorsements,
+            avoid=avoid,
         )
         timings["policy_and_rank"] = round((perf_counter() - policy_started) * 1_000, 3)
-        decision, selected = _select(ranked, causes, risk)
+        decision, selected = _select(ranked, causes, risk, features)
     product_ids = tuple(
         str(item.get("product_id"))
         for item in state.cart.get("items", [])
@@ -358,6 +428,10 @@ def run_decision(
         "policy_results": [result.to_dict() for result in policy_results],
         "utility_scores": [item.to_dict() for item in ranked],
         "explanation": explanation,
+        "reasoning": (
+            diagnosis.to_dict() if diagnosis else {"path": reasoning_path}
+        ),
+        "shap_attributions": _top_attributions(risk, features),
         "latency_ms": timings,
         "feature_schema_version": FEATURE_SCHEMA_VERSION,
         "experiment_id": experiment_id,
@@ -386,4 +460,5 @@ def run_decision(
         decision_time=decision_time,
         experiment_id=experiment_id,
         experiment_group=experiment_group,
+        diagnosis=diagnosis,
     )

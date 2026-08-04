@@ -6,7 +6,26 @@ import { InlineCartCard } from "./InlineCartCard";
 import { NonBlockingBanner } from "./NonBlockingBanner";
 import { customerExplanation } from "../../lib/interventionPresentation";
 
-type Surface = "global" | "cart" | "checkout";
+type Surface = "global" | "cart" | "checkout" | "pdp";
+
+/**
+ * Which channels each mount point is allowed to render.
+ *
+ * `INLINE_CARD` is claimed by both `cart` and `pdp` deliberately: only one of
+ * those mounts exists at a time, and an inline card is the right shape on
+ * either page.
+ *
+ * `ASSISTANT_PANEL` is absent on purpose. `CompanionWidget` delivers those
+ * decisions into the persistent chat thread and fires their impression itself;
+ * rendering one here too would show the shopper the same recommendation twice
+ * and double-count it.
+ */
+const CHANNELS_BY_SURFACE: Record<Surface, readonly string[]> = {
+  global: ["BANNER", "COMPARISON_DRAWER"],
+  cart: ["INLINE_CARD"],
+  checkout: ["CHECKOUT_PANEL"],
+  pdp: ["INLINE_CARD"],
+};
 
 export function InterventionRenderer({ surface }: { surface: Surface }) {
   const { intervention, explanation, shown, click, dismiss } = useIntervention();
@@ -14,11 +33,8 @@ export function InterventionRenderer({ surface }: { surface: Surface }) {
   const belongsHere = Boolean(
     intervention
     && intervention.decision_id
-    && (
-      (surface === "global" && channel && ["BANNER", "COMPARISON_DRAWER"].includes(channel))
-      || (surface === "cart" && channel === "INLINE_CARD")
-      || (surface === "checkout" && channel === "CHECKOUT_PANEL")
-    )
+    && channel
+    && CHANNELS_BY_SURFACE[surface].includes(channel)
   );
 
   useEffect(() => {

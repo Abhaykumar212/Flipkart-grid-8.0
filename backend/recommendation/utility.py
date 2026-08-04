@@ -40,8 +40,15 @@ def score_candidate(
     features: dict[str, float],
     risk_probability: float,
     causes: CauseResult,
+    endorsements: dict[str, float] | None = None,
+    avoid: frozenset[str] | None = None,
 ) -> UtilityScore:
-    """Apply the exact §12.4 normalized utility formula."""
+    """Apply the exact §12.4 normalized utility formula.
+
+    `endorsements`/`avoid` carry the reasoning agent's opinion. They move a
+    candidate's position in the ranking; they cannot put one in front of a
+    shopper, because the policy engine has already filtered this set.
+    """
 
     if candidate.intervention_id == InterventionId.NO_ACTION:
         return UtilityScore(0.0, {
@@ -49,6 +56,7 @@ def score_candidate(
             "expected_uplift": 0.0,
             "user_affinity": 0.0,
             "information_gain": 0.0,
+            "agent_endorsement": 0.0,
             "direct_cost_penalty": 0.0,
             "margin_risk_penalty": 0.0,
             "fatigue_penalty": 0.0,
@@ -85,11 +93,16 @@ def score_candidate(
         + 0.40 * features["i_dismissal_count"],
     )
     intrusiveness = candidate.intrusiveness / 3
+    lever = candidate.intervention_id.value
+    endorsement = (endorsements or {}).get(lever, 0.0)
+    if avoid and lever in avoid:
+        endorsement -= config.REASONING_AVOID_PENALTY / config.REASONING_ENDORSEMENT_WEIGHT
     breakdown = {
         "relevance": 0.40 * relevance,
         "expected_uplift": 0.30 * expected_uplift,
         "user_affinity": 0.20 * user_affinity,
         "information_gain": 0.10 * information_gain,
+        "agent_endorsement": config.REASONING_ENDORSEMENT_WEIGHT * endorsement,
         "direct_cost_penalty": -0.15 * direct_cost,
         "margin_risk_penalty": -0.25 * margin_risk,
         "fatigue_penalty": -0.20 * fatigue,

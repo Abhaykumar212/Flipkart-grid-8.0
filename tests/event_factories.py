@@ -27,6 +27,7 @@ METADATA_BY_EVENT = {
     EventType.INTERVENTION_DISMISSED: {"decision_id": "d1", "intervention_id": "NO_ACTION"},
     EventType.ORDER_COMPLETED: {"order_id": "o1", "order_value": 71999, "payment_method": "UPI"},
     EventType.SESSION_ENDED: {"reason": "EXPLICIT"},
+    EventType.EXIT_INTENT_DETECTED: {"signal": "POINTER_EXIT"},
 }
 
 

@@ -5,6 +5,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend import config
 from backend.storage.models import Experiment, ExperimentAssignment
 
 
@@ -20,7 +21,10 @@ def assign_group(
     session_id: str,
     experiment_id: str,
     *,
-    traffic_split: int = 50,
+    # Defaults to the configured split so a caller without the Experiment row —
+    # the scenario replayer choosing a session id for a required arm — buckets
+    # sessions exactly the way the pipeline will.
+    traffic_split: int = config.EXPERIMENT_TRAFFIC_SPLIT,
     control_group: str = "CONTROL",
     treatment_group: str = "PERSONALIZED_V1",
 ) -> str:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 import urllib.error
 import urllib.request
@@ -8,6 +9,11 @@ import urllib.request
 from backend import config
 
 from .base import LLMUnavailable, RateLimitedError
+
+#: One retry, briefly. Groq's free tier 429s in bursts and returns transient
+#: 5xx/400s often enough that a single failure used to poison a cached review
+#: summary for the whole session. Anything longer would stall the decision path.
+_RETRY_DELAY_SECONDS = 0.6
 
 
 class GroqClient:
@@ -32,6 +38,7 @@ class GroqClient:
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.2,
             "max_tokens": max_tokens,
+            "reasoning_effort": "low",
         }
         if response_format is not None:
             payload["response_format"] = response_format
@@ -46,15 +53,24 @@ class GroqClient:
                 "User-Agent": "flipkart-grid-explain/1.0",
             },
         )
-        try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                body = json.load(response)
-        except urllib.error.HTTPError as error:
-            if error.code == 429:
-                raise RateLimitedError("Groq rate limit reached") from error
-            raise LLMUnavailable(f"Groq HTTP {error.code}") from error
-        except (TimeoutError, urllib.error.URLError) as error:
-            raise LLMUnavailable("Groq request failed or timed out") from error
+        body = None
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    body = json.load(response)
+                break
+            except urllib.error.HTTPError as error:
+                if attempt == 0 and error.code in (429, 500, 502, 503):
+                    time.sleep(_RETRY_DELAY_SECONDS)
+                    continue
+                if error.code == 429:
+                    raise RateLimitedError("Groq rate limit reached") from error
+                raise LLMUnavailable(f"Groq HTTP {error.code}") from error
+            except (TimeoutError, urllib.error.URLError) as error:
+                if attempt == 0:
+                    time.sleep(_RETRY_DELAY_SECONDS)
+                    continue
+                raise LLMUnavailable("Groq request failed or timed out") from error
         try:
             return str(body["choices"][0]["message"]["content"])
         except (KeyError, IndexError, TypeError) as error:

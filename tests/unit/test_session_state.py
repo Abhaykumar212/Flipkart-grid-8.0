@@ -43,4 +43,4 @@ def test_every_event_type_updates_state_without_mutating_input():
     assert len(state.interventions["shown"]) == 1
     assert state.order_completed
     assert state.ended
-    assert len(state.recent_events) == 21
+    assert len(state.recent_events) == 22

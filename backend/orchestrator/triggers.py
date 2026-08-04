@@ -7,6 +7,7 @@ import json
 
 from backend import config
 from backend.domain.events import EventType
+from backend.policy_engine.browsing import is_browsing_assist
 from backend.session_state.state import SessionState
 
 
@@ -18,11 +19,19 @@ DIRECT_TRIGGERS = {
     EventType.PAYMENT_METHOD_CHANGED.value,
     EventType.DELIVERY_CHECKED.value,
     EventType.COUPON_SEARCHED.value,
+    # The one moment where waiting for a threshold is pointless — the shopper
+    # is already leaving.
+    EventType.EXIT_INTENT_DETECTED.value,
 }
+# Research behaviour has to accumulate before it means anything — one review
+# open is a glance, several is deliberation. Thresholds are deliberately low
+# enough that a shopper who is genuinely stuck gets helped inside one visit.
 THRESHOLD_TRIGGERS = {
-    EventType.REVIEW_OPENED.value: ("review_opens", 3),
-    EventType.SIMILAR_PRODUCT_VIEWED.value: ("similar_product_views", 5),
-    EventType.PRODUCT_COMPARED.value: ("comparisons", 2),
+    EventType.REVIEW_OPENED.value: ("review_opens", 2),
+    EventType.SIMILAR_PRODUCT_VIEWED.value: ("similar_product_views", 3),
+    EventType.PRODUCT_COMPARED.value: ("comparisons", 1),
+    EventType.REVIEW_DWELL_RECORDED.value: ("review_dwell_ms", 20_000),
+    EventType.PRODUCT_VIEWED.value: ("distinct_products_viewed", 3),
 }
 TRIGGER_NAMES = DIRECT_TRIGGERS | set(THRESHOLD_TRIGGERS) | {"PERIODIC"}
 CONTINUOUS_FEATURES = {
@@ -32,6 +41,10 @@ CONTINUOUS_FEATURES = {
     "s_idle_seconds_current",
     "s_event_velocity_per_min",
 }
+
+#: Dwell is the whole signal for a shopper who hasn't added anything, but it
+#: ticks every second. Bucketing puts it in the hash without re-firing on tick.
+DWELL_BUCKET_SECONDS = 15.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +66,8 @@ def material_feature_hash(features: dict[str, float]) -> str:
         )
         and name not in CONTINUOUS_FEATURES
     }
+    dwell = float(features.get("s_review_dwell_seconds", 0.0))
+    material["s_review_dwell_bucket"] = int(dwell // DWELL_BUCKET_SECONDS)
     encoded = json.dumps(material, sort_keys=True, separators=(",", ":"))
     return sha256(encoded.encode()).hexdigest()
 
@@ -103,7 +118,11 @@ def evaluate(
     threshold = THRESHOLD_TRIGGERS.get(trigger)
     if threshold and state.counters.get(threshold[0], 0) < threshold[1]:
         return TriggerVerdict(False, "trigger_threshold_not_met", feature_hash, event_id)
-    if trigger == "PERIODIC" and features["c_item_count"] <= 0:
+    if (
+        trigger == "PERIODIC"
+        and features["c_item_count"] <= 0
+        and not is_browsing_assist(features)
+    ):
         return TriggerVerdict(False, "periodic_cart_empty", feature_hash)
 
     event_at = _timestamp(event.get("server_timestamp")) if event else state.last_event_at

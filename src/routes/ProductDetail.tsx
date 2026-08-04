@@ -28,6 +28,7 @@ import { ProductQuestions } from "../components/pdp/ProductQuestions";
 import { RelatedProductsRail } from "../components/pdp/RelatedProductsRail";
 import { SellerPanel } from "../components/pdp/SellerPanel";
 import { StockStatus } from "../components/pdp/StockStatus";
+import { InterventionRenderer } from "../components/intervention/InterventionRenderer";
 
 export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -153,6 +154,9 @@ export default function ProductDetail() {
       <section className="rounded-[2px] bg-white p-4 sm:p-6"><h2 className="mb-2 text-fk-xl font-medium text-fk-ink">Product Description</h2><p className="max-w-4xl text-fk-base leading-6 text-fk-ink">{description}</p></section>
       <ProductComparison current={product} alternatives={comparisonAlternatives} />
       <ProductQuestions product={product} />
+      {/* Anchored above the reviews: a shopper deliberating over reviews is
+          answered where they are looking, not on a page they haven't reached. */}
+      <InterventionRenderer surface="pdp" />
       <div id="ratings"><RatingsAndReviews productId={product.id} ratingDistribution={ratingDistribution} reviews={reviews} /></div>
       <RelatedProductsRail product={product} />
     </div>

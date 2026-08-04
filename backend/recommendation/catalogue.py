@@ -41,6 +41,24 @@ INTERVENTION_CATALOGUE = (
     _definition(InterventionId.CHECKOUT_ASSISTANCE, (RootCause.CHECKOUT_OR_PAYMENT_FAILURE,), CostLevel.LOW, 2, 10, (Channel.CHECKOUT_PANEL, Channel.ASSISTANT_PANEL), ("checkout_started",), 0.22),
     _definition(InterventionId.WISHLIST_REMINDER, (RootCause.LOW_PURCHASE_INTENT, RootCause.SESSION_INTERRUPTION_OR_DISTRACTION), CostLevel.LOW, 1, 30, (Channel.BANNER, Channel.INLINE_CARD), (), 0.14),
     _definition(InterventionId.LIMITED_TIME_DISCOUNT, (RootCause.PRICE_SENSITIVITY,), CostLevel.HIGH, 3, 60, (Channel.INLINE_CARD, Channel.BANNER), ("discount_budget_available", "cart_value≥1000"), 0.38, max_discount_pct=10.0),
+    # Zero-cost levers. These are the only ones a browsing shopper can reach,
+    # and the only ones that stay available once discount protection bites.
+    _definition(InterventionId.STOCK_SCARCITY_NUDGE, (RootCause.PRODUCT_AVAILABILITY_CONCERN, RootCause.LOW_PURCHASE_INTENT), CostLevel.ZERO, 1, 20, (Channel.INLINE_CARD, Channel.BANNER), ("low_stock_confirmed",), 0.16),
+    _definition(InterventionId.EXIT_INTENT_REMINDER, (RootCause.LOW_PURCHASE_INTENT, RootCause.SESSION_INTERRUPTION_OR_DISTRACTION), CostLevel.ZERO, 2, 30, (Channel.BANNER, Channel.INLINE_CARD), (), 0.15),
+    _definition(InterventionId.TRUST_BADGE_REASSURANCE, (RootCause.TRUST_OR_RETURN_POLICY_CONCERN,), CostLevel.ZERO, 1, 20, (Channel.INLINE_CARD, Channel.CHECKOUT_PANEL), (), 0.17),
+    # Only after a real failure, and modelled below the retry it accompanies:
+    # "save a method for next time" is the follow-up to a declined payment, not
+    # the remedy for it. Scoped to `checkout_started` it fired on quiet sessions
+    # and outranked the retry purely for being free.
+    _definition(InterventionId.SAVED_PAYMENT_PROMPT, (RootCause.CHECKOUT_OR_PAYMENT_FAILURE,), CostLevel.ZERO, 1, 30, (Channel.CHECKOUT_PANEL, Channel.INLINE_CARD), ("payment_failure_occurred",), 0.10),
+    # Trust only. Listing it against payment failure let a "create an account"
+    # nudge outrank the retry path for a shopper whose payment had just been
+    # declined, purely because it is the cheaper lever.
+    _definition(InterventionId.GUEST_ACCOUNT_NUDGE, (RootCause.TRUST_OR_RETURN_POLICY_CONCERN,), CostLevel.ZERO, 1, 45, (Channel.CHECKOUT_PANEL, Channel.INLINE_CARD), ("guest_session",), 0.14),
+    # Margin-spending delivery levers. Higher modelled uplift than the free
+    # levers, which is exactly why they need the same protection as a discount.
+    _definition(InterventionId.DELIVERY_SPEED_UPGRADE, (RootCause.DELIVERY_CONCERN,), CostLevel.MEDIUM, 2, 45, (Channel.INLINE_CARD, Channel.CHECKOUT_PANEL), ("delivery_data_available",), 0.23),
+    _definition(InterventionId.FREE_DELIVERY_WAIVER, (RootCause.DELIVERY_CONCERN, RootCause.PRICE_SENSITIVITY), CostLevel.HIGH, 2, 60, (Channel.INLINE_CARD, Channel.BANNER), ("delivery_fee_present", "cart_value≥1000"), 0.30),
     _definition(InterventionId.NO_ACTION, ("*",), CostLevel.ZERO, 0, 0, (), (), 0.0),
 )
 

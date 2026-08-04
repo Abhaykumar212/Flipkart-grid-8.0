@@ -21,6 +21,7 @@ export const EVENT_TYPES = [
   "INTERVENTION_CLICKED",
   "INTERVENTION_DISMISSED",
   "ORDER_COMPLETED",
+  "EXIT_INTENT_DETECTED",
   "SESSION_ENDED",
 ] as const;
 
@@ -48,6 +49,7 @@ export interface EventMetadataMap {
   INTERVENTION_DISMISSED: { decision_id: string; intervention_id: string };
   ORDER_COMPLETED: { order_id: string; order_value: number; payment_method: string };
   SESSION_ENDED: { reason: "EXPLICIT" | "TIMEOUT" | "UNLOAD" };
+  EXIT_INTENT_DETECTED: { signal: "POINTER_EXIT" | "TAB_HIDDEN" };
 }
 
 type ProductEventType =

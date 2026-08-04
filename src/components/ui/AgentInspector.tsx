@@ -1,9 +1,20 @@
 import { useState } from "react";
-import { Activity, ExternalLink, RefreshCw, ShieldCheck, Workflow, X } from "lucide-react";
+import {
+  Activity,
+  BrainCircuit,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  RefreshCw,
+  ShieldCheck,
+  Workflow,
+  X,
+} from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
 import { useTracker } from "../../context/TrackerContext";
 import { useSession } from "../../context/SessionContext";
+import { FEATURE_GROUPS, featureLabel } from "../../lib/featureLabels";
 
 const COUNTER_LABELS: Record<string, string> = {
   product_views: "Product views",
@@ -32,11 +43,51 @@ interface ExplanationShape {
   rendered_text?: string;
 }
 
+interface ReasoningShape {
+  path?: string;
+  headline?: string;
+  explanation?: string;
+  narrative?: string;
+  confidence?: string;
+  endorsed?: string[];
+  avoided?: string[];
+  model?: string;
+  latency_ms?: number;
+}
+
+interface Attribution {
+  feature: string;
+  value: number;
+  shap: number;
+}
+
 function humanCause(cause: string): string {
   return cause
     .replaceAll("_", " ")
     .toLowerCase()
     .replace(/\b[a-z]/g, (character) => character.toUpperCase());
+}
+
+/** Feature readings are wildly different magnitudes; keep the grid scannable. */
+function compactValue(value: number): string {
+  if (Number.isInteger(value)) return value.toLocaleString("en-IN");
+  if (Math.abs(value) >= 100) return Math.round(value).toLocaleString("en-IN");
+  return value.toFixed(2);
+}
+
+/**
+ * Whether the agent or the trained model answered. The distinction matters on
+ * stage: a demo that has quietly fallen back to the model should say so rather
+ * than let a viewer assume they are watching an LLM reason.
+ */
+function reasoningSource(path: string | undefined): { label: string; tone: string } {
+  if (path === "llm") return { label: "LLM agent", tone: "text-fk-blue" };
+  if (path === "cache") return { label: "LLM agent (cached)", tone: "text-fk-blue" };
+  if (path === "model:rate_limited") return { label: "Model — agent rate limited", tone: "text-fk-orange" };
+  if (path === "model:disabled") return { label: "Model — agent disabled", tone: "text-fk-muted" };
+  if (path === "model:session_budget_spent") return { label: "Model — agent budget spent", tone: "text-fk-orange" };
+  if (path === "model:agent_error") return { label: "Model — agent unavailable", tone: "text-fk-orange" };
+  return { label: "Trained model", tone: "text-fk-muted" };
 }
 
 /**
@@ -49,18 +100,28 @@ function humanCause(cause: string): string {
  */
 export function AgentInspector() {
   const [isOpen, setIsOpen] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(false);
   const { pathname } = useLocation();
   const { count } = useCart();
   const { snapshot, loading, error, refresh } = useTracker();
   const { latestDecision } = useSession();
 
-  if (count === 0 && (snapshot?.cart.item_count ?? 0) === 0) return null;
+  // Deliberately visible with an empty cart: browsing is exactly when the
+  // system is deciding whether a shopper needs help, and hiding the inspector
+  // there hides the most interesting decision it makes.
 
   const counters = Object.entries(snapshot?.counters ?? {})
     .filter(([name]) => name in COUNTER_LABELS && Number(snapshot?.counters?.[name]) > 0)
     .sort(([left], [right]) => left.localeCompare(right));
 
   const explanation = (latestDecision?.explanation ?? {}) as ExplanationShape;
+  const reasoning = ((latestDecision as { reasoning?: ReasoningShape } | null)?.reasoning
+    ?? {}) as ReasoningShape;
+  const attributions = ((latestDecision as { shap_attributions?: Attribution[] } | null)
+    ?.shap_attributions ?? []) as Attribution[];
+  const features = snapshot?.current_features ?? null;
+  const maxShap = Math.max(...attributions.map((item) => Math.abs(item.shap)), 0.0001);
+  const source = reasoningSource(reasoning.path);
   const probability = latestDecision?.abandonment_probability ?? null;
   const band = latestDecision?.risk_level ?? null;
   const decision = latestDecision?.decision;
@@ -206,6 +267,151 @@ export function AgentInspector() {
                     </>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* What the reasoning agent concluded, and whether it was the agent
+                at all — a fallback to the trained model must be legible. */}
+            {(reasoning.path || decision) && (
+              <div className="border-b border-fk-border px-5 py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="flex items-center gap-1.5 text-fk-xs font-bold uppercase tracking-wider text-fk-muted">
+                    <BrainCircuit className="h-3.5 w-3.5" />
+                    Agent reasoning
+                  </p>
+                  <span className={`text-fk-xs font-bold ${source.tone}`}>{source.label}</span>
+                </div>
+                {reasoning.headline ? (
+                  <>
+                    <p className="mt-2 text-fk-md font-medium text-fk-ink">{reasoning.headline}</p>
+                    {reasoning.narrative && (
+                      <p className="mt-1 text-fk-sm leading-relaxed text-fk-muted">
+                        {reasoning.narrative}
+                      </p>
+                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {reasoning.confidence && (
+                        <span className="rounded-full bg-fk-bg px-2 py-0.5 text-fk-xs text-fk-muted">
+                          confidence: {reasoning.confidence}
+                        </span>
+                      )}
+                      {reasoning.model && (
+                        <span className="rounded-full bg-fk-bg px-2 py-0.5 font-mono text-fk-xs text-fk-muted">
+                          {reasoning.model}
+                        </span>
+                      )}
+                      {typeof reasoning.latency_ms === "number" && reasoning.latency_ms > 0 && (
+                        <span className="rounded-full bg-fk-bg px-2 py-0.5 text-fk-xs text-fk-muted">
+                          {Math.round(reasoning.latency_ms)}ms
+                        </span>
+                      )}
+                    </div>
+                    {reasoning.endorsed && reasoning.endorsed.length > 0 && (
+                      <p className="mt-2 text-fk-xs text-fk-muted">
+                        Proposed: {reasoning.endorsed.map(humanCause).join(" · ")}
+                      </p>
+                    )}
+                    {reasoning.avoided && reasoning.avoided.length > 0 && (
+                      <p className="mt-1 text-fk-xs text-fk-muted">
+                        Argued against: {reasoning.avoided.map(humanCause).join(" · ")}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="mt-2 text-fk-sm text-fk-muted">
+                    The trained cause model answered this decision.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* The model's own attribution, signed. */}
+            {attributions.length > 0 && (
+              <div className="border-b border-fk-border px-5 py-4">
+                <p className="text-fk-xs font-bold uppercase tracking-wider text-fk-muted">
+                  SHAP attribution
+                </p>
+                <p className="mt-1 text-fk-xs text-fk-muted">
+                  Red pushes toward abandoning · green holds the shopper in
+                </p>
+                <ul className="mt-2 space-y-1.5">
+                  {attributions.slice(0, 8).map((item) => (
+                    <li key={item.feature}>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="truncate text-fk-xs text-fk-ink" title={item.feature}>
+                          {featureLabel(item.feature)}
+                        </span>
+                        <span
+                          className={`shrink-0 font-mono text-fk-xs tabular-nums ${
+                            item.shap >= 0 ? "text-red-600" : "text-fk-green"
+                          }`}
+                        >
+                          {item.shap >= 0 ? "+" : ""}
+                          {item.shap.toFixed(3)}
+                        </span>
+                      </div>
+                      <span className="mt-0.5 block h-1.5 w-full overflow-hidden rounded-full bg-fk-bg">
+                        <span
+                          className={`block h-full rounded-full ${
+                            item.shap >= 0 ? "bg-red-500" : "bg-fk-green"
+                          }`}
+                          style={{ width: `${Math.max(3, (Math.abs(item.shap) / maxShap) * 100)}%` }}
+                        />
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* The full serving vector, exactly as the models received it. */}
+            {features && (
+              <div className="border-b border-fk-border px-5 py-4">
+                <button
+                  type="button"
+                  onClick={() => setShowFeatures((open) => !open)}
+                  className="flex w-full items-center justify-between gap-2"
+                  aria-expanded={showFeatures}
+                >
+                  <span className="text-fk-xs font-bold uppercase tracking-wider text-fk-muted">
+                    Live feature vector · {Object.keys(features).length}
+                  </span>
+                  {showFeatures ? (
+                    <ChevronUp className="h-4 w-4 text-fk-muted" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-fk-muted" />
+                  )}
+                </button>
+                {showFeatures && (
+                  <div className="mt-3 space-y-3">
+                    {FEATURE_GROUPS.map((group) => {
+                      const rows = Object.entries(features).filter(([name]) =>
+                        name.startsWith(group.prefix),
+                      );
+                      if (rows.length === 0) return null;
+                      return (
+                        <div key={group.prefix}>
+                          <p className="text-fk-xs font-medium text-fk-muted">{group.label}</p>
+                          <div className="mt-1 grid grid-cols-2 gap-1.5">
+                            {rows.map(([name, value]) => (
+                              <div
+                                key={name}
+                                className="rounded-[2px] border border-fk-border px-2 py-1.5"
+                              >
+                                <div className="truncate text-[10px] text-fk-muted" title={name}>
+                                  {featureLabel(name)}
+                                </div>
+                                <div className="mt-0.5 font-mono text-fk-sm font-bold tabular-nums text-fk-ink">
+                                  {compactValue(Number(value))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 

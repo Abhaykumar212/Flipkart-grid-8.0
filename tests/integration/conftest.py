@@ -104,6 +104,11 @@ def _integration_causes(features: dict[str, float]) -> CauseResult:
 @pytest.fixture
 def api_harness(migrated_database, monkeypatch):
     run_command([sys.executable, "-m", "scripts.seed_catalog"], migrated_database)
+    # Migration 0008 seeds a fixed split; this brings the row up to the
+    # configured one, exactly as reset_demo does. Without it the replayer picks
+    # session ids for an arm using one split while the pipeline buckets with
+    # another, and scenario H stops demonstrating both arms.
+    run_command([sys.executable, "-m", "scripts.seed_experiment"], migrated_database)
     run_command([sys.executable, "-m", "scripts.warm_review_cache"], migrated_database)
     engine = build_engine(migrated_database)
     testing_sessions = sessionmaker(bind=engine, expire_on_commit=False)

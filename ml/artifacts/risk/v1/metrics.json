@@ -1,17 +1,17 @@
 {
-  "roc_auc": 0.7937631580432435,
-  "pr_auc": 0.9253696212000444,
-  "log_loss": 0.4291284382343292,
-  "brier": 0.14679348468780518,
-  "ece_15": 0.01126298349083946,
+  "roc_auc": 0.7927616676066214,
+  "pr_auc": 0.9249642673209786,
+  "log_loss": 0.42954903841018677,
+  "brier": 0.14692197740077972,
+  "ece_15": 0.01076119294949384,
   "model_name": "risk",
   "model_version": "risk-v1",
   "training_data_version": "simulator-v1",
   "selected_calibration": "none",
   "calibration_validation_log_loss": {
-    "none": 0.414863258600235,
-    "isotonic": 0.420913680473607,
-    "sigmoid": 0.4153501036337735
+    "none": 0.4141802489757538,
+    "isotonic": 0.4170369219966316,
+    "sigmoid": 0.4146250700719937
   },
   "best_params": {
     "subsample": 0.9,
@@ -24,17 +24,17 @@
   "best_cv_neg_log_loss": -0.42658697565396625,
   "baselines": {
     "logistic_regression": {
-      "roc_auc": 0.7820542189858153,
-      "pr_auc": 0.9209181371609569,
-      "log_loss": 0.5282643768043009,
-      "brier": 0.1921176988768475,
-      "ece_15": 0.1715185634213569
+      "roc_auc": 0.7820568863056887,
+      "pr_auc": 0.9209192997000304,
+      "log_loss": 0.528265690710615,
+      "brier": 0.19211842416840635,
+      "ece_15": 0.1715216936895655
     },
     "random_forest": {
-      "roc_auc": 0.783626901644762,
+      "roc_auc": 0.7836269016447621,
       "pr_auc": 0.9215079295086231,
       "log_loss": 0.47381162632160156,
-      "brier": 0.16343196295389947,
+      "brier": 0.1634319629538995,
       "ece_15": 0.11116130169533014
     }
   },
@@ -1017,9 +1017,9 @@
   "operating_table": [
     {
       "threshold": 0.3,
-      "precision": 0.7739177636042882,
-      "recall": 0.9916536254564423,
-      "intervention_rate": 0.9541628900686262
+      "precision": 0.7738717339667458,
+      "recall": 0.9913928012519562,
+      "intervention_rate": 0.9539686650265441
     },
     {
       "threshold": 0.35,
@@ -1029,146 +1029,146 @@
     },
     {
       "threshold": 0.4,
-      "precision": 0.7741102961151861,
-      "recall": 0.9909580942444792,
-      "intervention_rate": 0.9532565065389097
+      "precision": 0.7740730680429173,
+      "recall": 0.9910450356459746,
+      "intervention_rate": 0.9533859899002978
     },
     {
       "threshold": 0.45,
-      "precision": 0.7742352141400408,
-      "recall": 0.9901756216310207,
-      "intervention_rate": 0.9523501230091933
+      "precision": 0.7742746483658355,
+      "recall": 0.9906972700399931,
+      "intervention_rate": 0.9528033147740516
     },
     {
       "threshold": 0.5,
-      "precision": 0.7762544557170277,
-      "recall": 0.9845244305338202,
-      "intervention_rate": 0.9444516379645216
+      "precision": 0.7762194704795786,
+      "recall": 0.9864371413667188,
+      "intervention_rate": 0.9463291467046484
     },
     {
       "threshold": 0.55,
-      "precision": 0.7887182431462609,
-      "recall": 0.9554860024343592,
-      "intervention_rate": 0.9021105787906254
+      "precision": 0.7872355631789594,
+      "recall": 0.957659537471744,
+      "intervention_rate": 0.9058655962708791
     },
     {
       "threshold": 0.6,
-      "precision": 0.8086588898457684,
-      "recall": 0.8980177360459051,
-      "intervention_rate": 0.8269454875048556
+      "precision": 0.8079755562519586,
+      "recall": 0.8966266736219788,
+      "intervention_rate": 0.8263628123786093
     },
     {
       "threshold": 0.65,
-      "precision": 0.8317732250088308,
-      "recall": 0.8189010606850983,
-      "intervention_rate": 0.733134792179205
+      "precision": 0.8307773664727657,
+      "recall": 0.819509650495566,
+      "intervention_rate": 0.7345591091544736
     },
     {
       "threshold": 0.7,
-      "precision": 0.8706775067750677,
-      "recall": 0.6983133368109894,
-      "intervention_rate": 0.5972420044024342
+      "precision": 0.8698868581375109,
+      "recall": 0.6951834463571552,
+      "intervention_rate": 0.5951055289395313
     },
     {
       "threshold": 0.75,
-      "precision": 0.9369601454765873,
-      "recall": 0.5375586854460094,
-      "intervention_rate": 0.42723035089990935
+      "precision": 0.9356314826113484,
+      "recall": 0.5332985567727352,
+      "intervention_rate": 0.424446458630066
     },
     {
       "threshold": 0.8,
-      "precision": 0.9721453606345692,
-      "recall": 0.4581811858807164,
-      "intervention_rate": 0.35096465104234104
+      "precision": 0.9722067815453029,
+      "recall": 0.45618153364632236,
+      "intervention_rate": 0.34941085070568434
     },
     {
       "threshold": 0.85,
-      "precision": 0.9863523573200993,
-      "recall": 0.41471048513302033,
-      "intervention_rate": 0.31309076783633305
+      "precision": 0.9861655998348131,
+      "recall": 0.4152321335419927,
+      "intervention_rate": 0.31354395960119125
     },
     {
       "threshold": 0.9,
       "precision": 1.0,
-      "recall": 0.37732568249000176,
-      "intervention_rate": 0.28097889421209377
+      "recall": 0.3756737958615893,
+      "intervention_rate": 0.27974880227890714
     }
   ],
   "reliability_curve": [
     {
-      "mean_prediction": 0.05820973962545395,
-      "observed_rate": 0.75,
-      "count": 4
-    },
-    {
-      "mean_prediction": 0.10808293521404266,
-      "observed_rate": 0.1504424778761062,
-      "count": 339
-    },
-    {
-      "mean_prediction": 0.15956251323223114,
-      "observed_rate": 0.10580204778156997,
-      "count": 293
-    },
-    {
-      "mean_prediction": 0.22469386458396912,
-      "observed_rate": 0.12307692307692308,
-      "count": 65
-    },
-    {
-      "mean_prediction": 0.2983747124671936,
-      "observed_rate": 0.5384615384615384,
-      "count": 13
-    },
-    {
-      "mean_prediction": 0.3679083585739136,
-      "observed_rate": 0.5,
-      "count": 8
-    },
-    {
-      "mean_prediction": 0.44798028469085693,
-      "observed_rate": 0.5714285714285714,
-      "count": 35
-    },
-    {
-      "mean_prediction": 0.5121747851371765,
-      "observed_rate": 0.4988179669030733,
-      "count": 423
-    },
-    {
-      "mean_prediction": 0.5687851905822754,
-      "observed_rate": 0.5612860013395847,
-      "count": 1493
-    },
-    {
-      "mean_prediction": 0.6348173022270203,
-      "observed_rate": 0.6305541687468796,
-      "count": 2003
-    },
-    {
-      "mean_prediction": 0.7018738389015198,
-      "observed_rate": 0.6858747044917257,
-      "count": 3384
-    },
-    {
-      "mean_prediction": 0.7591930031776428,
-      "observed_rate": 0.7506361323155216,
-      "count": 1965
-    },
-    {
-      "mean_prediction": 0.8336984515190125,
-      "observed_rate": 0.8607594936708861,
-      "count": 790
-    },
-    {
-      "mean_prediction": 0.8904468417167664,
-      "observed_rate": 0.8982630272952854,
-      "count": 403
-    },
-    {
-      "mean_prediction": 0.9987897872924805,
+      "mean_prediction": 0.06519860774278641,
       "observed_rate": 1.0,
-      "count": 4228
+      "count": 1
+    },
+    {
+      "mean_prediction": 0.1082640066742897,
+      "observed_rate": 0.1588235294117647,
+      "count": 340
+    },
+    {
+      "mean_prediction": 0.1589927077293396,
+      "observed_rate": 0.10033444816053512,
+      "count": 299
+    },
+    {
+      "mean_prediction": 0.2273850440979004,
+      "observed_rate": 0.14516129032258066,
+      "count": 62
+    },
+    {
+      "mean_prediction": 0.30111950635910034,
+      "observed_rate": 0.5333333333333333,
+      "count": 15
+    },
+    {
+      "mean_prediction": 0.37522199749946594,
+      "observed_rate": 0.3333333333333333,
+      "count": 3
+    },
+    {
+      "mean_prediction": 0.4461117386817932,
+      "observed_rate": 0.6470588235294118,
+      "count": 17
+    },
+    {
+      "mean_prediction": 0.5126239061355591,
+      "observed_rate": 0.509478672985782,
+      "count": 422
+    },
+    {
+      "mean_prediction": 0.5697875618934631,
+      "observed_rate": 0.5646749835850295,
+      "count": 1523
+    },
+    {
+      "mean_prediction": 0.63597172498703,
+      "observed_rate": 0.6333169048792509,
+      "count": 2029
+    },
+    {
+      "mean_prediction": 0.7019842863082886,
+      "observed_rate": 0.6845324788814448,
+      "count": 3433
+    },
+    {
+      "mean_prediction": 0.7594218850135803,
+      "observed_rate": 0.7511811023622047,
+      "count": 1905
+    },
+    {
+      "mean_prediction": 0.833918035030365,
+      "observed_rate": 0.8578947368421053,
+      "count": 760
+    },
+    {
+      "mean_prediction": 0.8897755146026611,
+      "observed_rate": 0.9014084507042254,
+      "count": 426
+    },
+    {
+      "mean_prediction": 0.9987789988517761,
+      "observed_rate": 1.0,
+      "count": 4211
     }
   ]
 }

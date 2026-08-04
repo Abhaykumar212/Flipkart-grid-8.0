@@ -38,6 +38,9 @@ class EventType(StrEnum):
     INTERVENTION_CLICKED = "INTERVENTION_CLICKED"
     INTERVENTION_DISMISSED = "INTERVENTION_DISMISSED"
     ORDER_COMPLETED = "ORDER_COMPLETED"
+    # Before SESSION_ENDED: that one is terminal, and anything declared after it
+    # lands after it in any full-enum replay, where it is correctly rejected.
+    EXIT_INTENT_DETECTED = "EXIT_INTENT_DETECTED"
     SESSION_ENDED = "SESSION_ENDED"
 
 
@@ -147,6 +150,12 @@ class SessionEndedMetadata(MetadataModel):
     reason: Literal["EXPLICIT", "TIMEOUT", "UNLOAD"]
 
 
+class ExitIntentMetadata(MetadataModel):
+    #: How the shopper signalled they were leaving. POINTER_EXIT is the cursor
+    #: heading for the browser chrome; TAB_HIDDEN is a background tab.
+    signal: Literal["POINTER_EXIT", "TAB_HIDDEN"]
+
+
 Metadata = (
     SessionStartedMetadata
     | SearchPerformedMetadata
@@ -167,6 +176,7 @@ Metadata = (
     | InterventionOutcomeMetadata
     | OrderCompletedMetadata
     | SessionEndedMetadata
+    | ExitIntentMetadata
 )
 
 
@@ -192,6 +202,7 @@ _METADATA_BY_TYPE: dict[EventType, type[MetadataModel]] = {
     EventType.INTERVENTION_DISMISSED: InterventionOutcomeMetadata,
     EventType.ORDER_COMPLETED: OrderCompletedMetadata,
     EventType.SESSION_ENDED: SessionEndedMetadata,
+    EventType.EXIT_INTENT_DETECTED: ExitIntentMetadata,
 }
 
 PRODUCT_EVENT_TYPES = {

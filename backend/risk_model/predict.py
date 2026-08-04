@@ -38,7 +38,16 @@ def predict(features: dict[str, float]) -> RiskPrediction:
     if shap_values.ndim == 3:
         shap_values = shap_values[:, :, -1]
     row = shap_values[0]
+    shap_by_feature = {name: float(row[index]) for index, name in enumerate(RISK_MODEL_FEATURES)}
     indices = np.argsort(np.abs(row))[::-1][:5]
     factors = tuple(RiskFactor(RISK_MODEL_FEATURES[index], float(values[0, index]), float(row[index])) for index in indices)
     confidence = min(1.0, abs(probability - 0.5) * 2)
-    return RiskPrediction(float(np.clip(probability, 0, 1)), confidence, _band(probability), loaded.version, factors, (perf_counter() - started) * 1000)
+    return RiskPrediction(
+        float(np.clip(probability, 0, 1)),
+        confidence,
+        _band(probability),
+        loaded.version,
+        factors,
+        (perf_counter() - started) * 1000,
+        shap_by_feature=shap_by_feature,
+    )

@@ -23,6 +23,10 @@ def _number(name: str, default: float) -> float:
     return float(_text(name, str(default)))
 
 
+def _flag(name: str, default: bool) -> bool:
+    return _text(name, "1" if default else "0").lower() not in {"0", "false", "no", ""}
+
+
 # Database and API
 DATABASE_URL = _text("DATABASE_URL", "sqlite:///./data/grid8.db")
 API_HOST = _text("API_HOST", "0.0.0.0")
@@ -57,10 +61,18 @@ SESSION_HARD_TTL_HOURS = _number("SESSION_HARD_TTL_HOURS", 4)
 EVENT_DEDUPE_TTL_HOURS = _number("EVENT_DEDUPE_TTL_HOURS", 24)
 EVENT_LATE_THRESHOLD_SECONDS = _number("EVENT_LATE_THRESHOLD_SECONDS", 5)
 MAX_EVENT_BATCH_SIZE = _integer("MAX_EVENT_BATCH_SIZE", 50)
-EVENT_RATE_LIMIT_PER_MINUTE = _integer("EVENT_RATE_LIMIT_PER_MINUTE", 100)
+# Raised from 100: periodic review-dwell reporting means an engaged shopper now
+# emits legitimately more events, and a rejected batch still consumes budget on
+# retry — so a session that trips this can otherwise never recover in-window.
+EVENT_RATE_LIMIT_PER_MINUTE = _integer("EVENT_RATE_LIMIT_PER_MINUTE", 300)
 DECISION_RATE_LIMIT_PER_MINUTE = _integer("DECISION_RATE_LIMIT_PER_MINUTE", 20)
 
 # Models
+# Share of sessions receiving the personalized arm. A 50/50 pilot split makes a
+# live walkthrough a coin flip; 80/20 is the ordinary shape of a rollout that has
+# already passed its pilot, and still leaves a real control arm to measure.
+EXPERIMENT_TRAFFIC_SPLIT = _integer("EXPERIMENT_TRAFFIC_SPLIT", 80)
+
 RISK_MODEL_VERSION = _text("RISK_MODEL_VERSION", "v1")
 ROOT_CAUSE_MODEL_VERSION = _text("ROOT_CAUSE_MODEL_VERSION", "v1")
 MODEL_ARTIFACT_DIR = Path(_text("MODEL_ARTIFACT_DIR", "./ml/artifacts"))
@@ -74,7 +86,15 @@ LLM_MODEL = _text("LLM_MODEL", "openai/gpt-oss-120b")
 LLM_TIMEOUT_SECONDS = _number("LLM_TIMEOUT_SECONDS", 8)
 LLM_MAX_TOKENS = _integer("LLM_MAX_TOKENS", 320)
 
-# Legacy RCA-agent settings retained until its Phase 12 adapter replaces it.
+# Reasoning agent. When enabled and a key is present, the LLM diagnoses the root
+# cause and endorses levers; the trained cause model is the fallback. Turning
+# this off is also how the model-only path gets demonstrated.
+REASONING_LLM_ENABLED = _flag("REASONING_LLM_ENABLED", True)
+#: Utility bonus for the agent's top pick. Sits just above `relevance`'s 0.40
+#: ceiling so an endorsement leads, without overwhelming cost and fatigue.
+REASONING_ENDORSEMENT_WEIGHT = _number("REASONING_ENDORSEMENT_WEIGHT", 0.35)
+REASONING_AVOID_PENALTY = _number("REASONING_AVOID_PENALTY", 0.25)
+
 RCA_MODEL = _text("RCA_MODEL", LLM_MODEL)
 RCA_FALLBACK_MODEL = _text("RCA_FALLBACK_MODEL", "")
 RCA_MAX_TOKENS = _integer("RCA_MAX_TOKENS", 2400)
@@ -84,11 +104,17 @@ RCA_TIMEOUT_SECONDS = _number("RCA_TIMEOUT_SECONDS", 30)
 RCA_PROBABILITY_THRESHOLD = _number("RCA_PROBABILITY_THRESHOLD", 0.80)
 RCA_MIN_CART_AGE_SECONDS = _number("RCA_MIN_CART_AGE_SECONDS", 10)
 RCA_COOLDOWN_SECONDS = _number("RCA_COOLDOWN_SECONDS", 90)
-RCA_MAX_PER_SESSION = _integer("RCA_MAX_PER_SESSION", 10)
+# Browsing triggers make decisions frequent, so the cap is a safety net rather
+# than the primary economy; the signature cache does most of the saving.
+RCA_MAX_PER_SESSION = _integer("RCA_MAX_PER_SESSION", 40)
 
 
 def groq_is_configured() -> bool:
     return bool(GROQ_API_KEY)
+
+
+def llm_is_configured() -> bool:
+    return bool(GROQ_API_KEY) and LLM_PROVIDER.lower() != "null"
 
 
 def redacted_key_hint() -> str:

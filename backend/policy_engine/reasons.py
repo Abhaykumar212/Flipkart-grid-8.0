@@ -19,6 +19,9 @@ class PolicyReason(StrEnum):
     DISCOUNT_BUDGET_UNAVAILABLE = "requirement_not_met:discount_budget_available"
     CART_VALUE_REQUIREMENT = "requirement_not_met:cart_value≥5000"
     DISCOUNT_CART_VALUE_REQUIREMENT = "requirement_not_met:cart_value≥1000"
+    LOW_STOCK_UNCONFIRMED = "requirement_not_met:low_stock_confirmed"
+    DELIVERY_FEE_ABSENT = "requirement_not_met:delivery_fee_present"
+    GUEST_SESSION_REQUIRED = "requirement_not_met:guest_session"
     CART_VALUE_BELOW_EMI_THRESHOLD = "cart_value_below_emi_threshold"
     EQUIVALENT_COUPON_ALREADY_APPLIED = "equivalent_coupon_already_applied"
     DELIVERY_DATA_UNAVAILABLE = "delivery_data_unavailable"
@@ -44,4 +47,7 @@ REQUIREMENT_REASONS = {
     "discount_budget_available": PolicyReason.DISCOUNT_BUDGET_UNAVAILABLE,
     "cart_value≥5000": PolicyReason.CART_VALUE_REQUIREMENT,
     "cart_value≥1000": PolicyReason.DISCOUNT_CART_VALUE_REQUIREMENT,
+    "low_stock_confirmed": PolicyReason.LOW_STOCK_UNCONFIRMED,
+    "delivery_fee_present": PolicyReason.DELIVERY_FEE_ABSENT,
+    "guest_session": PolicyReason.GUEST_SESSION_REQUIRED,
 }

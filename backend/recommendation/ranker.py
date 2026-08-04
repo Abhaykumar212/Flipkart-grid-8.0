@@ -12,11 +12,17 @@ from .utility import score_candidate
 
 
 RANKER_VERSION = "ranker-rules-v1"
+# Tie-break ordering, not the cost scale — `utility.DIRECT_COST` still separates
+# ZERO from LOW when scoring. ZERO and LOW share a rank here because neither
+# spends margin, and this tie-break exists to protect margin. Ranking them apart
+# let a free-but-weaker lever displace a strictly better-scoring one: a shopper
+# whose payment had just failed was offered "save a card for next time" instead
+# of "try another method", purely because the former costs marginally less.
 COST_ORDER = {
     CostLevel.ZERO: 0,
-    CostLevel.LOW: 1,
-    CostLevel.MEDIUM: 2,
-    CostLevel.HIGH: 3,
+    CostLevel.LOW: 0,
+    CostLevel.MEDIUM: 1,
+    CostLevel.HIGH: 2,
 }
 
 
@@ -44,20 +50,38 @@ class ScoredIntervention:
         }
 
 
+#: Channel preference per route. Only some surfaces are mounted on any given
+#: page, so picking a channel the current page cannot render is the same as
+#: deciding nothing — the shopper sees no help at all. Ordering by where the
+#: shopper actually is keeps the decision and the DOM in agreement.
+_ROUTE_PREFERENCE: tuple[tuple[str, tuple[Channel, ...]], ...] = (
+    ("/checkout", (Channel.CHECKOUT_PANEL, Channel.INLINE_CARD, Channel.BANNER)),
+    ("/cart", (Channel.INLINE_CARD, Channel.BANNER, Channel.COMPARISON_DRAWER, Channel.ASSISTANT_PANEL)),
+    ("/product", (Channel.INLINE_CARD, Channel.ASSISTANT_PANEL, Channel.COMPARISON_DRAWER, Channel.BANNER)),
+)
+
+#: Home, search and category pages mount only the global surfaces.
+_DEFAULT_PREFERENCE: tuple[Channel, ...] = (
+    Channel.BANNER,
+    Channel.COMPARISON_DRAWER,
+    Channel.ASSISTANT_PANEL,
+    Channel.INLINE_CARD,
+    Channel.CHECKOUT_PANEL,
+)
+
+
 def _channel(candidate: InterventionDefinition, current_route: str | None) -> Channel | None:
     allowed = candidate.allowed_channels
-    if current_route == "/checkout" and Channel.CHECKOUT_PANEL in allowed:
-        return Channel.CHECKOUT_PANEL
-    for preferred in (
-        Channel.INLINE_CARD,
-        Channel.BANNER,
-        Channel.COMPARISON_DRAWER,
-        Channel.ASSISTANT_PANEL,
-        Channel.CHECKOUT_PANEL,
-    ):
+    route = current_route or ""
+    preference = next(
+        (order for prefix, order in _ROUTE_PREFERENCE if route.startswith(prefix)),
+        _DEFAULT_PREFERENCE,
+    )
+    for preferred in preference:
         if preferred in allowed:
             return preferred
-    return None
+    # Fall back to anything the catalogue allows rather than deciding nothing.
+    return next((item for item in _DEFAULT_PREFERENCE if item in allowed), None)
 
 
 def _compare(left: ScoredIntervention, right: ScoredIntervention) -> int:
@@ -83,13 +107,17 @@ def rules_score_all(
     causes: CauseResult,
     *,
     current_route: str | None = None,
+    endorsements: dict[str, float] | None = None,
+    avoid: frozenset[str] | None = None,
 ) -> tuple[ScoredIntervention, ...]:
     """Score and deterministically order all approved candidates."""
 
     unique = {candidate.intervention_id: candidate for candidate in candidates}
     provisional = []
     for candidate in unique.values():
-        utility = score_candidate(candidate, features, risk.probability, causes)
+        utility = score_candidate(
+            candidate, features, risk.probability, causes, endorsements, avoid
+        )
         relevant = utility.relevant_cause
         provisional.append(ScoredIntervention(
             candidate=candidate,
@@ -143,6 +171,8 @@ def score_all(
     causes: CauseResult,
     *,
     current_route: str | None = None,
+    endorsements: dict[str, float] | None = None,
+    avoid: frozenset[str] | None = None,
 ) -> tuple[ScoredIntervention, ...]:
     """Select the configured ranker; rules remain the deterministic default."""
 
@@ -164,4 +194,6 @@ def score_all(
         risk,
         causes,
         current_route=current_route,
+        endorsements=endorsements,
+        avoid=avoid,
     )

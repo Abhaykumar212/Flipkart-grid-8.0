@@ -1,18 +1,28 @@
-"""Phase 2 — root cause analysis agent.
+"""The reasoning agent — diagnoses *why* a session is at risk.
 
-Given the Phase 1 model's prediction *and its SHAP attribution*, plus the actual
-cart contents, this agent produces structured JSON naming why the cart is at
-risk and which intervention levers fit.
+Given the risk model's probability *and its SHAP attribution over the 67-feature
+vector*, this agent produces structured JSON naming the root cause and the
+intervention levers that fit it.
 
 Design intent
 -------------
 The agent explains **the model's own attribution**. Its evidence array is built
 from SHAP values, not from free association over a prompt, so it cannot name a
 cause the model did not attribute. That property is what makes the output
-defensible: "the LLM isn't guessing, it's verbalising the model's reasoning."
+defensible: the LLM isn't guessing, it's verbalising the model's reasoning.
 
-The response is enforced by Groq's strict `json_schema` mode and re-validated
-locally with pydantic, so a downstream phase never has to parse free text.
+Its vocabulary comes from `levers.py`, which derives from the executable
+catalogue — so a hallucinated cause or lever is rejected by the strict
+`json_schema` enum at the API boundary, and again by pydantic locally.
+
+Why some features are withheld from the evidence array
+------------------------------------------------------
+`pay_method_on_file` and `pay_checkout_max_step` are among the risk model's
+highest-gain features, and left in the evidence they swamp everything else —
+every session gets diagnosed as a checkout problem, because how *far* someone
+got through the funnel dominates the attribution. They describe how risky a
+session is, not why the shopper is hesitating. They stay in the prompt as
+context under SESSION FACTS, but never as rankable evidence.
 """
 
 from __future__ import annotations
@@ -22,6 +32,8 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from .. import config
+from ..explainability.narratives import NARRATIVES, format_value, informative, statement
+from ..feature_engine.schema import RISK_MODEL_FEATURES
 from ..llm import GroqClient, RateLimitedError
 from ..schemas import CartContext, RootCauseAnalysis
 from .levers import (
@@ -31,94 +43,145 @@ from .levers import (
     catalog_for_prompt,
 )
 
-# Human labels for the raw model features. Mirrors the frontend inspector so the
-# same vocabulary appears in the UI, the prompt and the analysis.
-FEATURE_LABELS: Dict[str, str] = {
-    "seconds_spent_in_cart": "time spent in cart",
-    "times_returned_to_product_page": "returns to the product page",
-    "product_reviews_read": "product reviews read",
-    "seconds_idle_before_checkout": "idle time before checkout",
-    "delivery_pincode_checks": "delivery pincode checks",
-    "saved_items_in_wishlist": "items saved in wishlist",
-    "cart_value_vs_typical_order": "cart value vs this shopper's usual order",
-    "delivery_fee_percent_of_cart": "delivery fee as % of cart",
-    "price_dropped_since_first_view": "price dropped since first view",
-    "discount_seeking_tendency": "discount-seeking tendency",
-    "failed_coupon_attempts": "failed coupon attempts",
-    "estimated_delivery_days": "estimated delivery days",
-    "payment_method_on_file": "saved payment method",
-    "checkout_steps_completed": "checkout steps completed (of 3)",
-    "payment_attempts_failed": "failed payment attempts",
-    "is_guest_checkout": "guest checkout",
-    "past_abandonment_rate": "historical abandonment rate",
-    "past_order_return_rate": "historical return rate",
-    "lifetime_orders_placed": "lifetime orders placed",
-    "days_since_last_purchase": "days since last purchase",
-    "is_mobile_session": "mobile session",
-    "is_late_night_session": "late-night session",
-    # Engineered
-    "extra_cost_burden_score": "combined delivery-fee and basket-size burden",
-    "product_research_intensity": "product research intensity",
-    "checkout_friction_events": "count of checkout blockers hit",
-    "delivery_concern_index": "delivery concern index",
-    "dwell_per_return_visit": "dwell time per return visit",
-    "hesitation_ratio": "share of cart time spent idle",
-    "price_sensitivity_exposure": "price sensitivity against basket size",
-    "customer_loyalty_score": "loyalty score (frequency damped by recency)",
-    "checkout_progress_ratio": "fraction of checkout funnel completed",
-    "trust_barrier_score": "guest checkout on a high-value basket",
-}
+# Funnel-progress and session-mechanics signals. Real inputs to the risk score,
+# but they answer "how far" and "how fast", not "why" — see the module docstring.
+_NON_DIAGNOSTIC: frozenset[str] = frozenset({
+    "pay_method_on_file",
+    "pay_checkout_max_step",
+    "s_duration_seconds",
+    "s_event_velocity_per_min",
+    "x_hour_of_day",
+})
 
-# Feature subset that materially changes the diagnosis. Used for dedup hashing
-# so trivial dwell-time drift doesn't re-trigger an identical analysis.
-MATERIAL_FEATURES: Tuple[str, ...] = (
-    "cart_value_vs_typical_order",
-    "delivery_fee_percent_of_cart",
-    "estimated_delivery_days",
-    "payment_method_on_file",
-    "checkout_steps_completed",
-    "payment_attempts_failed",
-    "is_guest_checkout",
-    "failed_coupon_attempts",
-    "times_returned_to_product_page",
-    "product_reviews_read",
-    "price_dropped_since_first_view",
+#: The subset of the risk vector the agent may rank evidence over.
+#: `RISK_MODEL_FEATURES` already excludes the `i_*` intervention-history group.
+DIAGNOSTIC_FEATURES: Tuple[str, ...] = tuple(
+    name for name in RISK_MODEL_FEATURES if name not in _NON_DIAGNOSTIC
 )
 
+# Features that materially change a diagnosis. Used for dedup hashing so an
+# identical situation doesn't buy a second identical LLM call.
+MATERIAL_FEATURES: Tuple[str, ...] = (
+    "c_value",
+    "c_item_count",
+    "c_promo_applied",
+    "c_max_price_drop_pct",
+    "d_check_count",
+    "d_max_days",
+    "d_fee_pct_of_cart",
+    "pay_failure_count",
+    "pay_method_change_count",
+    "s_review_open_count",
+    "s_similar_product_view_count",
+    "s_comparison_count",
+    "s_coupon_search_count",
+    "s_price_sort_count",
+    "s_cart_add_count",
+    "s_distinct_products_viewed",
+    "p_any_low_stock",
+    "p_any_out_of_stock",
+)
 
-def _format_value(name: str, value: float) -> str:
-    """Render a feature value the way a human would describe it."""
-    booleans = {
-        "price_dropped_since_first_view",
-        "payment_method_on_file",
-        "is_guest_checkout",
-        "is_mobile_session",
-        "is_late_night_session",
-    }
-    if name in booleans:
-        return "yes" if value >= 0.5 else "no"
-    if name in {"past_abandonment_rate", "discount_seeking_tendency", "past_order_return_rate"}:
-        return f"{value * 100:.0f}%"
-    if name == "cart_value_vs_typical_order":
-        return f"{value:.2f}x their usual order"
-    if name == "delivery_fee_percent_of_cart":
-        return f"{value:.1f}% of cart value"
-    if name in {"seconds_spent_in_cart", "seconds_idle_before_checkout"}:
-        return f"{value:.0f}s"
-    if name == "estimated_delivery_days":
-        return f"{value:.0f} days"
-    if name == "checkout_steps_completed":
-        return f"{value:.0f} of 3 steps"
-    if name == "days_since_last_purchase":
-        return f"{value:.0f} days ago"
-    if float(value).is_integer():
-        return str(int(value))
-    return f"{value:.3f}"
+#: Review dwell is continuous, so it can't go in the signature raw without
+#: re-triggering on every tick. Bucketed, sustained reading still registers as a
+#: genuinely new situation.
+DWELL_BUCKET_SECONDS = 15.0
+
+#: What the shopper actually *did*. These are reported to the agent verbatim,
+#: independently of SHAP, because the risk model routinely attributes near-zero
+#: to them — it doesn't need review-reading to score risk once idle time and
+#: cart state are known. Near-zero SHAP is not evidence the behaviour is
+#: irrelevant to *why*, which is the question the agent is answering.
+BEHAVIOUR_SIGNALS: Tuple[str, ...] = (
+    "s_review_open_count",
+    "s_review_dwell_seconds",
+    "s_similar_product_view_count",
+    "s_comparison_count",
+    "s_distinct_products_viewed",
+    "s_product_view_count",
+    "s_search_count",
+    "s_price_sort_count",
+    "s_coupon_search_count",
+    "s_cart_view_count",
+    "s_cart_add_count",
+    "s_cart_remove_count",
+    "s_cart_product_switch_count",
+    "s_checkout_start_count",
+    "s_back_from_checkout_count",
+    "s_idle_seconds_current",
+    "d_check_count",
+    "pay_failure_count",
+    "pay_method_change_count",
+    "p_any_low_stock",
+    "p_any_out_of_stock",
+    "c_promo_applied",
+    "c_max_price_drop_pct",
+)
+
+# Prompt grouping. Order is presentation only; membership decides what the agent
+# sees as plain context versus ranked evidence.
+_FACT_GROUPS: Dict[str, Tuple[str, ...]] = {
+    "Cart": (
+        "c_value",
+        "c_item_count",
+        "c_distinct_categories",
+        "c_value_to_aov_ratio",
+        "c_age_seconds",
+        "c_promo_applied",
+        "c_discount_pct_available",
+        "c_max_price_drop_pct",
+    ),
+    "Browsing and research": (
+        "s_product_view_count",
+        "s_distinct_products_viewed",
+        "s_review_open_count",
+        "s_review_dwell_seconds",
+        "s_similar_product_view_count",
+        "s_comparison_count",
+        "s_search_count",
+        "s_idle_seconds_current",
+    ),
+    "Price behaviour": (
+        "s_price_sort_count",
+        "s_coupon_search_count",
+        "u_discount_usage_rate",
+    ),
+    "Delivery": ("d_max_days", "d_min_days", "d_fee", "d_fee_pct_of_cart", "d_check_count"),
+    "Product": ("p_max_item_price", "p_avg_rating", "p_min_rating_count", "p_any_low_stock", "p_any_out_of_stock"),
+    "Checkout and payment (context only — not evidence for a cause)": (
+        "pay_method_on_file",
+        "pay_checkout_max_step",
+        "pay_failure_count",
+        "pay_method_change_count",
+        "pay_emi_eligible",
+        "s_checkout_start_count",
+        "s_back_from_checkout_count",
+    ),
+    "Shopper history": (
+        "u_lifetime_orders",
+        "u_prior_abandonment_rate",
+        "u_avg_order_value",
+        "u_days_since_last_purchase",
+        "u_return_rate",
+        "u_is_new_user",
+    ),
+    "Session context": ("x_is_mobile", "x_is_late_night", "x_is_weekend", "x_is_returning_user"),
+}
+
+
+def _value_text(name: str, value: float) -> str:
+    """Render one reading the way the rest of the product renders it."""
+    narrative = NARRATIVES.get(name)
+    if narrative is None:
+        return f"{value:.3f}" if not float(value).is_integer() else str(int(value))
+    return format_value(float(value), narrative.kind)
 
 
 def build_feature_signature(features: Dict[str, float]) -> str:
     """Stable hash of the diagnosis-relevant features, for dedup."""
     parts = [f"{name}={round(float(features.get(name, 0)), 3)}" for name in MATERIAL_FEATURES]
+    dwell = float(features.get("s_review_dwell_seconds", 0.0))
+    parts.append(f"dwell_bucket={int(dwell // DWELL_BUCKET_SECONDS)}")
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
@@ -127,37 +190,50 @@ def build_evidence(
     feature_impacts: Dict[str, float],
     limit: int = 8,
 ) -> List[Dict[str, Any]]:
-    """Top signed SHAP contributors, rendered for the prompt.
+    """Top signed SHAP contributors within the diagnostic subset.
 
     Positive SHAP pushes toward abandonment, negative pulls toward conversion.
     Both directions are included: knowing what is *holding the shopper in* is as
     useful for choosing a lever as knowing what is pushing them away.
     """
-    ranked = sorted(feature_impacts.items(), key=lambda kv: abs(kv[1]), reverse=True)[:limit]
+    scoped = {
+        name: impact
+        for name, impact in feature_impacts.items()
+        if name in DIAGNOSTIC_FEATURES
+    }
+    # The legacy 22-feature service speaks a different vocabulary. Rank whatever
+    # it hands us rather than returning an empty evidence array.
+    pool = scoped or feature_impacts
+    ranked = sorted(pool.items(), key=lambda kv: abs(kv[1]), reverse=True)[:limit]
     evidence = []
     for name, impact in ranked:
         raw_value = features.get(name)
         evidence.append(
             {
                 "signal": name,
-                "label": FEATURE_LABELS.get(name, name),
-                "observed_value": _format_value(name, float(raw_value)) if raw_value is not None else "derived",
+                "observed_value": (
+                    _value_text(name, float(raw_value)) if raw_value is not None else "derived"
+                ),
+                "statement": (
+                    statement(name, float(raw_value))
+                    if raw_value is not None and name in NARRATIVES
+                    else name.replace("_", " ")
+                ),
                 "shap_contribution": round(float(impact), 4),
-                "direction": "increases abandonment risk" if impact > 0 else "reduces abandonment risk",
+                "direction": (
+                    "increases abandonment risk" if impact > 0 else "reduces abandonment risk"
+                ),
             }
         )
     return evidence
 
 
-def _describe_cart(cart: CartContext) -> str:
+def describe_cart(cart: CartContext) -> str:
     if not cart.lines:
         return "Cart contents were not supplied."
     rows = []
     for line in cart.lines:
-        bits = [
-            f"{line.quantity}x {line.title}",
-            f"₹{line.selling_price:,.0f}",
-        ]
+        bits = [f"{line.quantity}x {line.title}", f"₹{line.selling_price:,.0f}"]
         if line.discount_percent > 0:
             bits.append(f"{line.discount_percent:.0f}% off ₹{line.mrp:,.0f}")
         bits.append(f"delivery in {line.estimated_delivery_days}d")
@@ -174,18 +250,25 @@ def _describe_cart(cart: CartContext) -> str:
     return header + "\n" + "\n".join(rows)
 
 
+_describe_cart = describe_cart  # retained for existing callers
+
+
 SYSTEM_PROMPT = """You are a cart-abandonment root cause analyst for an Indian e-commerce platform.
 
-A gradient-boosted model has already scored this session's abandonment risk and produced SHAP attributions showing exactly which signals drove that score. Your job is to explain WHY, grounded strictly in that attribution.
+A gradient-boosted model has already scored this session's abandonment risk and produced SHAP attributions showing exactly which signals drove that score. Your job is to explain WHY, grounded strictly in that attribution, and to choose what the platform should do about it.
 
 Rules:
-1. Your diagnosis must be supported by the SHAP evidence provided. Do not invent causes that the evidence does not support.
-2. Positive SHAP values push toward abandonment; negative values pull toward conversion. Weigh both.
-3. Quote concrete observed values (amounts, counts, days) in your explanation — be specific, not generic.
-4. Recommend levers ONLY from the supplied catalog, and only where they match the diagnosed cause.
-5. Populate levers_to_avoid when a lever would be wasteful or margin-destroying — e.g. do not discount a shopper showing no price sensitivity.
-6. Set confidence honestly: 'high' when the evidence concentrates on one clear cause, 'low' when it is diffuse or contradictory.
-7. Write shopper_narrative as plain English a non-technical operator could read aloud, in 2-3 sentences.
+1. OBSERVED BEHAVIOUR decides WHICH cause. SHAP decides HOW STRONGLY the model already weights it. Pick the cause the behaviour supports; do not invent causes that neither block supports.
+2. A signal with near-zero SHAP is NOT evidence that the behaviour is irrelevant. The risk model often scores risk from cart state and idle time alone, so review-reading or comparison activity can carry ~0.0 SHAP while still being the whole reason the shopper is hesitating. Never conclude "no concern" from a small SHAP value.
+3. Positive SHAP pushes toward abandonment; negative pulls toward conversion. A large negative value is a REASSURING signal — never cite it as the reason a shopper is about to leave. In particular, near-zero idle time means the shopper is actively engaged, which is the opposite of low purchase intent.
+4. The SHAP evidence deliberately excludes checkout-funnel-progress facts (steps completed, payment method on file) — they tell you HOW FAR a shopper got, not WHY. They appear under SESSION FACTS as context only; never cite them as support for a root cause.
+5. Quote concrete observed values (amounts, counts, days) in your explanation — be specific, not generic.
+6. Recommend levers ONLY from the supplied catalog, and only where they match the diagnosed cause.
+7. Populate levers_to_avoid when a lever would be wasteful or margin-destroying — e.g. do not discount a shopper showing no price sensitivity.
+8. Set confidence honestly: 'high' when the evidence concentrates on one clear cause, 'low' when it is diffuse or contradictory.
+9. If the evidence genuinely does not support any single cause, diagnose UNKNOWN rather than picking the least-bad label. Recommending NO_ACTION is a legitimate, often correct answer — an unnecessary interruption costs more than staying silent.
+10. If the cart is empty the shopper is still browsing. Only informational levers make sense; never spend margin on someone who has not chosen anything yet.
+11. Write shopper_narrative as plain English a non-technical operator could read aloud, in 2-3 sentences.
 
 Be concise. Stay within these limits so the response fits the token budget:
 - supporting_evidence: 3 items maximum
@@ -203,68 +286,61 @@ def build_prompt(
     confidence: float,
     features: Dict[str, float],
     evidence: List[Dict[str, Any]],
-    cart: CartContext,
+    cart: CartContext | str,
 ) -> str:
     """Assemble the case file the agent reasons over."""
-    evidence_lines = "\n".join(
-        f"  - {item['label']} ({item['signal']}): observed {item['observed_value']}, "
-        f"SHAP {item['shap_contribution']:+.4f} — {item['direction']}"
-        for item in evidence
+
+    def _shap_lines(items: List[Dict[str, Any]]) -> str:
+        return "\n".join(
+            f"    - {item['signal']} = {item['observed_value']} "
+            f"(SHAP {item['shap_contribution']:+.4f})"
+            for item in items
+        ) or "    - none"
+
+    pushing = [item for item in evidence if item["shap_contribution"] > 0]
+    holding = [item for item in evidence if item["shap_contribution"] <= 0]
+    evidence_lines = (
+        "  Pushing toward abandonment:\n"
+        + _shap_lines(pushing)
+        + "\n  Holding the shopper in (these are reassuring, not problems):\n"
+        + _shap_lines(holding)
     )
 
-    grouped = {
-        "Cost signals": [
-            "cart_value_vs_typical_order",
-            "delivery_fee_percent_of_cart",
-            "discount_seeking_tendency",
-            "failed_coupon_attempts",
-            "price_dropped_since_first_view",
-        ],
-        "Delivery signals": ["estimated_delivery_days", "delivery_pincode_checks"],
-        "Checkout & trust signals": [
-            "payment_method_on_file",
-            "checkout_steps_completed",
-            "payment_attempts_failed",
-            "is_guest_checkout",
-        ],
-        "Engagement signals": [
-            "seconds_spent_in_cart",
-            "times_returned_to_product_page",
-            "product_reviews_read",
-            "seconds_idle_before_checkout",
-        ],
-        "Shopper history": [
-            "past_abandonment_rate",
-            "lifetime_orders_placed",
-            "days_since_last_purchase",
-            "past_order_return_rate",
-        ],
-        "Session context": ["is_mobile_session", "is_late_night_session"],
-    }
+    behaviour = [
+        f"  - {statement(name, float(features[name]))}"
+        for name in BEHAVIOUR_SIGNALS
+        if name in features and informative(name, float(features[name]))
+    ]
+    behaviour_block = "\n".join(behaviour) or "  - No notable activity recorded yet."
+
     fact_blocks = []
-    for group, names in grouped.items():
+    for group, names in _FACT_GROUPS.items():
         facts = [
-            f"{FEATURE_LABELS.get(n, n)}: {_format_value(n, float(features[n]))}"
-            for n in names
-            if n in features
+            f"{name}={_value_text(name, float(features[name]))}"
+            for name in names
+            if name in features
         ]
         if facts:
-            fact_blocks.append(f"{group}: " + "; ".join(facts))
+            fact_blocks.append(f"  {group}: " + "; ".join(facts))
 
-    categories = "\n".join(f"  - {c}: {CATEGORY_DESCRIPTIONS[c]}" for c in ROOT_CAUSE_CATEGORIES)
+    categories = "\n".join(f"  - {name}: {CATEGORY_DESCRIPTIONS[name]}" for name in ROOT_CAUSE_CATEGORIES)
+    cart_description = cart if isinstance(cart, str) else describe_cart(cart)
 
     return f"""MODEL VERDICT
 Abandonment probability: {probability:.1%} (risk tier: {risk_tier})
 Model decisiveness: {confidence:.1%}
 
-SHAP ATTRIBUTION — the model's own reasoning, ranked by magnitude
+OBSERVED BEHAVIOUR — what this shopper actually did, this session
+{behaviour_block}
+
+SHAP ATTRIBUTION — how the risk model weighted the signals it used
 {evidence_lines}
 
 SESSION FACTS
-{chr(10).join('  ' + block for block in fact_blocks)}
+{chr(10).join(fact_blocks)}
 
 CART
-{_describe_cart(cart)}
+{cart_description}
 
 ROOT CAUSE CATEGORIES
 {categories}
@@ -386,7 +462,7 @@ def analyse(
     confidence: float,
     features: Dict[str, float],
     feature_impacts: Dict[str, float],
-    cart: CartContext,
+    cart: CartContext | str,
     recorder: Any,
 ) -> Tuple[Optional[RootCauseAnalysis], Dict[str, Any]]:
     """Run the agent. Returns (analysis, metadata).

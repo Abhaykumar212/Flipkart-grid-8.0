@@ -86,6 +86,41 @@ INTERVENTION_COPY = {
         "An eligible cart saving is available for a limited time.",
         "View saving",
     ),
+    InterventionId.STOCK_SCARCITY_NUDGE: (
+        "Limited stock on this item",
+        "Only a few units are left with this seller right now.",
+        "View availability",
+    ),
+    InterventionId.EXIT_INTENT_REMINDER: (
+        "Before you go",
+        "Your selection is saved. Pick up exactly where you left off whenever you're ready.",
+        "Keep my selection",
+    ),
+    InterventionId.TRUST_BADGE_REASSURANCE: (
+        "Protected on every order",
+        "Secure payments, verified sellers and a 7-day replacement window apply here.",
+        "View protections",
+    ),
+    InterventionId.SAVED_PAYMENT_PROMPT: (
+        "Save a payment method",
+        "Storing a payment method removes the slowest step next time you check out.",
+        "Save for next time",
+    ),
+    InterventionId.GUEST_ACCOUNT_NUDGE: (
+        "Track this order easily",
+        "Create an account in one tap for order tracking and faster reordering.",
+        "Create account",
+    ),
+    InterventionId.DELIVERY_SPEED_UPGRADE: (
+        "A faster delivery slot",
+        "An earlier delivery window is available for this order.",
+        "See faster delivery",
+    ),
+    InterventionId.FREE_DELIVERY_WAIVER: (
+        "Delivery fee waived",
+        "The delivery fee on this order has been covered for you.",
+        "View updated total",
+    ),
     InterventionId.NO_ACTION: (
         "No intervention needed",
         "The current session does not need assistance.",

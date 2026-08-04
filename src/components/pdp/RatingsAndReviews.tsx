@@ -17,6 +17,7 @@ type ReviewSort = "recent" | "helpful" | "highest" | "lowest";
 
 const PAGE_SIZE = 3;
 const COMPANION_DWELL_MS = 4_000;
+const DWELL_REPORT_MS = 8_000;
 const reviewDateFormat = new Intl.DateTimeFormat("en-IN", {
   day: "numeric",
   month: "short",
@@ -34,6 +35,8 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
   const recorded = useRef(false);
   const dwellStartedAt = useRef<number | null>(null);
   const companionDwellTimer = useRef<number | null>(null);
+  const dwellReporter = useRef<number | null>(null);
+  const dwellReportedMs = useRef(0);
   const { emit } = useSession();
   const [allReviews, setAllReviews] = useState(reviews);
   const [ratingFilter, setRatingFilter] = useState<number | null>(null);
@@ -51,6 +54,20 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
     if (!section) return;
     recorded.current = false;
     dwellStartedAt.current = null;
+    dwellReportedMs.current = 0;
+
+    // Report the time already spent, rather than waiting for unmount. Someone
+    // still reading is exactly who a review summary should reach, and a single
+    // report on the way out arrives after the moment has passed.
+    const flushDwell = () => {
+      if (dwellStartedAt.current === null) return;
+      const total = Math.max(0, Math.round(performance.now() - dwellStartedAt.current));
+      const unreported = total - dwellReportedMs.current;
+      if (unreported < 1_000) return;
+      dwellReportedMs.current = total;
+      emit("REVIEW_DWELL_RECORDED", { productId, metadata: { dwell_ms: unreported } });
+    };
+
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting && companionDwellTimer.current === null) {
         companionDwellTimer.current = window.setTimeout(() => {
@@ -69,6 +86,13 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
           metadata: { source: "PRODUCT_PAGE" },
         });
       }
+      if (entry.isIntersecting && dwellReporter.current === null) {
+        dwellReporter.current = window.setInterval(flushDwell, DWELL_REPORT_MS);
+      } else if (!entry.isIntersecting && dwellReporter.current !== null) {
+        window.clearInterval(dwellReporter.current);
+        dwellReporter.current = null;
+        flushDwell();
+      }
     }, { threshold: 0.35 });
     observer.observe(section);
     return () => {
@@ -77,13 +101,12 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
         window.clearTimeout(companionDwellTimer.current);
         companionDwellTimer.current = null;
       }
-      if (dwellStartedAt.current !== null) {
-        emit("REVIEW_DWELL_RECORDED", {
-          productId,
-          metadata: { dwell_ms: Math.max(0, Math.round(performance.now() - dwellStartedAt.current)) },
-        });
-        dwellStartedAt.current = null;
+      if (dwellReporter.current !== null) {
+        window.clearInterval(dwellReporter.current);
+        dwellReporter.current = null;
       }
+      flushDwell();
+      dwellStartedAt.current = null;
     };
   }, [emit, productId]);
 
