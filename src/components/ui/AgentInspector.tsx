@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   BrainCircuit,
@@ -70,6 +70,20 @@ interface LiveRisk {
   top_factors?: Attribution[];
 }
 
+/**
+ * Features that advance with the wall clock rather than with events.
+ *
+ * The server is still the source of truth — it recomputes all 67 on every poll.
+ * But polls are 5s apart, so between them these three sit still and the vector
+ * reads as frozen. Advancing them locally makes the grid tick the way it
+ * actually behaves; every poll snaps them back to the server's value.
+ */
+const CLOCK_DRIVEN = new Set([
+  "c_age_seconds",
+  "s_duration_seconds",
+  "s_idle_seconds_current",
+]);
+
 /** Signals that actually drive help for a shopper who has not carted anything. */
 const DELIBERATION_SIGNALS: Array<{ key: string; label: string }> = [
   { key: "review_opens", label: "Review opens" },
@@ -140,7 +154,30 @@ export function AgentInspector() {
     ?? {}) as ReasoningShape;
   const attributions = ((latestDecision as { shap_attributions?: Attribution[] } | null)
     ?.shap_attributions ?? []) as Attribution[];
-  const features = snapshot?.current_features ?? null;
+  // Ticks once a second so the clock-driven features advance between polls.
+  const [now, setNow] = useState(() => Date.now());
+  const snapshotAt = useRef(Date.now());
+  useEffect(() => {
+    snapshotAt.current = Date.now();
+  }, [snapshot]);
+  useEffect(() => {
+    if (!isOpen) return;
+    const tick = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(tick);
+  }, [isOpen]);
+
+  const served = snapshot?.current_features ?? null;
+  const features = useMemo(() => {
+    if (!served) return null;
+    const elapsed = Math.max(0, (now - snapshotAt.current) / 1000);
+    if (elapsed < 1) return served;
+    return Object.fromEntries(
+      Object.entries(served).map(([name, value]) => [
+        name,
+        CLOCK_DRIVEN.has(name) && value > 0 ? value + elapsed : value,
+      ]),
+    );
+  }, [served, now]);
   const maxShap = Math.max(...attributions.map((item) => Math.abs(item.shap)), 0.0001);
   const source = reasoningSource(reasoning.path);
   const decision = latestDecision?.decision;
