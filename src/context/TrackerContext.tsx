@@ -42,6 +42,16 @@ export interface SessionSnapshot {
   };
   counters: Record<string, number>;
   current_features: Record<string, number> | null;
+  /** Scored on every poll, so the inspector moves between decisions. */
+  current_risk: {
+    probability: number;
+    band: string;
+    confidence: number;
+    /** False with an empty cart: the model is only defined once there is one. */
+    scored: boolean;
+    model_version: string;
+    top_factors: Array<{ feature: string; value: number; shap: number }>;
+  } | null;
   feature_schema_version: string | null;
   latest_decision: Record<string, unknown> | null;
   interventions: {

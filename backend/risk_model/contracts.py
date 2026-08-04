@@ -24,6 +24,10 @@ class RiskPrediction:
     #: Signed SHAP for every risk-model feature. The agent ranks evidence inside
     #: its own diagnostic subset, so top-5 by magnitude is not enough for it.
     shap_by_feature: dict[str, float] = field(default_factory=dict)
+    #: False when there is no cart. The model is defined over sessions that have
+    #: one, so the number it returns then is a held ceiling rather than a
+    #: prediction — callers must not present it as one.
+    scored: bool = True
 
     def to_dict(self) -> dict[str, object]:
         result = asdict(self)

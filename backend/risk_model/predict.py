@@ -29,9 +29,12 @@ def predict(features: dict[str, float]) -> RiskPrediction:
     frame = pd.DataFrame(values, columns=RISK_MODEL_FEATURES)
     raw = float(loaded.model.predict_proba(frame)[0, 1])
     probability = raw if loaded.calibrator is None else float(loaded.calibrator.transform(np.asarray([raw]))[0])
-    # The simulator and model are defined only for an actual cart. Keep the
-    # Phase-5 no-cart contract conservative instead of extrapolating trees.
-    if features.get("c_item_count", 0.0) <= 0 or features.get("s_cart_add_count", 0.0) <= 0:
+    # The simulator and model are defined only for an actual cart. Extrapolating
+    # the trees past that saturates near 1.0, so the ceiling stays — but the
+    # result is flagged, because a held constant presented as a live prediction
+    # is worse than showing nothing.
+    scored = features.get("c_item_count", 0.0) > 0 and features.get("s_cart_add_count", 0.0) > 0
+    if not scored:
         probability = min(probability, 0.12)
     explanation = loaded.explainer(frame)
     shap_values = np.asarray(explanation.values, dtype=float)
@@ -50,4 +53,5 @@ def predict(features: dict[str, float]) -> RiskPrediction:
         factors,
         (perf_counter() - started) * 1000,
         shap_by_feature=shap_by_feature,
+        scored=scored,
     )

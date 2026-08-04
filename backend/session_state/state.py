@@ -82,6 +82,7 @@ def session_response(
     *,
     current_features: dict[str, float] | None = None,
     feature_schema_version: str | None = None,
+    current_risk: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "session": {
@@ -100,6 +101,7 @@ def session_response(
         "cart": state.cart,
         "counters": state.counters,
         "current_features": current_features,
+        "current_risk": current_risk,
         "feature_schema_version": feature_schema_version,
         "latest_decision": state.last_decision,
         "interventions": state.interventions,

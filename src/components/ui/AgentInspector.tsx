@@ -61,6 +61,23 @@ interface Attribution {
   shap: number;
 }
 
+interface LiveRisk {
+  probability: number;
+  band: string;
+  confidence: number;
+  /** False with an empty cart: the model is only defined once there is one. */
+  scored: boolean;
+  top_factors?: Attribution[];
+}
+
+/** Signals that actually drive help for a shopper who has not carted anything. */
+const DELIBERATION_SIGNALS: Array<{ key: string; label: string }> = [
+  { key: "review_opens", label: "Review opens" },
+  { key: "review_dwell_ms", label: "Time on reviews" },
+  { key: "comparisons", label: "Comparisons" },
+  { key: "similar_product_views", label: "Similar viewed" },
+];
+
 function humanCause(cause: string): string {
   return cause
     .replaceAll("_", " ")
@@ -114,6 +131,10 @@ export function AgentInspector() {
     .filter(([name]) => name in COUNTER_LABELS && Number(snapshot?.counters?.[name]) > 0)
     .sort(([left], [right]) => left.localeCompare(right));
 
+  // Risk comes from the 5s session poll, not from the last decision: decisions
+  // are rate-limited to one per 20s, so reading the number off them made it sit
+  // still for long stretches and look hard-coded.
+  const liveRisk = (snapshot as { current_risk?: LiveRisk } | null)?.current_risk ?? null;
   const explanation = (latestDecision?.explanation ?? {}) as ExplanationShape;
   const reasoning = ((latestDecision as { reasoning?: ReasoningShape } | null)?.reasoning
     ?? {}) as ReasoningShape;
@@ -122,12 +143,20 @@ export function AgentInspector() {
   const features = snapshot?.current_features ?? null;
   const maxShap = Math.max(...attributions.map((item) => Math.abs(item.shap)), 0.0001);
   const source = reasoningSource(reasoning.path);
-  const probability = latestDecision?.abandonment_probability ?? null;
-  const band = latestDecision?.risk_level ?? null;
   const decision = latestDecision?.decision;
   const intervention = latestDecision?.recommended_intervention;
+
+  // Only a session with a cart gets a number. Without one the model is being
+  // extrapolated past where it is defined, and the value it returns is a held
+  // ceiling — main never showed a percentage here either.
+  const isScored = liveRisk?.scored ?? false;
+  const probability = isScored ? (liveRisk?.probability ?? null) : null;
+  const band = isScored ? (liveRisk?.band ?? null) : null;
   const displayPct =
     probability === null ? null : Math.min(99, Math.max(1, Math.round(probability * 100)));
+  const deliberation = DELIBERATION_SIGNALS
+    .map((signal) => ({ ...signal, value: Number(snapshot?.counters?.[signal.key] ?? 0) }))
+    .filter((signal) => signal.value > 0);
 
   const bandColor =
     band === "HIGH" ? "bg-red-500" : band === "MEDIUM" ? "bg-fk-orange" : "bg-fk-green";
@@ -207,18 +236,44 @@ export function AgentInspector() {
                 )}
               </div>
               {displayPct === null ? (
-                <p className="mt-2 text-fk-base text-fk-muted">
-                  Gathering evidence — no decision requested yet.
-                </p>
+                <>
+                  <p className="mt-1 text-fk-md font-medium text-fk-ink">Not scored yet</p>
+                  <p className="mt-1 text-fk-sm leading-relaxed text-fk-muted">
+                    Cart abandonment is only defined once there is a cart. Until then
+                    the agent works from deliberation, not a probability.
+                  </p>
+                  {deliberation.length > 0 && (
+                    <dl className="mt-3 grid grid-cols-2 gap-2">
+                      {deliberation.map((signal) => (
+                        <div
+                          key={signal.key}
+                          className="rounded-[2px] border border-fk-border bg-fk-bg px-3 py-2"
+                        >
+                          <dt className="text-fk-xs text-fk-muted">{signal.label}</dt>
+                          <dd className="mt-0.5 text-fk-md font-bold tabular-nums text-fk-ink">
+                            {signal.key === "review_dwell_ms"
+                              ? `${Math.round(signal.value / 1000)}s`
+                              : signal.value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                </>
               ) : (
                 <>
-                  <p className="mt-1 text-2xl font-bold text-fk-ink">{displayPct}%</p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums text-fk-ink">
+                    {displayPct}%
+                  </p>
                   <span className="mt-2 block h-2 w-full overflow-hidden rounded-full bg-fk-bg">
                     <span
-                      className={`block h-full rounded-full ${bandColor}`}
+                      className={`block h-full rounded-full transition-[width] duration-700 ease-out ${bandColor}`}
                       style={{ width: `${displayPct}%` }}
                     />
                   </span>
+                  <p className="mt-1.5 text-fk-xs text-fk-muted">
+                    Live · rescored every few seconds
+                  </p>
                 </>
               )}
             </div>
@@ -496,9 +551,9 @@ export function AgentInspector() {
           <Activity className="h-5 w-5" />
           <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-blue-600 bg-emerald-400" />
         </span>
-        {displayPct !== null && (
-          <span className="text-fk-md font-bold tabular-nums">{displayPct}%</span>
-        )}
+        <span className="text-fk-md font-bold tabular-nums">
+          {displayPct !== null ? `${displayPct}%` : "Watching"}
+        </span>
       </button>
     </div>
   );

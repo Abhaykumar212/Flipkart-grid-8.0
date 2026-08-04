@@ -10,6 +10,7 @@ from backend.deps import get_session_store
 from backend.feature_engine.compute import compute_features
 from backend.feature_engine.schema import FEATURE_SCHEMA_VERSION
 from backend.feature_engine.snapshot import write_feature_snapshot
+from backend.risk_model.predict import predict as predict_risk
 from backend.storage.db import get_db
 from backend.storage.models import ShoppingSession, User
 from backend.storage.repositories import user_history
@@ -97,8 +98,23 @@ def get_session(
         trigger_event_id=trigger_event_id,
     )
     db.commit()
+    # Scored on every poll, not only when a decision fires. Decisions are held
+    # back by a 20s minimum interval, so reading risk off the last one made the
+    # number look frozen; this is the same model, just answering continuously.
+    risk = predict_risk(features)
     return session_response(
         state,
         current_features=features,
         feature_schema_version=FEATURE_SCHEMA_VERSION,
+        current_risk={
+            "probability": round(risk.probability, 6),
+            "band": risk.band.value,
+            "confidence": round(risk.confidence, 6),
+            "scored": risk.scored,
+            "model_version": risk.model_version,
+            "top_factors": [
+                {"feature": f.feature, "value": round(f.value, 4), "shap": round(f.shap, 6)}
+                for f in risk.top_factors
+            ],
+        },
     )
