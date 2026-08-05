@@ -1,11 +1,13 @@
 import { AnimatePresence } from "framer-motion";
 import { useIntervention } from "../../context/InterventionContext";
+import { useLanguage } from "../../context/LanguageContext";
 import { LEVER_TARGET_KEYS } from "../../lib/interventionTargets";
 import { getAllMounted } from "../../lib/targetRegistry";
 import { AmbientCard } from "./AmbientCard";
 import { Spotlight } from "./Spotlight";
 import { InterventionOutcomeCard } from "./InterventionOutcomeCard";
 import { buildInterventionContent } from "./interventionContent";
+import { useTranslatedRationale } from "./useTranslatedRationale";
 
 /**
  * Dispatches the delivery layer's decision to a real surface component.
@@ -20,6 +22,8 @@ import { buildInterventionContent } from "./interventionContent";
  */
 export function InterventionRenderer() {
   const { active, surface, accept, dismiss, ctaOutcome, dismissOutcome } = useIntervention();
+  const { language } = useLanguage();
+  const translatedRationale = useTranslatedRationale(active?.lever_id ?? "", active?.rationale ?? "", language);
 
   const outcomeNode = (
     <AnimatePresence>
@@ -31,7 +35,7 @@ export function InterventionRenderer() {
     return outcomeNode;
   }
 
-  const content = buildInterventionContent(active, accept, dismiss);
+  const content = buildInterventionContent(active, accept, dismiss, language, translatedRationale);
 
   if (surface === "ambient") {
     return (

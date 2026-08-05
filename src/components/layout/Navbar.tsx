@@ -10,16 +10,18 @@ import {
   HelpCircle,
   TrendingUp,
   Download,
+  Sparkles,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useCart } from "../../context/CartContext";
 import { useTracker } from "../../context/TrackerContext";
+import { useAuth } from "../../context/AuthContext";
 import { pageContext } from "../../lib/pageContext";
+import { SignInModal } from "../ui/SignInModal";
+import { LanguageSwitcher } from "../ui/LanguageSwitcher";
 
 const accountMenu = [
-  { label: "My Profile", icon: User },
-  { label: "Flipkart Plus Zone", icon: TrendingUp },
-  { label: "Orders", icon: ShoppingCart },
+  { label: "My Orders & History", icon: ShoppingCart, to: "/account" },
   { label: "Wishlist", icon: Bell },
   { label: "Rewards", icon: TrendingUp },
   { label: "Gift Cards", icon: Store },
@@ -33,7 +35,7 @@ const moreMenu = [
 ];
 
 interface DropdownProps {
-  items: { label: string; icon: typeof User }[];
+  items: { label: string; icon: typeof User; to?: string; onClick?: () => void }[];
   className?: string;
 }
 
@@ -44,15 +46,27 @@ function Dropdown({ items, className = "" }: DropdownProps) {
     >
       <div className="rounded-[2px] bg-white py-1 shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
         <span className="absolute -top-0 left-8 h-3 w-3 rotate-45 bg-white" />
-        {items.map(({ label, icon: Icon }) => (
-          <button
-            key={label}
-            className="flex w-full items-center gap-3 border-b border-fk-border/60 px-4 py-2.5 text-left text-fk-md text-fk-ink last:border-0 hover:bg-fk-bg"
-          >
-            <Icon className="h-4 w-4 text-fk-blue" strokeWidth={2} />
-            {label}
-          </button>
-        ))}
+        {items.map(({ label, icon: Icon, to, onClick }) =>
+          to ? (
+            <Link
+              key={label}
+              to={to}
+              className="flex w-full items-center gap-3 border-b border-fk-border/60 px-4 py-2.5 text-left text-fk-md text-fk-ink last:border-0 hover:bg-fk-bg"
+            >
+              <Icon className="h-4 w-4 text-fk-blue" strokeWidth={2} />
+              {label}
+            </Link>
+          ) : (
+            <button
+              key={label}
+              onClick={onClick}
+              className="flex w-full items-center gap-3 border-b border-fk-border/60 px-4 py-2.5 text-left text-fk-md text-fk-ink last:border-0 hover:bg-fk-bg"
+            >
+              <Icon className="h-4 w-4 text-fk-blue" strokeWidth={2} />
+              {label}
+            </button>
+          ),
+        )}
       </div>
     </div>
   );
@@ -61,8 +75,10 @@ function Dropdown({ items, className = "" }: DropdownProps) {
 export function Navbar() {
   const { count } = useCart();
   const { recordSearch } = useTracker();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [signInOpen, setSignInOpen] = useState(false);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,14 +118,39 @@ export function Navbar() {
           </button>
         </form>
 
+        <Link
+          to="/smart-search"
+          className="hidden shrink-0 items-center gap-1.5 text-fk-md font-medium text-white lg:flex"
+          title="Vector-search the catalog by meaning"
+        >
+          <Sparkles className="h-4 w-4" strokeWidth={2} />
+          Smart Search
+        </Link>
+
+        <LanguageSwitcher />
+
         {/* Login + account dropdown */}
-        <div className="group relative shrink-0">
-          <button className="flex h-9 items-center gap-1.5 rounded-[2px] bg-white px-8 text-fk-md font-bold text-fk-blue">
+        {user ? (
+          <div className="group relative shrink-0">
+            <button className="flex h-9 items-center gap-1.5 rounded-[2px] bg-white px-4 text-fk-md font-bold text-fk-blue">
+              {user.name || user.email.split("@")[0]}
+              <ChevronDown className="h-3.5 w-3.5 transition-transform group-hover:rotate-180" />
+            </button>
+            <Dropdown
+              items={[...accountMenu, { label: "Logout", icon: User, onClick: logout }]}
+              className="left-0"
+            />
+          </div>
+        ) : (
+          <button
+            onClick={() => setSignInOpen(true)}
+            data-testid="signin-open-button"
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-[2px] bg-white px-8 text-fk-md font-bold text-fk-blue"
+          >
             Login
-            <ChevronDown className="h-3.5 w-3.5 transition-transform group-hover:rotate-180" />
           </button>
-          <Dropdown items={accountMenu} className="left-0" />
-        </div>
+        )}
+        <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
 
         <Link
           to="#"

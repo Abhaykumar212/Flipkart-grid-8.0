@@ -10,8 +10,9 @@ import {
 } from "react";
 import { useLocation } from "react-router-dom";
 import { useTracker } from "./TrackerContext";
-import { sendDeliveryDecision, sendElicitationResponse, sendInterventionFeedback } from "../lib/tracker";
+import { sendDeliveryDecision, sendElicitationResponse, sendInterventionFeedback, SESSION_ID } from "../lib/tracker";
 import { fatigueBudget } from "../lib/fatigueBudget";
+import * as abTesting from "../lib/abTesting";
 import {
   assertPolicyCoverage,
   findSuppressedRung3Levers,
@@ -87,6 +88,13 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
   // Separate one-shot guard so a mouse that leaves the viewport repeatedly
   // doesn't force a fresh (paid) LLM call every time — once per cart visit.
   const exitIntentFiredRef = useRef(false);
+
+  // A/B testing framework: resolve this session's arm once, early — reads
+  // are synchronous after (`abTesting.getVariant()`), the fetch just needs to
+  // land before the first `runRootCauseAnalysis` result arrives.
+  useEffect(() => {
+    void abTesting.ensureLoaded(SESSION_ID);
+  }, []);
 
   // A navigation opens a fresh attention window and retires whatever was on
   // screen. The exposure stays `pending` — being navigated away from is exactly
@@ -194,6 +202,7 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
       probability: rootCause.prediction.abandonment_probability,
       hasElicited: fatigueBudget.hasElicitedThisSession(),
       exitIntent,
+      abVariant: abTesting.getVariant(),
     };
     const outcome = selectSurface(ranked, analysis.confidence, fatigueBudget.getState(), surfaceOptions);
 

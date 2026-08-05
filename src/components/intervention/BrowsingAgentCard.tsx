@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { browsingAgent, type BrowsingCue, type BrowsingIntervention } from "../../lib/browsingAgent";
+import { useLanguage } from "../../context/LanguageContext";
 import { buildInterventionContent } from "./interventionContent";
+import { useTranslatedRationale } from "./useTranslatedRationale";
 import { AmbientCard } from "./AmbientCard";
 
 const ACTION_TARGET: Record<string, string> = {
@@ -27,6 +29,12 @@ const ACTION_TARGET: Record<string, string> = {
 export function useBrowsingAgentTrigger() {
   const [result, setResult] = useState<BrowsingIntervention | null>(null);
   const lastCueKey = useRef<string | null>(null);
+  const { language } = useLanguage();
+  const translatedRationale = useTranslatedRationale(
+    result?.intervention.lever_id ?? "",
+    result?.intervention.rationale ?? "",
+    language,
+  );
 
   const trigger = useCallback((cue: BrowsingCue) => {
     const key = `${cue.type}:${cue.query ?? cue.productId ?? ""}`;
@@ -50,7 +58,7 @@ export function useBrowsingAgentTrigger() {
       {result && (
         <AmbientCard
           key={`${result.intervention.lever_id}-${lastCueKey.current}`}
-          {...buildInterventionContent(result.intervention, accept, dismiss)}
+          {...buildInterventionContent(result.intervention, accept, dismiss, language, translatedRationale)}
         />
       )}
     </AnimatePresence>

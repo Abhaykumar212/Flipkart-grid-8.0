@@ -11,6 +11,7 @@ import { TraceWaterfall } from "../components/pipeline/TraceWaterfall";
 import { RcaReport } from "../components/pipeline/RcaReport";
 import { ScenarioPicker } from "../components/pipeline/ScenarioPicker";
 import { InterventionLedgerPanel } from "../components/pipeline/InterventionLedgerPanel";
+import { Link } from "react-router-dom";
 
 const STATUS_CHIP: Record<string, string> = {
   success: "bg-emerald-100 text-emerald-700",
@@ -133,6 +134,24 @@ export default function PipelineConsole() {
               Clear
             </button>
           </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+          {[
+            { to: "/ab-testing", label: "A/B Test Dashboard" },
+            { to: "/reengagement", label: "Re-Engagement Engine" },
+            { to: "/admin/catalog", label: "Catalog Admin" },
+            { to: "/smart-search", label: "Smart Search (RAG)" },
+            { to: "/account", label: "My Account" },
+          ].map((link) => (
+            <Link
+              key={link.to}
+              to={link.to}
+              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:border-blue-300 hover:text-blue-600"
+            >
+              {link.label}
+            </Link>
+          ))}
         </div>
 
         {config && (

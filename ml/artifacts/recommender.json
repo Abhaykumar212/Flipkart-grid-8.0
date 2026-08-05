@@ -1,0 +1,2107 @@
+{
+  "model": "content-based item-item cosine similarity",
+  "trained_on": 50,
+  "feature_dims": 37,
+  "neighbours": {
+    "p-1001": [
+      {
+        "product_id": "p-1002",
+        "score": 1.0
+      },
+      {
+        "product_id": "p-1005",
+        "score": 0.8352
+      },
+      {
+        "product_id": "p-1003",
+        "score": 0.8239
+      },
+      {
+        "product_id": "p-1007",
+        "score": 0.8134
+      },
+      {
+        "product_id": "p-1009",
+        "score": 0.8089
+      },
+      {
+        "product_id": "p-1004",
+        "score": 0.8027
+      },
+      {
+        "product_id": "p-1010",
+        "score": 0.7983
+      },
+      {
+        "product_id": "p-1008",
+        "score": 0.7809
+      },
+      {
+        "product_id": "p-1006",
+        "score": 0.7775
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.2142
+      }
+    ],
+    "p-1002": [
+      {
+        "product_id": "p-1001",
+        "score": 1.0
+      },
+      {
+        "product_id": "p-1005",
+        "score": 0.8353
+      },
+      {
+        "product_id": "p-1003",
+        "score": 0.8251
+      },
+      {
+        "product_id": "p-1007",
+        "score": 0.814
+      },
+      {
+        "product_id": "p-1009",
+        "score": 0.8098
+      },
+      {
+        "product_id": "p-1004",
+        "score": 0.8045
+      },
+      {
+        "product_id": "p-1010",
+        "score": 0.7991
+      },
+      {
+        "product_id": "p-1008",
+        "score": 0.782
+      },
+      {
+        "product_id": "p-1006",
+        "score": 0.7795
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.2141
+      }
+    ],
+    "p-1003": [
+      {
+        "product_id": "p-1004",
+        "score": 0.9951
+      },
+      {
+        "product_id": "p-1005",
+        "score": 0.9904
+      },
+      {
+        "product_id": "p-1006",
+        "score": 0.9818
+      },
+      {
+        "product_id": "p-1002",
+        "score": 0.8251
+      },
+      {
+        "product_id": "p-1001",
+        "score": 0.8239
+      },
+      {
+        "product_id": "p-1009",
+        "score": 0.8179
+      },
+      {
+        "product_id": "p-1007",
+        "score": 0.8155
+      },
+      {
+        "product_id": "p-1010",
+        "score": 0.807
+      },
+      {
+        "product_id": "p-1008",
+        "score": 0.7993
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.3544
+      }
+    ],
+    "p-1004": [
+      {
+        "product_id": "p-1003",
+        "score": 0.9951
+      },
+      {
+        "product_id": "p-1006",
+        "score": 0.9923
+      },
+      {
+        "product_id": "p-1005",
+        "score": 0.9742
+      },
+      {
+        "product_id": "p-1009",
+        "score": 0.8135
+      },
+      {
+        "product_id": "p-1007",
+        "score": 0.8072
+      },
+      {
+        "product_id": "p-1002",
+        "score": 0.8045
+      },
+      {
+        "product_id": "p-1010",
+        "score": 0.8035
+      },
+      {
+        "product_id": "p-1001",
+        "score": 0.8027
+      },
+      {
+        "product_id": "p-1008",
+        "score": 0.8024
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.3348
+      }
+    ],
+    "p-1005": [
+      {
+        "product_id": "p-1003",
+        "score": 0.9904
+      },
+      {
+        "product_id": "p-1004",
+        "score": 0.9742
+      },
+      {
+        "product_id": "p-1006",
+        "score": 0.9538
+      },
+      {
+        "product_id": "p-1002",
+        "score": 0.8353
+      },
+      {
+        "product_id": "p-1001",
+        "score": 0.8352
+      },
+      {
+        "product_id": "p-1007",
+        "score": 0.8113
+      },
+      {
+        "product_id": "p-1009",
+        "score": 0.8081
+      },
+      {
+        "product_id": "p-1010",
+        "score": 0.7973
+      },
+      {
+        "product_id": "p-1008",
+        "score": 0.7834
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.3732
+      }
+    ],
+    "p-1006": [
+      {
+        "product_id": "p-1004",
+        "score": 0.9923
+      },
+      {
+        "product_id": "p-1003",
+        "score": 0.9818
+      },
+      {
+        "product_id": "p-1005",
+        "score": 0.9538
+      },
+      {
+        "product_id": "p-1009",
+        "score": 0.8091
+      },
+      {
+        "product_id": "p-1008",
+        "score": 0.8089
+      },
+      {
+        "product_id": "p-1010",
+        "score": 0.805
+      },
+      {
+        "product_id": "p-1007",
+        "score": 0.8019
+      },
+      {
+        "product_id": "p-1002",
+        "score": 0.7795
+      },
+      {
+        "product_id": "p-1001",
+        "score": 0.7775
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.297
+      }
+    ],
+    "p-1007": [
+      {
+        "product_id": "p-1010",
+        "score": 0.9981
+      },
+      {
+        "product_id": "p-1009",
+        "score": 0.8173
+      },
+      {
+        "product_id": "p-1003",
+        "score": 0.8155
+      },
+      {
+        "product_id": "p-1002",
+        "score": 0.814
+      },
+      {
+        "product_id": "p-1001",
+        "score": 0.8134
+      },
+      {
+        "product_id": "p-1005",
+        "score": 0.8113
+      },
+      {
+        "product_id": "p-1004",
+        "score": 0.8072
+      },
+      {
+        "product_id": "p-1008",
+        "score": 0.8061
+      },
+      {
+        "product_id": "p-1006",
+        "score": 0.8019
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.1395
+      }
+    ],
+    "p-1008": [
+      {
+        "product_id": "p-1010",
+        "score": 0.8092
+      },
+      {
+        "product_id": "p-1009",
+        "score": 0.8091
+      },
+      {
+        "product_id": "p-1006",
+        "score": 0.8089
+      },
+      {
+        "product_id": "p-1007",
+        "score": 0.8061
+      },
+      {
+        "product_id": "p-1004",
+        "score": 0.8024
+      },
+      {
+        "product_id": "p-1003",
+        "score": 0.7993
+      },
+      {
+        "product_id": "p-1005",
+        "score": 0.7834
+      },
+      {
+        "product_id": "p-1002",
+        "score": 0.782
+      },
+      {
+        "product_id": "p-1001",
+        "score": 0.7809
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.0933
+      }
+    ],
+    "p-1009": [
+      {
+        "product_id": "p-1003",
+        "score": 0.8179
+      },
+      {
+        "product_id": "p-1007",
+        "score": 0.8173
+      },
+      {
+        "product_id": "p-1010",
+        "score": 0.8142
+      },
+      {
+        "product_id": "p-1004",
+        "score": 0.8135
+      },
+      {
+        "product_id": "p-1002",
+        "score": 0.8098
+      },
+      {
+        "product_id": "p-1006",
+        "score": 0.8091
+      },
+      {
+        "product_id": "p-1008",
+        "score": 0.8091
+      },
+      {
+        "product_id": "p-1001",
+        "score": 0.8089
+      },
+      {
+        "product_id": "p-1005",
+        "score": 0.8081
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.1376
+      }
+    ],
+    "p-1010": [
+      {
+        "product_id": "p-1007",
+        "score": 0.9981
+      },
+      {
+        "product_id": "p-1009",
+        "score": 0.8142
+      },
+      {
+        "product_id": "p-1008",
+        "score": 0.8092
+      },
+      {
+        "product_id": "p-1003",
+        "score": 0.807
+      },
+      {
+        "product_id": "p-1006",
+        "score": 0.805
+      },
+      {
+        "product_id": "p-1004",
+        "score": 0.8035
+      },
+      {
+        "product_id": "p-1002",
+        "score": 0.7991
+      },
+      {
+        "product_id": "p-1001",
+        "score": 0.7983
+      },
+      {
+        "product_id": "p-1005",
+        "score": 0.7973
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.1129
+      }
+    ],
+    "p-2001": [
+      {
+        "product_id": "p-2002",
+        "score": 0.998
+      },
+      {
+        "product_id": "p-2005",
+        "score": 0.9974
+      },
+      {
+        "product_id": "p-2004",
+        "score": 0.9937
+      },
+      {
+        "product_id": "p-2003",
+        "score": 0.9714
+      },
+      {
+        "product_id": "p-3004",
+        "score": 0.8273
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.8259
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.8244
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.8202
+      },
+      {
+        "product_id": "p-3002",
+        "score": 0.8197
+      },
+      {
+        "product_id": "p-2006",
+        "score": 0.8194
+      }
+    ],
+    "p-2002": [
+      {
+        "product_id": "p-2005",
+        "score": 0.9993
+      },
+      {
+        "product_id": "p-2001",
+        "score": 0.998
+      },
+      {
+        "product_id": "p-2004",
+        "score": 0.9856
+      },
+      {
+        "product_id": "p-2003",
+        "score": 0.9815
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.8318
+      },
+      {
+        "product_id": "p-3004",
+        "score": 0.8317
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.8269
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.8261
+      },
+      {
+        "product_id": "p-3002",
+        "score": 0.8179
+      },
+      {
+        "product_id": "p-2006",
+        "score": 0.8171
+      }
+    ],
+    "p-2003": [
+      {
+        "product_id": "p-2005",
+        "score": 0.9851
+      },
+      {
+        "product_id": "p-2002",
+        "score": 0.9815
+      },
+      {
+        "product_id": "p-2001",
+        "score": 0.9714
+      },
+      {
+        "product_id": "p-2004",
+        "score": 0.9437
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.8479
+      },
+      {
+        "product_id": "p-3004",
+        "score": 0.8228
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.8084
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.8046
+      },
+      {
+        "product_id": "p-2006",
+        "score": 0.7926
+      },
+      {
+        "product_id": "p-3002",
+        "score": 0.7856
+      }
+    ],
+    "p-2004": [
+      {
+        "product_id": "p-2001",
+        "score": 0.9937
+      },
+      {
+        "product_id": "p-2002",
+        "score": 0.9856
+      },
+      {
+        "product_id": "p-2005",
+        "score": 0.9835
+      },
+      {
+        "product_id": "p-2003",
+        "score": 0.9437
+      },
+      {
+        "product_id": "p-2006",
+        "score": 0.8144
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.8118
+      },
+      {
+        "product_id": "p-3002",
+        "score": 0.8103
+      },
+      {
+        "product_id": "p-3001",
+        "score": 0.8091
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.808
+      },
+      {
+        "product_id": "p-3004",
+        "score": 0.8067
+      }
+    ],
+    "p-2005": [
+      {
+        "product_id": "p-2002",
+        "score": 0.9993
+      },
+      {
+        "product_id": "p-2001",
+        "score": 0.9974
+      },
+      {
+        "product_id": "p-2003",
+        "score": 0.9851
+      },
+      {
+        "product_id": "p-2004",
+        "score": 0.9835
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.8353
+      },
+      {
+        "product_id": "p-3004",
+        "score": 0.8336
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.8279
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.8268
+      },
+      {
+        "product_id": "p-3002",
+        "score": 0.8174
+      },
+      {
+        "product_id": "p-2006",
+        "score": 0.8168
+      }
+    ],
+    "p-2006": [
+      {
+        "product_id": "p-2001",
+        "score": 0.8194
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.8194
+      },
+      {
+        "product_id": "p-2002",
+        "score": 0.8171
+      },
+      {
+        "product_id": "p-3004",
+        "score": 0.817
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.817
+      },
+      {
+        "product_id": "p-2005",
+        "score": 0.8168
+      },
+      {
+        "product_id": "p-3002",
+        "score": 0.8164
+      },
+      {
+        "product_id": "p-2004",
+        "score": 0.8144
+      },
+      {
+        "product_id": "p-3001",
+        "score": 0.812
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.8031
+      }
+    ],
+    "p-3001": [
+      {
+        "product_id": "p-3002",
+        "score": 0.9975
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.9911
+      },
+      {
+        "product_id": "p-3004",
+        "score": 0.9818
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.9463
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.8184
+      },
+      {
+        "product_id": "p-2006",
+        "score": 0.812
+      },
+      {
+        "product_id": "p-2001",
+        "score": 0.8115
+      },
+      {
+        "product_id": "p-2004",
+        "score": 0.8091
+      },
+      {
+        "product_id": "p-2002",
+        "score": 0.8053
+      },
+      {
+        "product_id": "p-2005",
+        "score": 0.8048
+      }
+    ],
+    "p-3002": [
+      {
+        "product_id": "p-3003",
+        "score": 0.9978
+      },
+      {
+        "product_id": "p-3001",
+        "score": 0.9975
+      },
+      {
+        "product_id": "p-3004",
+        "score": 0.992
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.9652
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.8263
+      },
+      {
+        "product_id": "p-2001",
+        "score": 0.8197
+      },
+      {
+        "product_id": "p-2002",
+        "score": 0.8179
+      },
+      {
+        "product_id": "p-2005",
+        "score": 0.8174
+      },
+      {
+        "product_id": "p-2006",
+        "score": 0.8164
+      },
+      {
+        "product_id": "p-2004",
+        "score": 0.8103
+      }
+    ],
+    "p-3003": [
+      {
+        "product_id": "p-3002",
+        "score": 0.9978
+      },
+      {
+        "product_id": "p-3004",
+        "score": 0.9976
+      },
+      {
+        "product_id": "p-3001",
+        "score": 0.9911
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.9788
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.8314
+      },
+      {
+        "product_id": "p-2005",
+        "score": 0.8268
+      },
+      {
+        "product_id": "p-2002",
+        "score": 0.8261
+      },
+      {
+        "product_id": "p-2001",
+        "score": 0.8244
+      },
+      {
+        "product_id": "p-2006",
+        "score": 0.817
+      },
+      {
+        "product_id": "p-2004",
+        "score": 0.808
+      }
+    ],
+    "p-3004": [
+      {
+        "product_id": "p-3003",
+        "score": 0.9976
+      },
+      {
+        "product_id": "p-3002",
+        "score": 0.992
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.9902
+      },
+      {
+        "product_id": "p-3001",
+        "score": 0.9818
+      },
+      {
+        "product_id": "p-2005",
+        "score": 0.8336
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.8322
+      },
+      {
+        "product_id": "p-2002",
+        "score": 0.8317
+      },
+      {
+        "product_id": "p-2001",
+        "score": 0.8273
+      },
+      {
+        "product_id": "p-2003",
+        "score": 0.8228
+      },
+      {
+        "product_id": "p-2006",
+        "score": 0.817
+      }
+    ],
+    "p-3005": [
+      {
+        "product_id": "p-3004",
+        "score": 0.9902
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.9788
+      },
+      {
+        "product_id": "p-3002",
+        "score": 0.9652
+      },
+      {
+        "product_id": "p-3001",
+        "score": 0.9463
+      },
+      {
+        "product_id": "p-2003",
+        "score": 0.8479
+      },
+      {
+        "product_id": "p-2005",
+        "score": 0.8353
+      },
+      {
+        "product_id": "p-2002",
+        "score": 0.8318
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.8218
+      },
+      {
+        "product_id": "p-2001",
+        "score": 0.8202
+      },
+      {
+        "product_id": "p-2006",
+        "score": 0.8031
+      }
+    ],
+    "p-3006": [
+      {
+        "product_id": "p-3004",
+        "score": 0.8322
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.8314
+      },
+      {
+        "product_id": "p-2005",
+        "score": 0.8279
+      },
+      {
+        "product_id": "p-2002",
+        "score": 0.8269
+      },
+      {
+        "product_id": "p-3002",
+        "score": 0.8263
+      },
+      {
+        "product_id": "p-2001",
+        "score": 0.8259
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.8218
+      },
+      {
+        "product_id": "p-2006",
+        "score": 0.8194
+      },
+      {
+        "product_id": "p-3001",
+        "score": 0.8184
+      },
+      {
+        "product_id": "p-2004",
+        "score": 0.8118
+      }
+    ],
+    "p-4001": [
+      {
+        "product_id": "p-4002",
+        "score": 0.9988
+      },
+      {
+        "product_id": "p-4008",
+        "score": 0.9985
+      },
+      {
+        "product_id": "p-4004",
+        "score": 0.9959
+      },
+      {
+        "product_id": "p-4003",
+        "score": 0.9957
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.8273
+      },
+      {
+        "product_id": "p-4009",
+        "score": 0.8192
+      },
+      {
+        "product_id": "p-4007",
+        "score": 0.8141
+      },
+      {
+        "product_id": "p-4006",
+        "score": 0.8116
+      },
+      {
+        "product_id": "p-6003",
+        "score": 0.1784
+      },
+      {
+        "product_id": "p-6001",
+        "score": 0.1736
+      }
+    ],
+    "p-4002": [
+      {
+        "product_id": "p-4008",
+        "score": 0.9999
+      },
+      {
+        "product_id": "p-4003",
+        "score": 0.999
+      },
+      {
+        "product_id": "p-4004",
+        "score": 0.999
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.9988
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.8279
+      },
+      {
+        "product_id": "p-4009",
+        "score": 0.8219
+      },
+      {
+        "product_id": "p-4007",
+        "score": 0.8115
+      },
+      {
+        "product_id": "p-4006",
+        "score": 0.8093
+      },
+      {
+        "product_id": "p-6003",
+        "score": 0.1647
+      },
+      {
+        "product_id": "p-6001",
+        "score": 0.1614
+      }
+    ],
+    "p-4003": [
+      {
+        "product_id": "p-4004",
+        "score": 1.0
+      },
+      {
+        "product_id": "p-4002",
+        "score": 0.999
+      },
+      {
+        "product_id": "p-4008",
+        "score": 0.999
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.9957
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.8292
+      },
+      {
+        "product_id": "p-4009",
+        "score": 0.8253
+      },
+      {
+        "product_id": "p-4007",
+        "score": 0.8052
+      },
+      {
+        "product_id": "p-4006",
+        "score": 0.8029
+      },
+      {
+        "product_id": "p-6003",
+        "score": 0.1577
+      },
+      {
+        "product_id": "p-6001",
+        "score": 0.1564
+      }
+    ],
+    "p-4004": [
+      {
+        "product_id": "p-4003",
+        "score": 1.0
+      },
+      {
+        "product_id": "p-4002",
+        "score": 0.999
+      },
+      {
+        "product_id": "p-4008",
+        "score": 0.9989
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.9959
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.8302
+      },
+      {
+        "product_id": "p-4009",
+        "score": 0.8262
+      },
+      {
+        "product_id": "p-4007",
+        "score": 0.8044
+      },
+      {
+        "product_id": "p-4006",
+        "score": 0.8021
+      },
+      {
+        "product_id": "p-6003",
+        "score": 0.1607
+      },
+      {
+        "product_id": "p-6001",
+        "score": 0.1596
+      }
+    ],
+    "p-4005": [
+      {
+        "product_id": "p-4009",
+        "score": 0.8324
+      },
+      {
+        "product_id": "p-4004",
+        "score": 0.8302
+      },
+      {
+        "product_id": "p-4003",
+        "score": 0.8292
+      },
+      {
+        "product_id": "p-4002",
+        "score": 0.8279
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.8273
+      },
+      {
+        "product_id": "p-4008",
+        "score": 0.8267
+      },
+      {
+        "product_id": "p-4007",
+        "score": 0.7907
+      },
+      {
+        "product_id": "p-4006",
+        "score": 0.7879
+      },
+      {
+        "product_id": "p-6001",
+        "score": 0.1734
+      },
+      {
+        "product_id": "p-6003",
+        "score": 0.1718
+      }
+    ],
+    "p-4006": [
+      {
+        "product_id": "p-4007",
+        "score": 0.8236
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.8116
+      },
+      {
+        "product_id": "p-4008",
+        "score": 0.8103
+      },
+      {
+        "product_id": "p-4002",
+        "score": 0.8093
+      },
+      {
+        "product_id": "p-4003",
+        "score": 0.8029
+      },
+      {
+        "product_id": "p-4004",
+        "score": 0.8021
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.7879
+      },
+      {
+        "product_id": "p-4009",
+        "score": 0.7788
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.1352
+      },
+      {
+        "product_id": "p-1004",
+        "score": 0.1345
+      }
+    ],
+    "p-4007": [
+      {
+        "product_id": "p-4006",
+        "score": 0.8236
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.8141
+      },
+      {
+        "product_id": "p-4008",
+        "score": 0.8124
+      },
+      {
+        "product_id": "p-4002",
+        "score": 0.8115
+      },
+      {
+        "product_id": "p-4003",
+        "score": 0.8052
+      },
+      {
+        "product_id": "p-4004",
+        "score": 0.8044
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.7907
+      },
+      {
+        "product_id": "p-4009",
+        "score": 0.7816
+      },
+      {
+        "product_id": "p-1004",
+        "score": 0.137
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.137
+      }
+    ],
+    "p-4008": [
+      {
+        "product_id": "p-4002",
+        "score": 0.9999
+      },
+      {
+        "product_id": "p-4003",
+        "score": 0.999
+      },
+      {
+        "product_id": "p-4004",
+        "score": 0.9989
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.9985
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.8267
+      },
+      {
+        "product_id": "p-4009",
+        "score": 0.8207
+      },
+      {
+        "product_id": "p-4007",
+        "score": 0.8124
+      },
+      {
+        "product_id": "p-4006",
+        "score": 0.8103
+      },
+      {
+        "product_id": "p-6003",
+        "score": 0.1611
+      },
+      {
+        "product_id": "p-6001",
+        "score": 0.1577
+      }
+    ],
+    "p-4009": [
+      {
+        "product_id": "p-4005",
+        "score": 0.8324
+      },
+      {
+        "product_id": "p-4004",
+        "score": 0.8262
+      },
+      {
+        "product_id": "p-4003",
+        "score": 0.8253
+      },
+      {
+        "product_id": "p-4002",
+        "score": 0.8219
+      },
+      {
+        "product_id": "p-4008",
+        "score": 0.8207
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.8192
+      },
+      {
+        "product_id": "p-4007",
+        "score": 0.7816
+      },
+      {
+        "product_id": "p-4006",
+        "score": 0.7788
+      },
+      {
+        "product_id": "p-6001",
+        "score": 0.1664
+      },
+      {
+        "product_id": "p-6002",
+        "score": 0.1644
+      }
+    ],
+    "p-5001": [
+      {
+        "product_id": "p-5008",
+        "score": 0.8193
+      },
+      {
+        "product_id": "p-5006",
+        "score": 0.8179
+      },
+      {
+        "product_id": "p-5007",
+        "score": 0.816
+      },
+      {
+        "product_id": "p-5005",
+        "score": 0.8151
+      },
+      {
+        "product_id": "p-5003",
+        "score": 0.815
+      },
+      {
+        "product_id": "p-5009",
+        "score": 0.8133
+      },
+      {
+        "product_id": "p-5004",
+        "score": 0.8119
+      },
+      {
+        "product_id": "p-5002",
+        "score": 0.8116
+      },
+      {
+        "product_id": "p-5010",
+        "score": 0.8093
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.1258
+      }
+    ],
+    "p-5002": [
+      {
+        "product_id": "p-5001",
+        "score": 0.8116
+      },
+      {
+        "product_id": "p-5008",
+        "score": 0.808
+      },
+      {
+        "product_id": "p-5006",
+        "score": 0.8034
+      },
+      {
+        "product_id": "p-5009",
+        "score": 0.8009
+      },
+      {
+        "product_id": "p-5005",
+        "score": 0.7986
+      },
+      {
+        "product_id": "p-5007",
+        "score": 0.7972
+      },
+      {
+        "product_id": "p-5003",
+        "score": 0.7945
+      },
+      {
+        "product_id": "p-5004",
+        "score": 0.7861
+      },
+      {
+        "product_id": "p-5010",
+        "score": 0.7856
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.1701
+      }
+    ],
+    "p-5003": [
+      {
+        "product_id": "p-5004",
+        "score": 0.821
+      },
+      {
+        "product_id": "p-5008",
+        "score": 0.8187
+      },
+      {
+        "product_id": "p-5007",
+        "score": 0.8183
+      },
+      {
+        "product_id": "p-5006",
+        "score": 0.8176
+      },
+      {
+        "product_id": "p-5005",
+        "score": 0.8156
+      },
+      {
+        "product_id": "p-5010",
+        "score": 0.8155
+      },
+      {
+        "product_id": "p-5001",
+        "score": 0.815
+      },
+      {
+        "product_id": "p-5009",
+        "score": 0.8113
+      },
+      {
+        "product_id": "p-5002",
+        "score": 0.7945
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.3059
+      }
+    ],
+    "p-5004": [
+      {
+        "product_id": "p-5005",
+        "score": 0.9936
+      },
+      {
+        "product_id": "p-5003",
+        "score": 0.821
+      },
+      {
+        "product_id": "p-5008",
+        "score": 0.8191
+      },
+      {
+        "product_id": "p-5007",
+        "score": 0.8182
+      },
+      {
+        "product_id": "p-5006",
+        "score": 0.8167
+      },
+      {
+        "product_id": "p-5010",
+        "score": 0.8157
+      },
+      {
+        "product_id": "p-5001",
+        "score": 0.8119
+      },
+      {
+        "product_id": "p-5009",
+        "score": 0.8074
+      },
+      {
+        "product_id": "p-5002",
+        "score": 0.7861
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.3063
+      }
+    ],
+    "p-5005": [
+      {
+        "product_id": "p-5004",
+        "score": 0.9936
+      },
+      {
+        "product_id": "p-5006",
+        "score": 0.8164
+      },
+      {
+        "product_id": "p-5007",
+        "score": 0.8162
+      },
+      {
+        "product_id": "p-5008",
+        "score": 0.8157
+      },
+      {
+        "product_id": "p-5003",
+        "score": 0.8156
+      },
+      {
+        "product_id": "p-5001",
+        "score": 0.8151
+      },
+      {
+        "product_id": "p-5009",
+        "score": 0.8123
+      },
+      {
+        "product_id": "p-5010",
+        "score": 0.8119
+      },
+      {
+        "product_id": "p-5002",
+        "score": 0.7986
+      },
+      {
+        "product_id": "p-3006",
+        "score": 0.2794
+      }
+    ],
+    "p-5006": [
+      {
+        "product_id": "p-5008",
+        "score": 0.823
+      },
+      {
+        "product_id": "p-5007",
+        "score": 0.8198
+      },
+      {
+        "product_id": "p-5001",
+        "score": 0.8179
+      },
+      {
+        "product_id": "p-5003",
+        "score": 0.8176
+      },
+      {
+        "product_id": "p-5004",
+        "score": 0.8167
+      },
+      {
+        "product_id": "p-5005",
+        "score": 0.8164
+      },
+      {
+        "product_id": "p-5009",
+        "score": 0.8113
+      },
+      {
+        "product_id": "p-5010",
+        "score": 0.8104
+      },
+      {
+        "product_id": "p-5002",
+        "score": 0.8034
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.1294
+      }
+    ],
+    "p-5007": [
+      {
+        "product_id": "p-5008",
+        "score": 0.821
+      },
+      {
+        "product_id": "p-5006",
+        "score": 0.8198
+      },
+      {
+        "product_id": "p-5003",
+        "score": 0.8183
+      },
+      {
+        "product_id": "p-5004",
+        "score": 0.8182
+      },
+      {
+        "product_id": "p-5005",
+        "score": 0.8162
+      },
+      {
+        "product_id": "p-5001",
+        "score": 0.816
+      },
+      {
+        "product_id": "p-5010",
+        "score": 0.8122
+      },
+      {
+        "product_id": "p-5009",
+        "score": 0.811
+      },
+      {
+        "product_id": "p-5002",
+        "score": 0.7972
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.1267
+      }
+    ],
+    "p-5008": [
+      {
+        "product_id": "p-5006",
+        "score": 0.823
+      },
+      {
+        "product_id": "p-5007",
+        "score": 0.821
+      },
+      {
+        "product_id": "p-5001",
+        "score": 0.8193
+      },
+      {
+        "product_id": "p-5004",
+        "score": 0.8191
+      },
+      {
+        "product_id": "p-5003",
+        "score": 0.8187
+      },
+      {
+        "product_id": "p-5005",
+        "score": 0.8157
+      },
+      {
+        "product_id": "p-5009",
+        "score": 0.8093
+      },
+      {
+        "product_id": "p-5010",
+        "score": 0.8085
+      },
+      {
+        "product_id": "p-5002",
+        "score": 0.808
+      },
+      {
+        "product_id": "p-3003",
+        "score": 0.1501
+      }
+    ],
+    "p-5009": [
+      {
+        "product_id": "p-5001",
+        "score": 0.8133
+      },
+      {
+        "product_id": "p-5005",
+        "score": 0.8123
+      },
+      {
+        "product_id": "p-5006",
+        "score": 0.8113
+      },
+      {
+        "product_id": "p-5003",
+        "score": 0.8113
+      },
+      {
+        "product_id": "p-5007",
+        "score": 0.811
+      },
+      {
+        "product_id": "p-5010",
+        "score": 0.8096
+      },
+      {
+        "product_id": "p-5008",
+        "score": 0.8093
+      },
+      {
+        "product_id": "p-5004",
+        "score": 0.8074
+      },
+      {
+        "product_id": "p-5002",
+        "score": 0.8009
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.1025
+      }
+    ],
+    "p-5010": [
+      {
+        "product_id": "p-5004",
+        "score": 0.8157
+      },
+      {
+        "product_id": "p-5003",
+        "score": 0.8155
+      },
+      {
+        "product_id": "p-5007",
+        "score": 0.8122
+      },
+      {
+        "product_id": "p-5005",
+        "score": 0.8119
+      },
+      {
+        "product_id": "p-5006",
+        "score": 0.8104
+      },
+      {
+        "product_id": "p-5009",
+        "score": 0.8096
+      },
+      {
+        "product_id": "p-5001",
+        "score": 0.8093
+      },
+      {
+        "product_id": "p-5008",
+        "score": 0.8085
+      },
+      {
+        "product_id": "p-5002",
+        "score": 0.7856
+      },
+      {
+        "product_id": "p-3005",
+        "score": 0.1294
+      }
+    ],
+    "p-6001": [
+      {
+        "product_id": "p-6003",
+        "score": 0.8335
+      },
+      {
+        "product_id": "p-6002",
+        "score": 0.8331
+      },
+      {
+        "product_id": "p-6004",
+        "score": 0.8299
+      },
+      {
+        "product_id": "p-6005",
+        "score": 0.8271
+      },
+      {
+        "product_id": "p-6007",
+        "score": 0.8262
+      },
+      {
+        "product_id": "p-6008",
+        "score": 0.826
+      },
+      {
+        "product_id": "p-6009",
+        "score": 0.826
+      },
+      {
+        "product_id": "p-6006",
+        "score": 0.82
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.1736
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.1734
+      }
+    ],
+    "p-6002": [
+      {
+        "product_id": "p-6001",
+        "score": 0.8331
+      },
+      {
+        "product_id": "p-6004",
+        "score": 0.8324
+      },
+      {
+        "product_id": "p-6003",
+        "score": 0.8298
+      },
+      {
+        "product_id": "p-6005",
+        "score": 0.8254
+      },
+      {
+        "product_id": "p-6007",
+        "score": 0.8224
+      },
+      {
+        "product_id": "p-6009",
+        "score": 0.8222
+      },
+      {
+        "product_id": "p-6008",
+        "score": 0.8202
+      },
+      {
+        "product_id": "p-6006",
+        "score": 0.8182
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.1694
+      },
+      {
+        "product_id": "p-4009",
+        "score": 0.1644
+      }
+    ],
+    "p-6003": [
+      {
+        "product_id": "p-6001",
+        "score": 0.8335
+      },
+      {
+        "product_id": "p-6008",
+        "score": 0.8299
+      },
+      {
+        "product_id": "p-6002",
+        "score": 0.8298
+      },
+      {
+        "product_id": "p-6007",
+        "score": 0.8282
+      },
+      {
+        "product_id": "p-6009",
+        "score": 0.828
+      },
+      {
+        "product_id": "p-6005",
+        "score": 0.8269
+      },
+      {
+        "product_id": "p-6004",
+        "score": 0.8246
+      },
+      {
+        "product_id": "p-6006",
+        "score": 0.8205
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.1784
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.1718
+      }
+    ],
+    "p-6004": [
+      {
+        "product_id": "p-6002",
+        "score": 0.8324
+      },
+      {
+        "product_id": "p-6001",
+        "score": 0.8299
+      },
+      {
+        "product_id": "p-6003",
+        "score": 0.8246
+      },
+      {
+        "product_id": "p-6005",
+        "score": 0.822
+      },
+      {
+        "product_id": "p-6007",
+        "score": 0.8169
+      },
+      {
+        "product_id": "p-6009",
+        "score": 0.8168
+      },
+      {
+        "product_id": "p-6006",
+        "score": 0.8147
+      },
+      {
+        "product_id": "p-6008",
+        "score": 0.8128
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.166
+      },
+      {
+        "product_id": "p-4009",
+        "score": 0.1629
+      }
+    ],
+    "p-6005": [
+      {
+        "product_id": "p-6001",
+        "score": 0.8271
+      },
+      {
+        "product_id": "p-6003",
+        "score": 0.8269
+      },
+      {
+        "product_id": "p-6002",
+        "score": 0.8254
+      },
+      {
+        "product_id": "p-6007",
+        "score": 0.8242
+      },
+      {
+        "product_id": "p-6009",
+        "score": 0.8241
+      },
+      {
+        "product_id": "p-6008",
+        "score": 0.8233
+      },
+      {
+        "product_id": "p-6004",
+        "score": 0.822
+      },
+      {
+        "product_id": "p-6006",
+        "score": 0.8209
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.1486
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.1461
+      }
+    ],
+    "p-6006": [
+      {
+        "product_id": "p-6005",
+        "score": 0.8209
+      },
+      {
+        "product_id": "p-6007",
+        "score": 0.8207
+      },
+      {
+        "product_id": "p-6009",
+        "score": 0.8207
+      },
+      {
+        "product_id": "p-6003",
+        "score": 0.8205
+      },
+      {
+        "product_id": "p-6001",
+        "score": 0.82
+      },
+      {
+        "product_id": "p-6008",
+        "score": 0.8192
+      },
+      {
+        "product_id": "p-6002",
+        "score": 0.8182
+      },
+      {
+        "product_id": "p-6004",
+        "score": 0.8147
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.1323
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.1283
+      }
+    ],
+    "p-6007": [
+      {
+        "product_id": "p-6003",
+        "score": 0.8282
+      },
+      {
+        "product_id": "p-6008",
+        "score": 0.827
+      },
+      {
+        "product_id": "p-6001",
+        "score": 0.8262
+      },
+      {
+        "product_id": "p-6009",
+        "score": 0.8259
+      },
+      {
+        "product_id": "p-6005",
+        "score": 0.8242
+      },
+      {
+        "product_id": "p-6002",
+        "score": 0.8224
+      },
+      {
+        "product_id": "p-6006",
+        "score": 0.8207
+      },
+      {
+        "product_id": "p-6004",
+        "score": 0.8169
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.1565
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.1477
+      }
+    ],
+    "p-6008": [
+      {
+        "product_id": "p-6003",
+        "score": 0.8299
+      },
+      {
+        "product_id": "p-6007",
+        "score": 0.827
+      },
+      {
+        "product_id": "p-6009",
+        "score": 0.8269
+      },
+      {
+        "product_id": "p-6001",
+        "score": 0.826
+      },
+      {
+        "product_id": "p-6005",
+        "score": 0.8233
+      },
+      {
+        "product_id": "p-6002",
+        "score": 0.8202
+      },
+      {
+        "product_id": "p-6006",
+        "score": 0.8192
+      },
+      {
+        "product_id": "p-6004",
+        "score": 0.8128
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.1702
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.1558
+      }
+    ],
+    "p-6009": [
+      {
+        "product_id": "p-6003",
+        "score": 0.828
+      },
+      {
+        "product_id": "p-6008",
+        "score": 0.8269
+      },
+      {
+        "product_id": "p-6001",
+        "score": 0.826
+      },
+      {
+        "product_id": "p-6007",
+        "score": 0.8259
+      },
+      {
+        "product_id": "p-6005",
+        "score": 0.8241
+      },
+      {
+        "product_id": "p-6002",
+        "score": 0.8222
+      },
+      {
+        "product_id": "p-6006",
+        "score": 0.8207
+      },
+      {
+        "product_id": "p-6004",
+        "score": 0.8168
+      },
+      {
+        "product_id": "p-4001",
+        "score": 0.1561
+      },
+      {
+        "product_id": "p-4005",
+        "score": 0.1472
+      }
+    ]
+  }
+}

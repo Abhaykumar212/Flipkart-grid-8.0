@@ -138,6 +138,13 @@ export interface SelectSurfaceOptions {
    * gated on an actual exit signal, not just a confident diagnosis.
    */
   exitIntent?: boolean;
+  /**
+   * A/B testing framework — 'b' bypasses the fatigue-budget hold below (still
+   * respects the confidence/margin ceiling and a lever the shopper already
+   * dismissed this session — see `abTesting.ts`). Undefined/'a' is the
+   * control path, byte-for-byte the existing behaviour.
+   */
+  abVariant?: "a" | "b" | null;
 }
 
 /**
@@ -277,7 +284,15 @@ export function selectSurface(
       const policy = LEVER_POLICY[intervention.lever_id];
       if (!policy || policy.intensity !== rung) continue;
 
-      const verdict = fatigueBudget.canShow(intervention, now);
+      const rawVerdict = fatigueBudget.canShow(intervention, now);
+      // Variant B (treatment): ignore fatigue-budget holds — cooldown, session
+      // cap, route cap — but still honour a lever the shopper explicitly
+      // dismissed this session ('dismissed_type'); "always deliver" isn't
+      // "re-show what was just declined".
+      const verdict: typeof rawVerdict =
+        options.abVariant === "b" && !(rawVerdict.allowed === false && rawVerdict.reason === "dismissed_type")
+          ? { allowed: true }
+          : rawVerdict;
       if (verdict.allowed) {
         return {
           decision: "deliver",

@@ -56,13 +56,20 @@ def record_decision(
 
     delivered = payload.outcome in ("delivered", "elicited")
 
+    # Stamped so `ab_testing.summary()` can aggregate by arm without joining
+    # through `sessions` at read time for every row — see that module's
+    # docstring for why the join happens anyway (late assignment edge case).
+    from . import ab_testing
+
+    variant = ab_testing.get_or_assign(connection, payload.session_id)
+
     with connection:
         db.touch_session(connection, payload.session_id, at)
         connection.execute(
             """
             INSERT INTO decisions
-                (session_id, decision_type, reason, detail, root_cause, probability, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (session_id, decision_type, reason, detail, root_cause, probability, created_at, ab_variant)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 payload.session_id,
@@ -72,6 +79,7 @@ def record_decision(
                 payload.root_cause,
                 payload.probability,
                 at,
+                variant,
             ),
         )
 

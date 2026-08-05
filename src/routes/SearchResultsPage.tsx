@@ -6,6 +6,7 @@ import type { CategorySlug } from "../types/product";
 import { Button } from "../components/ui/Button";
 import { ProductCard } from "../components/home/ProductCard";
 import { useBrowsingAgentTrigger } from "../components/intervention/BrowsingAgentCard";
+import { useAdminCatalog } from "../context/AdminCatalogContext";
 
 const VALID_CATEGORIES: CategorySlug[] = ["mobiles", "electronics", "audio", "appliances", "fashion"];
 
@@ -25,7 +26,10 @@ export default function SearchResultsPage() {
     : null;
   const isUnmappedCategory = hasCategoryFilter && category === null;
 
-  let results = products;
+  const { storeProducts } = useAdminCatalog();
+  // Admin-added products merged in alongside the static catalog — see
+  // AdminCatalogContext.tsx for why these live in a real backend table.
+  let results = [...products, ...storeProducts];
   if (hasCategoryFilter) {
     results = category ? results.filter((p) => p.category === category) : [];
   }

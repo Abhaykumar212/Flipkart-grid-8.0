@@ -135,13 +135,84 @@ CREATE TABLE IF NOT EXISTS reengagement_emails (
 
 CREATE INDEX IF NOT EXISTS idx_timeline_session ON session_timelines (session_id);
 CREATE INDEX IF NOT EXISTS idx_reengagement_session ON reengagement_emails (session_id);
+
+-- Mock account system: no passwords, no real auth — a demo user is just an
+-- email the shopper typed into the "Sign in" modal. `id` is derived from the
+-- email (see `backend/accounts.py`) so logging in twice with the same address
+-- always resolves to the same row instead of minting duplicates.
+CREATE TABLE IF NOT EXISTS users (
+    id         TEXT PRIMARY KEY,
+    email      TEXT NOT NULL UNIQUE,
+    name       TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL
+);
+
+-- One row per placed order. `items_json`/`address_json` are stored as opaque
+-- JSON rather than normalized lines — the catalog itself lives on the
+-- frontend (see `ProductAvailability`'s docstring), so there is no products
+-- table here to foreign-key against, and an order is a receipt, not a query
+-- surface that needs line-level joins.
+CREATE TABLE IF NOT EXISTS orders (
+    id              TEXT PRIMARY KEY,
+    session_id      TEXT NOT NULL,
+    user_id         TEXT,
+    items_json      TEXT NOT NULL,
+    address_json    TEXT NOT NULL,
+    payment_method  TEXT NOT NULL,
+    total_inr       REAL NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'placed',
+    created_at      REAL NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders (user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_session ON orders (session_id);
+
+-- Admin-authored catalog additions. Deliberately separate from (not a
+-- migration of) `src/data/products.ts` — that file stays the hand-authored
+-- source of truth for the 50-product demo catalog; this table is the "real
+-- backend" a catalog admin would actually write to. The frontend merges rows
+-- from here into the storefront at read time (see `AdminCatalogContext`).
+CREATE TABLE IF NOT EXISTS admin_products (
+    id              TEXT PRIMARY KEY,
+    title           TEXT NOT NULL,
+    brand           TEXT NOT NULL DEFAULT '',
+    category        TEXT NOT NULL DEFAULT 'electronics',
+    mrp             REAL NOT NULL,
+    selling_price   REAL NOT NULL,
+    image_url       TEXT NOT NULL DEFAULT '',
+    stock_qty       INTEGER NOT NULL DEFAULT 0,
+    description     TEXT NOT NULL DEFAULT '',
+    created_at      REAL NOT NULL,
+    updated_at      REAL NOT NULL
+);
 """
+
+# Columns added after the initial release of a table that already shipped
+# without them. `ALTER TABLE ... ADD COLUMN` has no `IF NOT EXISTS` in
+# SQLite, so each entry is applied with its own "does this column exist yet"
+# guard in `_apply_migrations` instead of unconditionally (which would raise
+# `duplicate column name` on every second boot).
+_MIGRATIONS = [
+    ("sessions", "user_id", "TEXT"),
+    # Deterministic per-session A/B bucket ('a' / 'b'), assigned once and
+    # reused for the life of the session — see `backend/ab_testing.py`.
+    ("sessions", "ab_variant", "TEXT"),
+    ("decisions", "ab_variant", "TEXT"),
+]
+
+
+def _apply_migrations(connection: sqlite3.Connection) -> None:
+    for table, column, coltype in _MIGRATIONS:
+        existing = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
 
 
 def init_schema(connection: sqlite3.Connection) -> None:
     """Create every table and index if absent. Idempotent, safe to re-run."""
     with connection:
         connection.executescript(SCHEMA)
+        _apply_migrations(connection)
 
 
 def _connect(path: str) -> sqlite3.Connection:

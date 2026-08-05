@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import joblib
 import numpy as np
@@ -22,6 +24,9 @@ CALIBRATOR_PATH = ARTIFACT_DIR / "calibrator.joblib"
 EXPLAINER_PATH = ARTIFACT_DIR / "explainer.joblib"
 FEATURE_NAMES_PATH = ARTIFACT_DIR / "feature_names.json"
 METRICS_PATH = ARTIFACT_DIR / "metrics.json"
+# Optional: absent on a fresh clone until `python ml/train_recommender.py`
+# runs, unlike the four artifacts above which are hard boot requirements.
+RECOMMENDER_PATH = ARTIFACT_DIR / "recommender.json"
 
 # Add project root to path so we can import the ml package
 if str(PROJECT_ROOT) not in sys.path:
@@ -33,8 +38,8 @@ from ml.feature_engineering import (  # noqa: E402
     engineer_features,
 )
 
-from . import config, db, ledger, reservations  # noqa: E402
-from .agents import browsing_intent, companion_chat, critic, explanation_scorer, gate, intervention, product_pitch, reengagement, root_cause  # noqa: E402
+from . import ab_testing, accounts, config, db, ledger, orders, reservations, translate  # noqa: E402
+from .agents import browsing_intent, companion_chat, critic, explanation_scorer, gate, intervention, product_pitch, reengagement, retrieval, root_cause  # noqa: E402
 from .agents.memory import memory_store  # noqa: E402
 from .schemas import (  # noqa: E402
     CartAddRequest,
@@ -59,6 +64,7 @@ MODEL: Any = None
 CALIBRATOR: Any = None
 EXPLAINER: Any = None
 FEATURE_NAMES: list = []
+RECOMMENDER: Optional[Dict[str, Any]] = None
 
 
 class SessionFeatures(BaseModel):
@@ -151,7 +157,7 @@ class PredictionResponse(BaseModel):
 
 
 def _load_artifacts() -> None:
-    global MODEL, CALIBRATOR, EXPLAINER, FEATURE_NAMES
+    global MODEL, CALIBRATOR, EXPLAINER, FEATURE_NAMES, RECOMMENDER
 
     missing = [
         str(path)
@@ -177,6 +183,12 @@ def _load_artifacts() -> None:
             f"feature_names.json must contain exactly {len(ALL_FEATURE_NAMES)} "
             f"features, got {len(FEATURE_NAMES)}"
         )
+
+    # Optional — a fresh clone that hasn't run `python ml/train_recommender.py`
+    # yet just serves an empty recommendation list rather than failing to boot.
+    RECOMMENDER = (
+        json.loads(RECOMMENDER_PATH.read_text(encoding="utf-8")) if RECOMMENDER_PATH.exists() else None
+    )
 
 
 @asynccontextmanager
@@ -1189,6 +1201,296 @@ def handle_browsing_intent(payload: Dict[str, Any]) -> dict:
 def handle_product_pitch(payload: Dict[str, Any]) -> dict:
     """Short LLM-generated 'why buy this now' bullets for the home page's personalization rail."""
     return product_pitch.generate_pitch(payload)
+
+
+# ============================================================================
+# Accounts — mock sign-in + per-user session/order history
+# ============================================================================
+
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str
+    name: str = ""
+
+
+class LinkSessionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    session_id: str
+    user_id: str
+
+
+@app.post("/api/auth/login")
+def auth_login(payload: LoginRequest) -> dict:
+    """Email-only mock sign-in — see `accounts.py` for why there's no password."""
+    if "@" not in payload.email:
+        raise HTTPException(status_code=400, detail="Enter a valid email address")
+    user = accounts.login(db.get_db(), payload.email, payload.name)
+    return {"status": "ok", "user": user}
+
+
+@app.post("/api/auth/link-session")
+def auth_link_session(payload: LinkSessionRequest) -> dict:
+    """Attach the shopper's current browser session to their account, so this
+    visit's decisions/orders show up in their history immediately."""
+    accounts.link_session(db.get_db(), payload.session_id, payload.user_id)
+    return {"status": "linked"}
+
+
+@app.get("/api/users/{user_id}/history")
+def user_history(user_id: str) -> dict:
+    """Profile + past orders + past session summaries for the account page."""
+    history = accounts.get_history(db.get_db(), user_id)
+    if history["user"] is None:
+        raise HTTPException(status_code=404, detail="No such user")
+    return history
+
+
+# ============================================================================
+# Checkout — real order persistence + the conversion-event contract
+# ============================================================================
+
+
+class CheckoutLine(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    product_id: str
+    title: str
+    quantity: int = Field(ge=1, le=50)
+    selling_price: float = Field(ge=0)
+
+
+class CheckoutAddress(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = ""
+    phone: str = ""
+    address_line: str = ""
+    city: str = ""
+    state: str = ""
+    pincode: str = ""
+
+
+class CheckoutRequest(BaseModel):
+    """Test-mode "payment" — see the endpoint docstring. Nothing here reaches
+    a real payment processor; this is the honest backend half of a flow the
+    frontend already labelled UPI/Card/Netbanking/COD as presentational-only.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    session_id: str
+    user_id: Optional[str] = None
+    items: List[CheckoutLine]
+    address: CheckoutAddress
+    payment_method: str
+    total_inr: float = Field(ge=0)
+
+
+@app.post("/api/checkout")
+def checkout(payload: CheckoutRequest) -> dict:
+    """Place a real order (SQLite-persisted) in explicit test/demo payment mode.
+
+    This is the write path `CheckoutPage.tsx`'s "Place Order" button now hits
+    instead of only generating a client-side id — the order survives a reload
+    and shows up in `/api/users/{id}/history`. No card/UPI details are
+    collected or transmitted, matching `PaymentOptions.tsx`'s existing
+    "nothing here collects payment details" design.
+    """
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="Cannot place an order with no items")
+    result = orders.place_order(
+        db.get_db(),
+        session_id=payload.session_id,
+        items=[line.model_dump() for line in payload.items],
+        address=payload.address.model_dump(),
+        payment_method=payload.payment_method,
+        total_inr=payload.total_inr,
+        user_id=payload.user_id,
+    )
+    return {**result, "payment_mode": "test"}
+
+
+# ============================================================================
+# Catalog admin — a real backend-authored product store, merged into the
+# storefront alongside (not replacing) the hand-authored src/data/products.ts
+# ============================================================================
+
+
+class AdminProductIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str
+    brand: str = ""
+    category: str = "electronics"
+    mrp: float = Field(ge=0)
+    selling_price: float = Field(ge=0)
+    image_url: str = ""
+    stock_qty: int = Field(ge=0, default=0)
+    description: str = ""
+
+
+def _slugify(title: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+
+
+@app.get("/api/catalog/products")
+def list_admin_products() -> dict:
+    rows = db.get_db().execute(
+        "SELECT * FROM admin_products ORDER BY created_at DESC"
+    ).fetchall()
+    return {"products": [dict(row) for row in rows]}
+
+
+@app.post("/api/catalog/products")
+def create_admin_product(payload: AdminProductIn) -> dict:
+    connection = db.get_db()
+    product_id = f"adm-{_slugify(payload.title)}-{int(time.time() * 1000) % 100000}"
+    now = time.time()
+    with connection:
+        connection.execute(
+            """
+            INSERT INTO admin_products
+                (id, title, brand, category, mrp, selling_price, image_url, stock_qty, description, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                product_id, payload.title, payload.brand, payload.category, payload.mrp,
+                payload.selling_price, payload.image_url, payload.stock_qty, payload.description, now, now,
+            ),
+        )
+    row = connection.execute("SELECT * FROM admin_products WHERE id = ?", (product_id,)).fetchone()
+    return dict(row)
+
+
+@app.put("/api/catalog/products/{product_id}")
+def update_admin_product(product_id: str, payload: AdminProductIn) -> dict:
+    connection = db.get_db()
+    existing = connection.execute("SELECT id FROM admin_products WHERE id = ?", (product_id,)).fetchone()
+    if existing is None:
+        raise HTTPException(status_code=404, detail="No such admin product")
+    now = time.time()
+    with connection:
+        connection.execute(
+            """
+            UPDATE admin_products
+               SET title = ?, brand = ?, category = ?, mrp = ?, selling_price = ?,
+                   image_url = ?, stock_qty = ?, description = ?, updated_at = ?
+             WHERE id = ?
+            """,
+            (
+                payload.title, payload.brand, payload.category, payload.mrp, payload.selling_price,
+                payload.image_url, payload.stock_qty, payload.description, now, product_id,
+            ),
+        )
+    row = connection.execute("SELECT * FROM admin_products WHERE id = ?", (product_id,)).fetchone()
+    return dict(row)
+
+
+@app.delete("/api/catalog/products/{product_id}")
+def delete_admin_product(product_id: str) -> dict:
+    connection = db.get_db()
+    with connection:
+        cursor = connection.execute("DELETE FROM admin_products WHERE id = ?", (product_id,))
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=404, detail="No such admin product")
+    return {"status": "deleted", "id": product_id}
+
+
+# ============================================================================
+# Recommendations — content-based item-item similarity (ml/train_recommender.py)
+# ============================================================================
+
+
+@app.get("/api/recommendations/{product_id}")
+def recommendations(product_id: str, n: int = Query(6, ge=1, le=10)) -> dict:
+    """Nearest neighbours by catalog feature similarity — a real, if simple,
+    learned model (see `ml/train_recommender.py`), not a hand-ranked list."""
+    if RECOMMENDER is None:
+        return {"product_id": product_id, "recommendations": [], "model": None}
+    neighbours = RECOMMENDER["neighbours"].get(product_id, [])
+    return {
+        "product_id": product_id,
+        "recommendations": neighbours[:n],
+        "model": RECOMMENDER["model"],
+    }
+
+
+# ============================================================================
+# RAG — TF-IDF vector retrieval across the catalog (backend/agents/retrieval.py)
+# ============================================================================
+
+
+class RagSearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    query: str
+    k: int = Field(ge=1, le=20, default=6)
+    product_id: Optional[str] = None
+
+
+@app.post("/api/rag-search")
+def rag_search(payload: RagSearchRequest) -> dict:
+    """Catalog-wide grounded search: real TF-IDF vectors, real cosine
+    similarity, real per-chunk provenance — see `agents/retrieval.py`'s
+    docstring for why this (and not the single-product chat) is the feature
+    that actually needs retrieval."""
+    if not retrieval.retrieval_index.is_ready():
+        return {"query": payload.query, "results": [], "indexed": False}
+    results = retrieval.retrieval_index.search(payload.query, k=payload.k, product_id=payload.product_id)
+    return {
+        "query": payload.query,
+        "indexed": True,
+        "results": [
+            {
+                "product_id": r.product_id,
+                "title": r.title,
+                "score": r.score,
+                "snippet": r.snippet,
+                "field": r.field,
+            }
+            for r in results
+        ],
+    }
+
+
+# ============================================================================
+# A/B testing framework
+# ============================================================================
+
+
+@app.get("/api/ab-variant/{session_id}")
+def ab_variant(session_id: str) -> dict:
+    """Assigns (once) and returns this session's experiment arm.
+
+    The frontend calls this once per session and adjusts delivery policy
+    accordingly — see `src/lib/interventionPolicy.ts`'s `AB_VARIANT` read.
+    """
+    variant = ab_testing.get_or_assign(db.get_db(), session_id)
+    return {"session_id": session_id, "variant": variant}
+
+
+@app.get("/api/ab-summary")
+def ab_summary() -> dict:
+    """Aggregate accept/dismiss/conversion rates by variant, across every
+    session recorded so far — the pipeline dashboard's A/B panel reads this."""
+    return ab_testing.summary(db.get_db())
+
+
+# ============================================================================
+# Multilingual intervention system
+# ============================================================================
+
+
+class TranslateInterventionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str
+    target_lang: str
+
+
+@app.post("/api/translate-intervention")
+def translate_intervention(payload: TranslateInterventionRequest) -> dict:
+    """Best-effort LLM translation of one dynamic (LLM-personalised) rationale
+    string. See `translate.py`'s docstring for why only this field needs a
+    network call — headline/action-label are static per lever and translated
+    instantly client-side."""
+    translated = translate.translate_text(payload.text, payload.target_lang)
+    return {"text": payload.text, "target_lang": payload.target_lang, "translated": translated}
 
 
 

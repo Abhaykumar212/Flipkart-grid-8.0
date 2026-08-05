@@ -35,10 +35,15 @@ import { InlineHighlight } from "../components/intervention/InlineHighlight";
 import { useInlineTarget } from "../components/intervention/useInlineTarget";
 import { isLowestPriceInDays } from "../lib/priceHistory";
 import { useBrowsingAgentTrigger } from "../components/intervention/BrowsingAgentCard";
+import { useAdminCatalog } from "../context/AdminCatalogContext";
+import { AiRecommendedRail } from "../components/pdp/AiRecommendedRail";
 
 export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
-  const product = slug ? productBySlug.get(slug) : undefined;
+  const { storeProducts } = useAdminCatalog();
+  // Static catalog first, then admin-authored products (see AdminCatalogContext)
+  // — same PDP, same components, no separate render path for either origin.
+  const product = (slug ? productBySlug.get(slug) : undefined) ?? storeProducts.find((p) => p.slug === slug);
   const navigate = useNavigate();
   const { recordPincodeCheck, recordProductVisit } = useTracker();
   const { has, toggle } = useWishlist();
@@ -347,6 +352,7 @@ export default function ProductDetail() {
 
       {/* Related Product Rails */}
       <RelatedProductsRail product={product} />
+      <AiRecommendedRail productId={product.id} />
     </div>
   );
 }
