@@ -1,9 +1,11 @@
+import { useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { SearchX } from "lucide-react";
 import { products } from "../data/products";
 import type { CategorySlug } from "../types/product";
 import { Button } from "../components/ui/Button";
 import { ProductCard } from "../components/home/ProductCard";
+import { useBrowsingAgentTrigger } from "../components/intervention/BrowsingAgentCard";
 
 const VALID_CATEGORIES: CategorySlug[] = ["mobiles", "electronics", "audio", "appliances", "fashion"];
 
@@ -41,8 +43,14 @@ export default function SearchResultsPage() {
       ? `Best of ${label}`
       : "All Products";
 
+  const { trigger, node: browsingAgentCard } = useBrowsingAgentTrigger();
+  useEffect(() => {
+    if (q) trigger({ type: "search", query: q });
+  }, [q, trigger]);
+
   return (
     <div className="flex flex-col gap-3">
+      {browsingAgentCard}
       <div className="bg-white p-4">
         <h1 className="text-fk-lg font-medium text-fk-ink">{heading}</h1>
         <p className="mt-0.5 text-fk-sm text-fk-muted">

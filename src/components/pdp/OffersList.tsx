@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { Landmark, Wallet, Repeat, Gift, Tag, ChevronDown, type LucideIcon } from "lucide-react";
 import type { Emi } from "../../types/product";
 import { formatINR } from "../../lib/format";
@@ -134,8 +135,16 @@ export function OffersList({ offers, emi, sellingPrice }: OffersListProps) {
               ref={isEmiRow ? emiInline.anchorRef : undefined}
               className="py-2.5 first:pt-0"
             >
-              {isEmiRow && emiInline.isActive && emiInline.content ? (
-                <InlineHighlight {...emiInline.content}>{rowContent}</InlineHighlight>
+              {isEmiRow ? (
+                <AnimatePresence mode="wait" initial={false}>
+                  {emiInline.isActive && emiInline.content ? (
+                    <InlineHighlight key="highlighted" {...emiInline.content}>
+                      {rowContent}
+                    </InlineHighlight>
+                  ) : (
+                    <span key="plain">{rowContent}</span>
+                  )}
+                </AnimatePresence>
               ) : (
                 rowContent
               )}

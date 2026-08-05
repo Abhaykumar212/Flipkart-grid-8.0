@@ -30,7 +30,7 @@ interface PlacedOrder {
 }
 
 export default function CheckoutPage() {
-  const { items, clearCart } = useCart();
+  const { items, clearCart, appliedPromo, freeDeliveryUnlocked, expressDeliveryUnlocked } = useCart();
 
   const [step, setStep] = useState(1);
   const [address, setAddress] = useState<Address>(EMPTY_ADDRESS);
@@ -49,7 +49,12 @@ export default function CheckoutPage() {
     const product = productById.get(item.productId);
     return product ? [{ product, quantity: item.quantity }] : [];
   });
-  const totals = computeCartTotals(items);
+  const totals = computeCartTotals(items, {
+    promoAmountOff: appliedPromo?.amountOff,
+    promoLabel: appliedPromo?.label,
+    freeDelivery: freeDeliveryUnlocked,
+    expressDelivery: expressDeliveryUnlocked,
+  });
 
   const placeOrder = () => {
     // Slowest item in the cart determines when the whole order lands. Computed

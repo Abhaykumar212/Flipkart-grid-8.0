@@ -157,6 +157,7 @@ def call_critic(prompt: str, model: str) -> Tuple[Dict[str, Any], Dict[str, Any]
         schema=schema,
         schema_name="critic_verdicts",
         max_tokens=config.CRITIC_MAX_TOKENS,
+        api_key=config.CRITIC_GROQ_API_KEY,
     )
 
 

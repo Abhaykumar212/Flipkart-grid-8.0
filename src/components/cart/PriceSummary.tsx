@@ -1,3 +1,4 @@
+import { Sparkles, Zap } from "lucide-react";
 import { Button } from "../ui/Button";
 import { formatINR } from "../../lib/format";
 import type { CartTotals } from "../../lib/cartTotals";
@@ -17,6 +18,8 @@ export function PriceSummary({ totals, action }: PriceSummaryProps) {
     isDeliveryFree,
     totalAmount,
     savings,
+    promoApplied,
+    expressDelivery,
   } = totals;
 
   return (
@@ -47,6 +50,23 @@ export function PriceSummary({ totals, action }: PriceSummaryProps) {
               <span>{formatINR(deliveryCharge)}</span>
             )}
           </div>
+
+          {promoApplied && (
+            <div className="flex items-center justify-between rounded-md bg-fk-green/10 px-2.5 py-2 text-fk-sm">
+              <span className="flex items-center gap-1.5 font-medium text-fk-green">
+                <Sparkles className="h-3.5 w-3.5" />
+                {promoApplied.label}
+              </span>
+              <span className="font-semibold text-fk-green">− {formatINR(promoApplied.amountOff)}</span>
+            </div>
+          )}
+
+          {expressDelivery && (
+            <div className="flex items-center gap-1.5 text-fk-sm font-medium text-fk-blue">
+              <Zap className="h-3.5 w-3.5" />
+              Express delivery unlocked
+            </div>
+          )}
 
           <div className="flex items-center justify-between border-y border-dashed border-fk-border py-4 text-fk-lg font-bold">
             <span>Total Amount</span>

@@ -258,6 +258,29 @@ class FatigueBudget {
     this.state = { ...EMPTY_STATE };
     this.commit();
   }
+
+  /**
+   * Demo control — backdates `count` synthetic "pending" (i.e. ignored)
+   * exposures for `rootCause`, so a scenario's very first real analysis
+   * already computes an escalated target rung instead of needing 2-3 manual
+   * re-runs to accumulate real ignored history. Backdated well past
+   * `MIN_GAP_MS` so it doesn't trip the cooldown on the run that follows.
+   */
+  seedIgnored(rootCause: string, count: number, now = Date.now()): void {
+    for (let i = 0; i < count; i += 1) {
+      this.state.exposures = [
+        ...this.state.exposures,
+        {
+          leverId: "_seed_escalation",
+          rootCause,
+          intensity: 1,
+          shownAt: now - MIN_GAP_MS - 5_000 - i * 100,
+          outcome: "pending",
+        },
+      ];
+    }
+    this.commit();
+  }
 }
 
 export const fatigueBudget = new FatigueBudget();

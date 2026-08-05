@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { IntelligenceGlow } from "./IntelligenceGlow";
 import { useEscapeDismiss } from "./useEscapeDismiss";
 import { useReducedMotion } from "./useReducedMotion";
+import { FormattedText } from "../ui/FormattedText";
 import type { InterventionContentProps } from "./types";
 
 interface SpotlightProps extends InterventionContentProps {
@@ -170,7 +171,7 @@ export function Spotlight({ title, body, actionLabel, onAction, onDismiss, reaso
               <X className="h-3.5 w-3.5" />
             </button>
             <h3 className="pr-5 text-fk-lg font-semibold text-fk-ink">{title}</h3>
-            <p className="mt-1.5 text-fk-sm leading-5 text-fk-ink/80">{body}</p>
+            <FormattedText text={body} className="mt-1.5 text-fk-sm leading-5 text-fk-ink/80" />
             <p className="mt-2.5 text-fk-xs text-fk-muted">{reasonText}</p>
             <div className="mt-3.5 flex items-center gap-3">
               {actionLabel && onAction && (

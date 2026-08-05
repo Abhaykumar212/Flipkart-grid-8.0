@@ -510,17 +510,24 @@ def call_llm(
     schema: Optional[Dict[str, Any]] = None,
     schema_name: str = "root_cause_analysis",
     max_tokens: Optional[int] = None,
+    api_key: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Dispatches to whichever provider `config.LLM_PROVIDER` selects.
 
-    The optional arguments exist so `agents/critic.py` can borrow this
-    provider dispatch — and its rate-limit handling — for a different prompt and
-    schema. Omitted, every one of them falls back to the RCA call this function
-    was written for, so existing callers are untouched.
+    The optional arguments exist so `agents/critic.py` and
+    `agents/explanation_scorer.py` can borrow this provider dispatch — and its
+    rate-limit handling — for a different prompt and schema. Omitted, every one
+    of them falls back to the RCA call this function was written for, so
+    existing callers are untouched.
+
+    `api_key` lets a caller spend a *different* Groq key than RCA's own —
+    critic and explanation-scoring both run after RCA in the same request, so
+    without this every pipeline run was spending RCA's rate-limit budget three
+    times over. Gemini has no such override yet; pass-through is a no-op there.
     """
     if config.LLM_PROVIDER == "gemini":
         return call_gemini(prompt, model, system_prompt, schema, max_tokens)
-    return call_groq(prompt, model, system_prompt, schema, schema_name, max_tokens)
+    return call_groq(prompt, model, system_prompt, schema, schema_name, max_tokens, api_key)
 
 
 def call_groq(
@@ -530,6 +537,7 @@ def call_groq(
     schema: Optional[Dict[str, Any]] = None,
     schema_name: str = "root_cause_analysis",
     max_tokens: Optional[int] = None,
+    api_key: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """POST to Groq with strict schema enforcement. Returns (parsed, usage)."""
     body = {
@@ -554,7 +562,7 @@ def call_groq(
         f"{config.GROQ_BASE_URL}/chat/completions",
         data=json.dumps(body).encode("utf-8"),
         headers={
-            "Authorization": f"Bearer {config.GROQ_API_KEY}",
+            "Authorization": f"Bearer {api_key or config.GROQ_API_KEY}",
             "Content-Type": "application/json",
             # Groq sits behind Cloudflare, which rejects Python's default
             # urllib User-Agent with a 403.

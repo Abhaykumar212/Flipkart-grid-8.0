@@ -1,8 +1,10 @@
+import { AnimatePresence } from "framer-motion";
 import { useIntervention } from "../../context/InterventionContext";
 import { LEVER_TARGET_KEYS } from "../../lib/interventionTargets";
 import { getAllMounted } from "../../lib/targetRegistry";
 import { AmbientCard } from "./AmbientCard";
 import { Spotlight } from "./Spotlight";
+import { InterventionOutcomeCard } from "./InterventionOutcomeCard";
 import { buildInterventionContent } from "./interventionContent";
 
 /**
@@ -17,22 +19,38 @@ import { buildInterventionContent } from "./interventionContent";
  * `InterventionContext` holds at most one active intervention app-wide.
  */
 export function InterventionRenderer() {
-  const { active, surface, accept, dismiss } = useIntervention();
+  const { active, surface, accept, dismiss, ctaOutcome, dismissOutcome } = useIntervention();
 
-  if (!active || !surface || surface === "inline" || surface === "companion") return null;
+  const outcomeNode = (
+    <AnimatePresence>
+      {ctaOutcome && <InterventionOutcomeCard key={ctaOutcome.leverId} outcome={ctaOutcome} onDismiss={dismissOutcome} />}
+    </AnimatePresence>
+  );
+
+  if (!active || !surface || surface === "inline" || surface === "companion") {
+    return outcomeNode;
+  }
 
   const content = buildInterventionContent(active, accept, dismiss);
 
   if (surface === "ambient") {
-    return <AmbientCard key={active.lever_id} {...content} />;
+    return (
+      <>
+        <AmbientCard key={active.lever_id} {...content} />
+        {outcomeNode}
+      </>
+    );
   }
 
   // surface === "spotlight" — target is guaranteed mounted at this point;
   // InterventionContext already downgraded to "ambient" otherwise.
   const targetEl = getAllMounted(LEVER_TARGET_KEYS[active.lever_id] ?? []);
-  if (!targetEl) return null;
+  if (!targetEl) return outcomeNode;
 
   return (
-    <Spotlight key={active.lever_id} targetRef={{ current: targetEl }} {...content} />
+    <>
+      <Spotlight key={active.lever_id} targetRef={{ current: targetEl }} {...content} />
+      {outcomeNode}
+    </>
   );
 }

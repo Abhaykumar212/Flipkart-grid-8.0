@@ -11,7 +11,7 @@ import { ProductRail } from "../components/home/ProductRail";
 import { useTargetAnchor } from "../lib/targetRegistry";
 
 export default function CartPage() {
-  const { items } = useCart();
+  const { items, appliedPromo, freeDeliveryUnlocked, expressDeliveryUnlocked } = useCart();
 
   const navigate = useNavigate();
   const railAnchorRef = useTargetAnchor("cart-similar-rail");
@@ -22,7 +22,12 @@ export default function CartPage() {
     return product ? [{ product, quantity: item.quantity }] : [];
   });
 
-  const totals = computeCartTotals(items);
+  const totals = computeCartTotals(items, {
+    promoAmountOff: appliedPromo?.amountOff,
+    promoLabel: appliedPromo?.label,
+    freeDelivery: freeDeliveryUnlocked,
+    expressDelivery: expressDeliveryUnlocked,
+  });
   const inCart = new Set(items.map((i) => i.productId));
   const recommendations = products.filter((p) => !inCart.has(p.id)).slice(0, 12);
 

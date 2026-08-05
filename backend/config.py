@@ -46,6 +46,13 @@ REENGAGEMENT_GROQ_API_KEY = os.getenv("REENGAGEMENT_GROQ_API_KEY", "").strip() o
 BROWSING_AGENT_GROQ_API_KEY = os.getenv("BROWSING_AGENT_GROQ_API_KEY", "").strip() or GROQ_API_KEY
 BROWSING_AGENT_MODEL = os.getenv("BROWSING_AGENT_MODEL", "llama-3.3-70b-versatile").strip()
 
+# Dedicated key for the pipeline stages that run *after* RCA in the same
+# request — critic.py and explanation_scorer.py. Without this they spent
+# RCA's own key a second and third time every run, tripling how fast a single
+# demo session burned the shared free-tier budget. Falls back to the shared
+# key if unset.
+CRITIC_GROQ_API_KEY = os.getenv("CRITIC_GROQ_API_KEY", "").strip() or GROQ_API_KEY
+
 # Benchmarked against the real RCA payload and schema before selection:
 #   gpt-oss-120b  strict json_schema, effort=low,  4000 tok -> OK, ~3.8s
 #   gpt-oss-120b  strict json_schema, effort=med,  6000 tok -> HTTP 413 (free-tier TPM)

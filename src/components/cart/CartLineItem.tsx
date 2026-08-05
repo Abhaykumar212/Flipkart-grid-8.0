@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import { Minus, Plus } from "lucide-react";
 import type { Product } from "../../types/product";
 import { PriceBlock } from "../ui/PriceBlock";
@@ -93,10 +94,16 @@ export function CartLineItem({ product, quantity, readOnly = false }: CartLineIt
                 <PriceBlock mrp={price.mrp} sellingPrice={price.sellingPrice} size="md" className="mt-2" />
               </span>
             );
-            return priceInline.isActive && priceInline.content ? (
-              <InlineHighlight {...priceInline.content}>{priceBlock}</InlineHighlight>
-            ) : (
-              priceBlock
+            return (
+              <AnimatePresence mode="wait" initial={false}>
+                {priceInline.isActive && priceInline.content ? (
+                  <InlineHighlight key="highlighted" {...priceInline.content}>
+                    {priceBlock}
+                  </InlineHighlight>
+                ) : (
+                  <span key="plain">{priceBlock}</span>
+                )}
+              </AnimatePresence>
             );
           })()}
 
@@ -110,10 +117,16 @@ export function CartLineItem({ product, quantity, readOnly = false }: CartLineIt
                 {delivery.free && <span className="text-fk-green"> — Free</span>}
               </p>
             );
-            return deliveryInline.isActive && deliveryInline.content ? (
-              <InlineHighlight {...deliveryInline.content}>{deliveryLine}</InlineHighlight>
-            ) : (
-              deliveryLine
+            return (
+              <AnimatePresence mode="wait" initial={false}>
+                {deliveryInline.isActive && deliveryInline.content ? (
+                  <InlineHighlight key="highlighted" {...deliveryInline.content}>
+                    {deliveryLine}
+                  </InlineHighlight>
+                ) : (
+                  <div key="plain">{deliveryLine}</div>
+                )}
+              </AnimatePresence>
             );
           })()}
         </div>

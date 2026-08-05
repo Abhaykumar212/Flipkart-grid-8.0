@@ -192,6 +192,7 @@ def call_scorer(prompt: str, model: str) -> Tuple[Dict[str, Any], Dict[str, Any]
         schema=schema,
         schema_name="explanation_score",
         max_tokens=config.EXPLANATION_SCORER_MAX_TOKENS,
+        api_key=config.CRITIC_GROQ_API_KEY,
     )
 
 
@@ -206,6 +207,7 @@ def call_regenerate(prompt: str, model: str) -> Tuple[Dict[str, Any], Dict[str, 
         schema=schema,
         schema_name="explanation_regenerate",
         max_tokens=config.EXPLANATION_SCORER_REGENERATE_MAX_TOKENS,
+        api_key=config.CRITIC_GROQ_API_KEY,
     )
 
 

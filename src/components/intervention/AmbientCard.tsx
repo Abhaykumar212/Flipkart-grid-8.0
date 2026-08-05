@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { IntelligenceGlow } from "./IntelligenceGlow";
 import { useEscapeDismiss } from "./useEscapeDismiss";
 import { useReducedMotion } from "./useReducedMotion";
+import { FormattedText } from "../ui/FormattedText";
 import type { InterventionContentProps } from "./types";
-
-const AUTO_DISMISS_MS = 12000;
 
 /**
  * Rung 1. Small frosted card docked bottom-right, above AgentInspector's
- * debug pill (fixed bottom-5 right-5). Slides and fades in, dismissible,
- * auto-fades after ~12s. Manages its own open/close animation and only
- * calls onDismiss once the exit transition has actually finished.
+ * debug pill (fixed bottom-5 right-5). Slides and fades in, dismissible via the
+ * close button, its action button, or Escape — stays open otherwise. Manages
+ * its own open/close animation and only calls onDismiss once the exit
+ * transition has actually finished.
  */
 export function AmbientCard({ title, body, actionLabel, onAction, onDismiss, reasonText }: InterventionContentProps) {
   const [open, setOpen] = useState(true);
@@ -20,11 +20,6 @@ export function AmbientCard({ title, body, actionLabel, onAction, onDismiss, rea
   const close = useCallback(() => setOpen(false), []);
 
   useEscapeDismiss(open, close);
-
-  useEffect(() => {
-    const timer = setTimeout(close, AUTO_DISMISS_MS);
-    return () => clearTimeout(timer);
-  }, [close]);
 
   return (
     <AnimatePresence onExitComplete={onDismiss}>
@@ -52,7 +47,7 @@ export function AmbientCard({ title, body, actionLabel, onAction, onDismiss, rea
                 </button>
               </div>
               <h3 className="pr-2 text-fk-md font-bold text-fk-ink">{title}</h3>
-              <p className="mt-1 text-fk-sm leading-5 text-fk-ink/80">{body}</p>
+              <FormattedText text={body} className="mt-1 text-fk-sm leading-5 text-fk-ink/80" />
               <p className="mt-2 text-fk-xs text-fk-blue font-medium">{reasonText}</p>
               {actionLabel && onAction && (
                 <button

@@ -1,6 +1,8 @@
 import type { KeyboardEvent, ReactNode } from "react";
+import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import { IntelligenceGlow } from "./IntelligenceGlow";
+import { useReducedMotion } from "./useReducedMotion";
 import type { InterventionContentProps } from "./types";
 
 interface InlineHighlightProps extends Partial<InterventionContentProps> {
@@ -28,6 +30,9 @@ interface InlineHighlightProps extends Partial<InterventionContentProps> {
  * text — useful for passive content reordering signals where full glow would
  * be too loud.
  */
+/** Shared "ease-out-expo"-ish curve — snappy start, soft landing, reads as smooth rather than springy. */
+const EASE = [0.16, 1, 0.3, 1] as const;
+
 export function InlineHighlight({
   title,
   body,
@@ -39,17 +44,23 @@ export function InlineHighlight({
   children,
   variant = "glow",
 }: InlineHighlightProps) {
+  const reducedMotion = useReducedMotion();
+
   /* ── quiet variant ─────────────────────────────────────────────────── */
   if (variant === "quiet") {
     return (
-      <span
+      <motion.span
         className="inline-flex items-start rounded-md font-semibold"
         style={{ background: "rgba(40,116,240,0.07)" }}
         role="note"
         aria-label={title ? `${title}: ${body ?? ""}` : undefined}
+        initial={reducedMotion ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: reducedMotion ? 0 : 0.25, ease: EASE }}
       >
         {children}
-      </span>
+      </motion.span>
     );
   }
 
@@ -59,12 +70,16 @@ export function InlineHighlight({
   }
 
   return (
-    <span
+    <motion.span
       className="inline-flex flex-col items-start align-middle outline-none"
       tabIndex={0}
       role="note"
       aria-label={`${title}: ${body}. ${reasonText}`}
       onKeyDown={handleKeyDown}
+      initial={reducedMotion ? false : { opacity: 0, scale: 0.94, y: -3 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.96, y: -2 }}
+      transition={{ duration: reducedMotion ? 0.12 : 0.4, ease: EASE }}
     >
       <IntelligenceGlow as="span" intensity="present" rounded="rounded-lg" active={active} wash>
         <span className="relative inline-flex flex-col p-1 rounded-lg border-2 border-fk-blue/40 bg-blue-50/40">
@@ -74,9 +89,11 @@ export function InlineHighlight({
           {children}
         </span>
       </IntelligenceGlow>
-      <span
-        className="mt-1 flex h-5 max-w-[340px] items-center gap-1.5 overflow-hidden text-fk-xs font-semibold text-fk-blue-dark transition-all duration-500 ease-out"
-        style={{ opacity: active ? 1 : 0, transform: active ? "translateY(0)" : "translateY(-2px)" }}
+      <motion.span
+        className="mt-1 flex h-5 max-w-[340px] items-center gap-1.5 overflow-hidden text-fk-xs font-semibold text-fk-blue-dark"
+        initial={reducedMotion ? false : { opacity: 0, y: -2 }}
+        animate={{ opacity: active ? 1 : 0, y: active ? 0 : -2 }}
+        transition={{ duration: reducedMotion ? 0.12 : 0.45, ease: EASE, delay: reducedMotion ? 0 : 0.08 }}
       >
         <Sparkles className="h-3 w-3 shrink-0 text-fk-blue animate-pulse" />
         <span className="truncate">{reasonText}</span>
@@ -84,13 +101,13 @@ export function InlineHighlight({
           <button
             type="button"
             onClick={onAction}
-            className="shrink-0 font-bold text-fk-blue hover:underline bg-fk-blue/10 px-1.5 py-0.5 rounded text-[11px]"
+            className="shrink-0 font-bold text-fk-blue hover:underline bg-fk-blue/10 px-1.5 py-0.5 rounded text-[11px] transition-transform hover:scale-105 active:scale-95"
           >
             {actionLabel} →
           </button>
         )}
-      </span>
-    </span>
+      </motion.span>
+    </motion.span>
   );
 }
 

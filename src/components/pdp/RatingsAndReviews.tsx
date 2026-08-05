@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { ThumbsUp, ChevronDown } from "lucide-react";
 import type { RatingBreakdown, Review } from "../../types/product";
 import { RatingStars } from "../ui/RatingStars";
@@ -14,6 +15,8 @@ interface RatingsAndReviewsProps {
   productId: string;
   ratingDistribution: RatingBreakdown[];
   reviews: Review[];
+  /** Real per-product spec highlights — what makes the AI summary specific to this item, not the category. */
+  highlights: string[];
 }
 
 const reviewDateFormat = new Intl.DateTimeFormat("en-IN", {
@@ -59,7 +62,7 @@ function ReviewCard({ review }: { review: Review }) {
   );
 }
 
-export function RatingsAndReviews({ productId, ratingDistribution, reviews }: RatingsAndReviewsProps) {
+export function RatingsAndReviews({ productId, ratingDistribution, reviews, highlights }: RatingsAndReviewsProps) {
   const sorted = [...ratingDistribution].sort((a, b) => b.stars - a.stars);
   const max = Math.max(...sorted.map((r) => r.count), 1);
   const sectionRef = useRef<HTMLElement>(null);
@@ -127,6 +130,13 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
     recordReviewVisibility();
   };
 
+  // Product-specific, not category-generic: pros come from this product's own
+  // spec highlights, the caveat from whichever review buyers actually voted
+  // most helpful — never a fixed "AMOLED display, low-light camera" blurb
+  // that happened to show up on a pair of headphones.
+  const summaryPros = highlights.slice(0, 3);
+  const mostHelpful = [...reviews].sort((a, b) => b.helpfulCount - a.helpfulCount)[0];
+
   return (
     <section
       ref={sectionRef}
@@ -140,10 +150,16 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
             Ratings &amp; Reviews
           </h2>
         );
-        return headerInline.isActive && headerInline.content ? (
-          <InlineHighlight {...headerInline.content}>{heading}</InlineHighlight>
-        ) : (
-          heading
+        return (
+          <AnimatePresence mode="wait" initial={false}>
+            {headerInline.isActive && headerInline.content ? (
+              <InlineHighlight key="highlighted" {...headerInline.content}>
+                {heading}
+              </InlineHighlight>
+            ) : (
+              <div key="plain">{heading}</div>
+            )}
+          </AnimatePresence>
         );
       })()}
 
@@ -158,10 +174,32 @@ export function RatingsAndReviews({ productId, ratingDistribution, reviews }: Ra
           <h4 className="text-fk-md font-bold text-fk-ink">AI Insights &amp; Sentiment Highlights</h4>
           <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-2 text-fk-sm text-fk-ink/90">
             <div className="rounded-xl bg-white/90 p-3 border border-emerald-200 shadow-sm">
-              <span className="font-bold text-emerald-700">👍 Top Verified Pros:</span> Exceptional build quality, crisp AMOLED 120Hz display, stellar low-light camera, and fast charging.
+              <span className="font-bold text-emerald-700">👍 Top Verified Pros</span>
+              {summaryPros.length > 0 ? (
+                <ul className="mt-1.5 flex flex-col gap-1">
+                  {summaryPros.map((pro) => (
+                    <li key={pro} className="flex items-start gap-1.5">
+                      <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-emerald-600" />
+                      <span>{pro}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1.5">Consistently praised for reliability and value in its category.</p>
+              )}
             </div>
             <div className="rounded-xl bg-white/90 p-3 border border-amber-200 shadow-sm">
-              <span className="font-bold text-amber-700">⚡ Helpful Buyer Note:</span> Power adapter sold separately; comes with official 1-year brand warranty and free replacement.
+              <span className="font-bold text-amber-700">⚡ Most helpful buyer review</span>
+              {mostHelpful ? (
+                <p className="mt-1.5">
+                  <span className="font-medium text-fk-ink">"{mostHelpful.title}"</span> — {mostHelpful.text}{" "}
+                  <span className="text-fk-xs text-fk-muted">
+                    ({formatIndianNumber(mostHelpful.helpfulCount)} found this helpful)
+                  </span>
+                </p>
+              ) : (
+                <p className="mt-1.5">No reviews yet — be the first to share your experience.</p>
+              )}
             </div>
           </div>
         </div>

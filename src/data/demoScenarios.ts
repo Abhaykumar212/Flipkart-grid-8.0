@@ -26,6 +26,13 @@ export interface DemoScenario {
   history: Partial<ShopperHistory>;
   session: Partial<ScenarioSessionState>;
   accent: string;
+  /**
+   * Backdates N synthetic "ignored" exposures for this root cause before the
+   * first real analysis runs, so escalation to a higher rung doesn't require
+   * 2-3 manual re-runs to accumulate real ignored history — see
+   * `fatigueBudget.seedIgnored`.
+   */
+  preSeedIgnored?: { rootCause: string; count: number };
 }
 
 export const DEMO_SCENARIOS: DemoScenario[] = [
@@ -159,6 +166,38 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
       idleBeforeCheckoutSeconds: 240,
     },
     accent: "from-teal-500 to-emerald-600",
+  },
+  {
+    id: "discount-hunter",
+    label: "Discount hunter (rung 3)",
+    intent:
+      "Cart is stacked with heavily-discounted items (~68% off MRP, not full-price electronics like Cost shock), so discount_seeking_tendency reads genuinely high instead of getting excluded by the agent. Escalation history is pre-seeded so the first real run already lands on the margin-spending rung instead of needing 2-3 manual re-runs.",
+    expectedOutcome: "Targets cost_friction, rung 3 (targeted_discount_code / free_delivery_waiver) — requires Margin approval ON",
+    cart: [
+      { productId: "p-4001", quantity: 1 },
+      { productId: "p-4002", quantity: 1 },
+      { productId: "p-4003", quantity: 1 },
+      { productId: "p-4004", quantity: 1 },
+    ],
+    cartAgeSeconds: 400,
+    history: {
+      averageOrderValue: 800,
+      historicalAbandonmentRate: 0.78,
+      pastReturnRate: 0.2,
+      wishlistItemCount: 4,
+      paymentMethodSaved: true,
+      lifetimeOrdersPlaced: 3,
+      daysSinceLastPurchase: 45,
+      isGuestCheckout: false,
+    },
+    session: {
+      failedCouponAttempts: 6,
+      checkoutStepsCompleted: 0,
+      cartPdpBounceCount: 2,
+      idleBeforeCheckoutSeconds: 120,
+    },
+    preSeedIgnored: { rootCause: "cost_friction", count: 2 },
+    accent: "from-violet-500 to-fuchsia-600",
   },
   {
     id: "low-risk-loyal",

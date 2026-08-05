@@ -34,7 +34,7 @@ from ml.feature_engineering import (  # noqa: E402
 )
 
 from . import config, db, ledger, reservations  # noqa: E402
-from .agents import browsing_intent, companion_chat, critic, explanation_scorer, gate, intervention, reengagement, root_cause  # noqa: E402
+from .agents import browsing_intent, companion_chat, critic, explanation_scorer, gate, intervention, product_pitch, reengagement, root_cause  # noqa: E402
 from .agents.memory import memory_store  # noqa: E402
 from .schemas import (  # noqa: E402
     CartAddRequest,
@@ -998,8 +998,7 @@ def session_end(payload: SessionEndRequest) -> dict:
             """
             UPDATE reengagement_emails
             SET status = 'sent', sent_at = ?
-            WHERE session_id = ?
-            ORDER BY id DESC LIMIT 1
+            WHERE id = (SELECT id FROM reengagement_emails WHERE session_id = ? ORDER BY id DESC LIMIT 1)
             """,
             (_time.time(), payload.session_id),
         )
@@ -1079,7 +1078,7 @@ def trigger_reengagement(session_id: str) -> dict:
         connection.execute(
             """
             UPDATE reengagement_emails SET status = 'sent', sent_at = ?
-            WHERE session_id = ? ORDER BY id DESC LIMIT 1
+            WHERE id = (SELECT id FROM reengagement_emails WHERE session_id = ? ORDER BY id DESC LIMIT 1)
             """,
             (_time.time(), session_id),
         )
@@ -1129,6 +1128,14 @@ def reengagement_preview(session_id: str) -> dict:
     }
 
 
+@app.get("/api/session-timeline/{session_id}")
+def session_timeline(session_id: str) -> dict:
+    """Full event list for one session, for the re-engagement dashboard's timeline panel."""
+    connection = db.get_db()
+    events = _load_timeline(connection, session_id)
+    return {"session_id": session_id, "events": events}
+
+
 @app.get("/api/reengagement-sessions")
 def reengagement_sessions() -> dict:
     """List all sessions with timeline data for the dashboard."""
@@ -1176,6 +1183,12 @@ def reengagement_sessions() -> dict:
 def handle_browsing_intent(payload: Dict[str, Any]) -> dict:
     """Analyze real-time browsing intent cues via dedicated BROWSING_AGENT_GROQ_API_KEY."""
     return browsing_intent.analyze_browsing_intent(payload)
+
+
+@app.post("/api/product-pitch")
+def handle_product_pitch(payload: Dict[str, Any]) -> dict:
+    """Short LLM-generated 'why buy this now' bullets for the home page's personalization rail."""
+    return product_pitch.generate_pitch(payload)
 
 
 

@@ -30,6 +30,9 @@ import { interventionLedger } from "../lib/interventionLedger";
 import { pageContext } from "../lib/pageContext";
 import type { RootCauseAnalysis } from "../lib/pipelineTrace";
 import { useCart } from "./CartContext";
+import { computeCartTotals } from "../lib/cartTotals";
+import { productById } from "../data/products";
+import { buildOutcome, type InterventionOutcome } from "../lib/interventionOutcomes";
 
 /**
  * Delivery layer between the Phase 3 intervention plan and the screen.
@@ -60,20 +63,30 @@ interface InterventionContextValue {
   dismissElicitation: () => void;
   accept: () => void;
   dismiss: () => void;
+  /** The concrete result of the most recently accepted intervention — a discount, a delivery perk, etc. */
+  ctaOutcome: InterventionOutcome | null;
+  dismissOutcome: () => void;
 }
 
 const InterventionContext = createContext<InterventionContextValue | null>(null);
 
 export function InterventionProvider({ children }: { children: ReactNode }) {
-  const { rootCause } = useTracker();
-  const { items } = useCart();
+  const { rootCause, runRootCauseAnalysis } = useTracker();
+  const { items, applyPromo, unlockFreeDelivery, unlockExpressDelivery } = useCart();
   const location = useLocation();
 
   const [selected, setSelected] = useState<SelectedIntervention | null>(null);
   const [alternatives, setAlternatives] = useState<RecommendedIntervention[]>([]);
   const [diagnosis, setDiagnosis] = useState<InterventionContextValue["diagnosis"]>(null);
   const [isEliciting, setIsEliciting] = useState(false);
+  const [ctaOutcome, setCtaOutcome] = useState<InterventionOutcome | null>(null);
   const handledRunId = useRef<string | null>(null);
+  // Mutable, not state: read once by the next analysis run and cleared there,
+  // not something that should itself trigger a re-render or an effect re-run.
+  const exitIntentRef = useRef(false);
+  // Separate one-shot guard so a mouse that leaves the viewport repeatedly
+  // doesn't force a fresh (paid) LLM call every time — once per cart visit.
+  const exitIntentFiredRef = useRef(false);
 
   // A navigation opens a fresh attention window and retires whatever was on
   // screen. The exposure stays `pending` — being navigated away from is exactly
@@ -82,7 +95,28 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
     fatigueBudget.noteRouteVisit(location.pathname);
     setSelected(null);
     setAlternatives([]);
+    setCtaOutcome(null);
+    exitIntentRef.current = false;
+    exitIntentFiredRef.current = false;
   }, [location.pathname]);
+
+  // Real exit intent, cart page only: the mouse crossing the top edge toward
+  // the tab/address bar is the standard "about to leave" signal. Gated to
+  // /cart specifically — margin should only be spent as a last resort on the
+  // page where leaving means abandoning the purchase outright. Forces an
+  // immediate re-analysis rather than waiting for the next 5s poll, so the
+  // override is demoable ("mouse leaves → discount appears"), not timing-luck.
+  useEffect(() => {
+    if (location.pathname !== "/cart") return;
+    const handleMouseLeave = (event: MouseEvent) => {
+      if (event.clientY > 0 || exitIntentFiredRef.current) return;
+      exitIntentFiredRef.current = true;
+      exitIntentRef.current = true;
+      void runRootCauseAnalysis({ force: true });
+    };
+    document.addEventListener("mouseleave", handleMouseLeave);
+    return () => document.removeEventListener("mouseleave", handleMouseLeave);
+  }, [location.pathname, runRootCauseAnalysis]);
 
   useEffect(() => {
     if (!rootCause) return;
@@ -149,11 +183,17 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
       );
     }
 
+    // Consumed once: the next run after a genuine exit-intent event gets the
+    // override, then it's spent regardless of what that run decided.
+    const exitIntent = exitIntentRef.current;
+    exitIntentRef.current = false;
+
     const surfaceOptions: SelectSurfaceOptions = {
       rootCause: analysis.primary_root_cause.category,
       marginApproved: resolveMarginApproval(),
       probability: rootCause.prediction.abandonment_probability,
       hasElicited: fatigueBudget.hasElicitedThisSession(),
+      exitIntent,
     };
     const outcome = selectSurface(ranked, analysis.confidence, fatigueBudget.getState(), surfaceOptions);
 
@@ -300,6 +340,28 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
             if (input) input.focus();
           }
         }
+
+        // Concrete, visible consequence — a discount actually applied, a
+        // delivery perk actually unlocked — not just the card disappearing.
+        const totals = computeCartTotals(items);
+        const slowestDeliveryDays = items.reduce((max, item) => {
+          const product = productById.get(item.productId);
+          return product ? Math.max(max, product.delivery.estimatedDays) : max;
+        }, 0);
+        const built = buildOutcome(leverId, {
+          cartValue: totals.totalSellingPrice,
+          slowestDeliveryDays,
+        });
+        if (built) {
+          if (built.promo) {
+            applyPromo({ code: built.promo.code, amountOff: built.promo.amountOff, label: built.title, leverId });
+          } else if (built.kind === "free_delivery") {
+            unlockFreeDelivery();
+          } else if (built.kind === "express_delivery") {
+            unlockExpressDelivery();
+          }
+          setCtaOutcome(built);
+        }
       } else {
         fatigueBudget.recordDismissed(leverId);
       }
@@ -313,7 +375,7 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
       setSelected(null);
       setAlternatives([]);
     },
-    [selected],
+    [selected, items, applyPromo, unlockFreeDelivery, unlockExpressDelivery],
   );
 
   const submitElicitationResponse = useCallback(
@@ -349,6 +411,8 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
     setIsEliciting(false);
   }, []);
 
+  const dismissOutcome = useCallback(() => setCtaOutcome(null), []);
+
   const value = useMemo<InterventionContextValue>(
     () => ({
       active: selected?.intervention ?? null,
@@ -362,8 +426,20 @@ export function InterventionProvider({ children }: { children: ReactNode }) {
       dismissElicitation,
       accept: () => resolve("accepted"),
       dismiss: () => resolve("dismissed"),
+      ctaOutcome,
+      dismissOutcome,
     }),
-    [selected, alternatives, diagnosis, isEliciting, submitElicitationResponse, dismissElicitation, resolve],
+    [
+      selected,
+      alternatives,
+      diagnosis,
+      isEliciting,
+      submitElicitationResponse,
+      dismissElicitation,
+      resolve,
+      ctaOutcome,
+      dismissOutcome,
+    ],
   );
 
   return <InterventionContext.Provider value={value}>{children}</InterventionContext.Provider>;

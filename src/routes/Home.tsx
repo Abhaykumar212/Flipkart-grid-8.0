@@ -1,6 +1,7 @@
 import { HeroCarousel } from "../components/home/HeroCarousel";
 import { CategoryStrip } from "../components/home/CategoryStrip";
 import { ProductRail } from "../components/home/ProductRail";
+import { ForYouPersuasion } from "../components/home/ForYouPersuasion";
 import { products, productsByCategory } from "../data/products";
 import { discountPercent } from "../lib/format";
 
@@ -15,16 +16,14 @@ const dealsOfTheDay = [...products]
 
 const bestOfElectronics = productsByCategory("electronics");
 
-/** Highest-rated across the catalog — the slot the agent will later personalise. */
-const suggestedForYou = [...products]
-  .sort((a, b) => b.rating.value - a.rating.value)
-  .slice(0, 12);
-
 export default function Home() {
   return (
     <>
       <CategoryStrip />
       <HeroCarousel />
+      {/* Real personalization — reads userHistory, replaces the old static
+          "highest rated across the catalog" placeholder rail entirely. */}
+      <ForYouPersuasion />
       <ProductRail
         title="Deals of the Day"
         subtitle="Ends in 08:14:22"
@@ -34,11 +33,6 @@ export default function Home() {
         title="Best of Electronics"
         subtitle="Laptops & Televisions"
         products={bestOfElectronics}
-      />
-      <ProductRail
-        title="Suggested for You"
-        subtitle="Based on your activity"
-        products={suggestedForYou}
       />
     </>
   );

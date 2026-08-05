@@ -10,7 +10,7 @@
     },
     {
       "name": "backend",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": "C:\\Users\\Lakshay\\AppData\\Local\\Programs\\Python\\Python39\\python.exe",
       "runtimeArgs": ["-m", "uvicorn", "backend.main:app", "--port", "8000"],
       "port": 8000
     }

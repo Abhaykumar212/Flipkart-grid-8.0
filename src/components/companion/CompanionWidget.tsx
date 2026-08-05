@@ -12,6 +12,7 @@ import {
 } from "../../lib/companionChat";
 import type { RecommendedIntervention } from "../../lib/pipelineTrace";
 import { VoiceButton } from "./VoiceButton";
+import { FormattedText } from "../ui/FormattedText";
 
 /**
  * The AI Shopping Companion — persistent across the entire journey, not just
@@ -501,7 +502,7 @@ function MessageBubble({
           isShopper ? "self-end bg-emerald-600 text-white" : "self-start bg-slate-100 text-slate-800"
         }`}
       >
-        {message.text}
+        {isShopper ? message.text : <FormattedText text={message.text} />}
       </div>
     );
   }

@@ -21,8 +21,19 @@ export interface CartItem {
   addedAt: string;
 }
 
+/** An intervention-granted promo code, applied client-side so "Claim Discount" has a real, visible effect. */
+export interface AppliedPromo {
+  code: string;
+  label: string;
+  amountOff: number;
+  leverId: string;
+}
+
 export interface CartState {
   items: CartItem[];
+  appliedPromo: AppliedPromo | null;
+  freeDeliveryUnlocked: boolean;
+  expressDeliveryUnlocked: boolean;
 }
 
 export type CartAction =
@@ -32,9 +43,17 @@ export type CartAction =
   | { type: "ADD_ITEM"; productId: string; quantity?: number; addedAt?: string }
   | { type: "REMOVE_ITEM"; productId: string }
   | { type: "UPDATE_QUANTITY"; productId: string; quantity: number }
-  | { type: "CLEAR_CART" };
+  | { type: "CLEAR_CART" }
+  | { type: "APPLY_PROMO"; promo: AppliedPromo }
+  | { type: "UNLOCK_FREE_DELIVERY" }
+  | { type: "UNLOCK_EXPRESS_DELIVERY" };
 
-const EMPTY_STATE: CartState = { items: [] };
+const EMPTY_STATE: CartState = {
+  items: [],
+  appliedPromo: null,
+  freeDeliveryUnlocked: false,
+  expressDeliveryUnlocked: false,
+};
 
 export function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
@@ -46,6 +65,7 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
       // keep the original `addedAt` so dwell time measures from the first add.
       if (existing) {
         return {
+          ...state,
           items: state.items.map((i) =>
             i.productId === action.productId
               ? { ...i, quantity: i.quantity + quantity }
@@ -55,6 +75,7 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
       }
 
       return {
+        ...state,
         items: [
           ...state.items,
           {
@@ -67,13 +88,14 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
     }
 
     case "REMOVE_ITEM":
-      return { items: state.items.filter((i) => i.productId !== action.productId) };
+      return { ...state, items: state.items.filter((i) => i.productId !== action.productId) };
 
     case "UPDATE_QUANTITY": {
       // Clamped at 1 — dropping to zero never silently removes a line, removal
       // is always an explicit REMOVE_ITEM.
       const quantity = Math.max(1, action.quantity);
       return {
+        ...state,
         items: state.items.map((i) =>
           i.productId === action.productId ? { ...i, quantity } : i,
         ),
@@ -82,6 +104,15 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
 
     case "CLEAR_CART":
       return EMPTY_STATE;
+
+    case "APPLY_PROMO":
+      return { ...state, appliedPromo: action.promo };
+
+    case "UNLOCK_FREE_DELIVERY":
+      return { ...state, freeDeliveryUnlocked: true };
+
+    case "UNLOCK_EXPRESS_DELIVERY":
+      return { ...state, expressDeliveryUnlocked: true };
 
     default:
       return state;
@@ -109,7 +140,13 @@ function readStoredCart(): CartState {
         typeof i?.quantity === "number" &&
         i.quantity > 0,
     );
-    return { items };
+    const candidate = parsed as Partial<CartState>;
+    return {
+      items,
+      appliedPromo: candidate.appliedPromo ?? null,
+      freeDeliveryUnlocked: candidate.freeDeliveryUnlocked ?? false,
+      expressDeliveryUnlocked: candidate.expressDeliveryUnlocked ?? false,
+    };
   } catch {
     return EMPTY_STATE;
   }
@@ -119,10 +156,17 @@ interface CartContextValue {
   items: CartItem[];
   /** Total quantity across all lines — what the navbar badge shows. */
   count: number;
+  appliedPromo: AppliedPromo | null;
+  freeDeliveryUnlocked: boolean;
+  expressDeliveryUnlocked: boolean;
   addItem: (productId: string, quantity?: number, addedAt?: string) => void;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
+  /** Applies an intervention-granted promo code — replaces any existing one. */
+  applyPromo: (promo: AppliedPromo) => void;
+  unlockFreeDelivery: () => void;
+  unlockExpressDelivery: () => void;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -142,6 +186,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
     () => ({
       items: state.items,
       count: state.items.reduce((sum, i) => sum + i.quantity, 0),
+      appliedPromo: state.appliedPromo,
+      freeDeliveryUnlocked: state.freeDeliveryUnlocked,
+      expressDeliveryUnlocked: state.expressDeliveryUnlocked,
       addItem: (productId, quantity, addedAt) => {
         dispatch({ type: "ADD_ITEM", productId, quantity, addedAt });
         // Fire-and-forget, outside the reducer so that stays pure. Releases the
@@ -152,6 +199,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       updateQuantity: (productId, quantity) =>
         dispatch({ type: "UPDATE_QUANTITY", productId, quantity }),
       clearCart: () => dispatch({ type: "CLEAR_CART" }),
+      applyPromo: (promo) => dispatch({ type: "APPLY_PROMO", promo }),
+      unlockFreeDelivery: () => dispatch({ type: "UNLOCK_FREE_DELIVERY" }),
+      unlockExpressDelivery: () => dispatch({ type: "UNLOCK_EXPRESS_DELIVERY" }),
     }),
     [state],
   );

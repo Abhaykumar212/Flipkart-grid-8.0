@@ -85,7 +85,10 @@ export const LEVER_POLICY: Record<string, LeverPolicy> = {
 const CONFIDENCE_BAND: Record<DiagnosisConfidence, { start: Intensity; ceiling: Intensity }> = {
   low: { start: 0, ceiling: 1 },
   medium: { start: 0, ceiling: 2 },
-  high: { start: 1, ceiling: 3 },
+  // Starts at 0 even on a confident diagnosis — the cheapest lever (EMI,
+  // usually) always gets tried first. Rung 3 has to be earned by being
+  // ignored, or unlocked outright by real exit intent (see `computeCeiling`).
+  high: { start: 0, ceiling: 3 },
 };
 
 const MARGIN_APPROVAL_KEY = "fk-intervention-margin-approval";
@@ -127,6 +130,14 @@ export interface SelectSurfaceOptions {
   now?: number;
   probability?: number;
   hasElicited?: boolean;
+  /**
+   * Real signal that the shopper is leaving right now (mouse toward the tab
+   * bar, closing the cart page) — a deliberate override that unlocks the
+   * ceiling immediately instead of waiting for ignored exposures to add up.
+   * "Last resort" is the whole justification for spending margin, so it's
+   * gated on an actual exit signal, not just a confident diagnosis.
+   */
+  exitIntent?: boolean;
 }
 
 /**
@@ -190,6 +201,7 @@ interface CeilingInfo {
   ceiling: Intensity;
   ignored: number;
   target: Intensity;
+  exitIntentUnlocked: boolean;
 }
 
 /** Shared by `selectSurface` and `findSuppressedRung3Levers` so the two never disagree. */
@@ -198,6 +210,7 @@ function computeCeiling(
   fatigueState: FatigueState,
   rootCause: string,
   marginApproved: boolean,
+  exitIntent: boolean = false,
 ): CeilingInfo {
   const band = CONFIDENCE_BAND[confidence] ?? CONFIDENCE_BAND.low;
 
@@ -207,11 +220,15 @@ function computeCeiling(
   const marginClamped = band.ceiling === 3 && !marginAllowed;
   const ceiling: Intensity = marginClamped ? 2 : band.ceiling;
 
-  // One rung per ignored attempt on this cause, never past the ceiling.
+  // One rung per ignored attempt on this cause, never past the ceiling —
+  // unless the shopper is genuinely leaving right now, in which case the
+  // "last resort" lever is allowed immediately rather than waiting for
+  // ignored history to accumulate.
   const ignored = ignoredCount(fatigueState, rootCause);
-  const target = Math.min(ceiling, band.start + ignored) as Intensity;
+  const exitIntentUnlocked = exitIntent && marginAllowed;
+  const target = exitIntentUnlocked ? ceiling : (Math.min(ceiling, band.start + ignored) as Intensity);
 
-  return { band, marginAllowed, marginClamped, ceiling, ignored, target };
+  return { band, marginAllowed, marginClamped, ceiling, ignored, target, exitIntentUnlocked };
 }
 
 /**
@@ -230,15 +247,17 @@ export function selectSurface(
   const marginApproved = options.marginApproved ?? resolveMarginApproval();
   const now = options.now ?? Date.now();
 
-  const { band, marginClamped, ceiling, ignored, target } = computeCeiling(
+  const { band, marginClamped, ceiling, ignored, target, exitIntentUnlocked } = computeCeiling(
     confidence,
     fatigueState,
     rootCause,
     marginApproved,
+    options.exitIntent,
   );
 
-  const reason =
-    ignored === 0
+  const reason = exitIntentUnlocked
+    ? `exit intent detected → last-resort rung ${target} unlocked immediately`
+    : ignored === 0
       ? `${confidence} confidence → start at rung ${band.start} (ceiling ${ceiling})`
       : `${ignored} ignored on ${rootCause} → escalate to rung ${target} (ceiling ${ceiling})`;
 
@@ -352,7 +371,13 @@ export function findSuppressedRung3Levers(
 ): SuppressedRung3Lever[] {
   const rootCause = options.rootCause ?? "unknown";
   const marginApproved = options.marginApproved ?? resolveMarginApproval();
-  const { band, marginClamped, target } = computeCeiling(confidence, fatigueState, rootCause, marginApproved);
+  const { band, marginClamped, target } = computeCeiling(
+    confidence,
+    fatigueState,
+    rootCause,
+    marginApproved,
+    options.exitIntent,
+  );
 
   const reason: Rung3SuppressionReason =
     band.ceiling < 3

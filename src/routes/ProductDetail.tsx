@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import { Heart } from "lucide-react";
 import { productBySlug } from "../data/products";
 import { formatDeliveryDate, formatINR } from "../lib/format";
@@ -20,6 +21,7 @@ import { RatingsAndReviews } from "../components/pdp/RatingsAndReviews";
 import { OffersList } from "../components/pdp/OffersList";
 import { ProductBreadcrumb } from "../components/pdp/ProductBreadcrumb";
 import { StockUrgency } from "../components/pdp/StockUrgency";
+import { SocialProof } from "../components/pdp/SocialProof";
 import { EMICalculator } from "../components/pdp/EMICalculator";
 import { SellerInfo } from "../components/pdp/SellerInfo";
 import { ProductComparison } from "../components/pdp/ProductComparison";
@@ -32,6 +34,7 @@ import { pageContext } from "../lib/pageContext";
 import { InlineHighlight } from "../components/intervention/InlineHighlight";
 import { useInlineTarget } from "../components/intervention/useInlineTarget";
 import { isLowestPriceInDays } from "../lib/priceHistory";
+import { useBrowsingAgentTrigger } from "../components/intervention/BrowsingAgentCard";
 
 export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -40,6 +43,7 @@ export default function ProductDetail() {
   const { recordPincodeCheck, recordProductVisit } = useTracker();
   const { has, toggle } = useWishlist();
   const [pincode, setPincode] = useState("");
+  const { trigger: triggerBrowsingAgent, node: browsingAgentCard } = useBrowsingAgentTrigger();
 
   useEffect(() => {
     if (product) {
@@ -52,6 +56,13 @@ export default function ProductDetail() {
         brand: product.brand,
         category: product.category,
         price: product.price.sellingPrice,
+      });
+      triggerBrowsingAgent({
+        type: "product_view",
+        productId: product.id,
+        productName: product.title,
+        price: product.price.sellingPrice,
+        category: product.category,
       });
     }
 
@@ -66,7 +77,7 @@ export default function ProductDetail() {
       pageContext.setCurrentProduct(null);
       document.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [product?.id]);
+  }, [product?.id, triggerBrowsingAgent]);
 
   // Scroll to top on product change (when navigating between related products)
   useEffect(() => {
@@ -161,6 +172,7 @@ export default function ProductDetail() {
 
   return (
     <div className="flex flex-col gap-3">
+      {browsingAgentCard}
       {/* Breadcrumb Navigation */}
       <ProductBreadcrumb
         category={product.category}
@@ -197,11 +209,15 @@ export default function ProductDetail() {
             <RatingStars variant="stars" value={rating.value} count={totalRatings} />
           </div>
 
-          {priceInline.isActive && priceContent ? (
-            <InlineHighlight {...priceContent}>{priceBlock}</InlineHighlight>
-          ) : (
-            priceBlock
-          )}
+          <AnimatePresence mode="wait" initial={false}>
+            {priceInline.isActive && priceContent ? (
+              <InlineHighlight key="highlighted" {...priceContent}>
+                {priceBlock}
+              </InlineHighlight>
+            ) : (
+              <span key="plain">{priceBlock}</span>
+            )}
+          </AnimatePresence>
           {isLowestPrice && (
             <span
               className="mt-2 inline-flex rounded-[2px] bg-fk-green/10 px-2 py-1 text-fk-sm font-medium text-fk-green"
@@ -211,8 +227,9 @@ export default function ProductDetail() {
             </span>
           )}
 
-          {/* Stock Urgency */}
+          {/* Social proof + Stock Urgency */}
           <div className="mt-3">
+            <SocialProof productId={product.id} />
             <StockUrgency inStock={stock.inStock} quantityLeft={stock.quantityLeft} />
           </div>
 
@@ -247,11 +264,15 @@ export default function ProductDetail() {
                 Check
               </Button>
             </form>
-            {deliveryInline.isActive && deliveryInline.content ? (
-              <InlineHighlight {...deliveryInline.content}>{deliveryLine}</InlineHighlight>
-            ) : (
-              deliveryLine
-            )}
+            <AnimatePresence mode="wait" initial={false}>
+              {deliveryInline.isActive && deliveryInline.content ? (
+                <InlineHighlight key="highlighted" {...deliveryInline.content}>
+                  {deliveryLine}
+                </InlineHighlight>
+              ) : (
+                <div key="plain">{deliveryLine}</div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Expanded Seller Info */}
@@ -317,7 +338,12 @@ export default function ProductDetail() {
         category={product.category}
       />
 
-      <RatingsAndReviews productId={product.id} ratingDistribution={ratingDistribution} reviews={reviews} />
+      <RatingsAndReviews
+        productId={product.id}
+        ratingDistribution={ratingDistribution}
+        reviews={reviews}
+        highlights={product.highlights}
+      />
 
       {/* Related Product Rails */}
       <RelatedProductsRail product={product} />

@@ -148,6 +148,8 @@ export interface PipelineRun {
   scenarioLabel?: string;
   probability: number | null;
   riskTier: string | null;
+  /** The model's own numeric confidence in `probability`, distinct from the RCA agent's qualitative high/medium/low. */
+  confidenceScore: number | null;
   gate: GateDecision | null;
   analysis: RootCauseAnalysis | null;
   interventionPlan: InterventionPlan | null;
@@ -209,6 +211,7 @@ class PipelineTraceStore {
       scenarioLabel,
       probability: null,
       riskTier: null,
+      confidenceScore: null,
       gate: null,
       analysis: null,
       interventionPlan: null,
@@ -256,6 +259,7 @@ class PipelineTraceStore {
       status: response.status,
       probability: response.prediction?.abandonment_probability ?? null,
       riskTier: response.prediction?.risk_tier ?? null,
+      confidenceScore: response.prediction?.confidence_score ?? null,
       gate: response.gate,
       analysis: response.analysis,
       interventionPlan: response.intervention_plan,

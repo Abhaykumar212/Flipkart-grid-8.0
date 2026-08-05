@@ -78,6 +78,13 @@ export default function PipelineConsole() {
       sessionTracker.resetScenario();
       sessionTracker.applyScenario(scenario.history, scenario.session);
 
+      // Reset first so a scenario built to demonstrate escalation isn't at the
+      // mercy of leftover pending/dismissed state from whatever ran before it.
+      if (scenario.preSeedIgnored) {
+        fatigueBudget.reset();
+        fatigueBudget.seedIgnored(scenario.preSeedIgnored.rootCause, scenario.preSeedIgnored.count);
+      }
+
       // Let the cart effect propagate into the tracker before scoring.
       await new Promise((resolve) => setTimeout(resolve, 350));
 

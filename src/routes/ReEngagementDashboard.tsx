@@ -8,40 +8,36 @@ import {
 
 interface Event {
   type: string;
-  timestamp: string;
+  timestamp: number;
   data: any;
 }
 
 interface Session {
   session_id: string;
   email: string | null;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  events: Event[];
-}
-
-interface AnalysisResult {
-  journey_summary: string;
-  behavioral_signals: string[];
-  recommended_action: string;
+  event_count: number;
+  first_event: number;
+  last_event: number;
+  email_status: string | null;
+  email_subject: string | null;
 }
 
 interface EmailPreview {
   subject: string;
   html_content: string;
-  analysis_summary?: AnalysisResult;
+  analysis_summary?: string;
+  behavioral_signals?: string;
 }
 
 export default function ReEngagementDashboard() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [selectedEvents, setSelectedEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isSending, setIsSending] = useState(false);
   const [emailPreview, setEmailPreview] = useState<EmailPreview | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async () => {
     setIsLoading(true);
@@ -65,16 +61,33 @@ export default function ReEngagementDashboard() {
   const handleSelectSession = async (session: Session) => {
     setSelectedSession(session);
     setEmailPreview(null);
+    setEmailSent(false);
     setError(null);
-    setSuccess(null);
-    
-    // Try fetching existing preview if status is email_generated or sent
-    if (session.status !== 'pending') {
+    setSelectedEvents([]);
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/session-timeline/${session.session_id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedEvents(data.events || []);
+      }
+    } catch (err) {
+      console.error('Failed to load session timeline', err);
+    }
+
+    // Load an existing generated email, if this session already has one
+    if (session.email_status) {
       try {
         const response = await fetch(`http://localhost:8000/api/reengagement-preview/${session.session_id}`);
         if (response.ok) {
           const data = await response.json();
-          setEmailPreview(data);
+          setEmailPreview({
+            subject: data.subject,
+            html_content: data.body_html,
+            analysis_summary: data.analysis_summary,
+            behavioral_signals: data.behavioral_signals,
+          });
+          setEmailSent(data.status === 'sent');
         }
       } catch (err) {
         console.error('Failed to load existing preview', err);
@@ -86,63 +99,38 @@ export default function ReEngagementDashboard() {
     if (!selectedSession) return;
     setIsGenerating(true);
     setError(null);
-    
+
     try {
       const response = await fetch(`http://localhost:8000/api/trigger-reengagement/${selectedSession.session_id}`, {
         method: 'POST',
       });
-      if (!response.ok) throw new Error('Failed to generate email');
-      
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.detail || 'Failed to generate email');
+      }
+
       const data = await response.json();
       setEmailPreview({
-        subject: data.subject || data.email_preview?.subject || 'Re-engagement Email',
-        html_content: data.html_content || data.email_preview?.html_content || '<div>No content generated</div>',
-        analysis_summary: data.analysis || data.email_preview?.analysis_summary
+        subject: data.subject,
+        html_content: data.body_html,
+        analysis_summary: data.analysis_summary,
+        behavioral_signals: data.behavioral_signals,
       });
-      
+      setEmailSent(Boolean(data.email_sent));
+
       // Update session status in local state
-      setSessions(prev => prev.map(s => 
-        s.session_id === selectedSession.session_id 
-          ? { ...s, status: 'email_generated' } 
+      const newStatus = data.email_sent ? 'sent' : 'email_generated';
+      setSessions(prev => prev.map(s =>
+        s.session_id === selectedSession.session_id
+          ? { ...s, email_status: newStatus, email_subject: data.subject }
           : s
       ));
-      setSelectedSession(prev => prev ? { ...prev, status: 'email_generated' } : null);
-    } catch (err) {
+      setSelectedSession(prev => prev ? { ...prev, email_status: newStatus, email_subject: data.subject } : null);
+    } catch (err: any) {
       console.error(err);
-      setError('Failed to generate email. Make sure you have set your API keys.');
+      setError(err.message || 'Failed to generate email. Make sure you have set your API keys.');
     } finally {
       setIsGenerating(false);
-    }
-  };
-
-  const handleSendEmail = async () => {
-    if (!selectedSession) return;
-    setIsSending(true);
-    setError(null);
-    
-    try {
-      // Assuming this endpoint exists based on the typical flow
-      const response = await fetch(`http://localhost:8000/api/send-reengagement-email/${selectedSession.session_id}`, {
-        method: 'POST',
-      });
-      
-      if (!response.ok) throw new Error('Failed to send email');
-      
-      setSuccess('Email sent successfully!');
-      
-      // Update status
-      setSessions(prev => prev.map(s => 
-        s.session_id === selectedSession.session_id 
-          ? { ...s, status: 'sent' } 
-          : s
-      ));
-      setSelectedSession(prev => prev ? { ...prev, status: 'sent' } : null);
-    } catch (err) {
-      console.error(err);
-      // Fallback success for UI if endpoint doesn't exist yet
-      setSuccess('Simulated: Email sent successfully!');
-    } finally {
-      setIsSending(false);
     }
   };
 
@@ -232,17 +220,17 @@ export default function ReEngagementDashboard() {
                 <span className="font-medium text-sm">Emails Generated</span>
               </div>
               <div className="text-3xl font-bold">
-                {sessions.filter(s => s.status === 'email_generated' || s.status === 'sent').length || 0}
+                {sessions.filter(s => s.email_status === 'generated' || s.email_status === 'sent').length || 0}
               </div>
             </div>
-            
+
             <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-5">
               <div className="flex items-center gap-3 text-green-200 mb-2">
                 <Send className="w-5 h-5" />
                 <span className="font-medium text-sm">Emails Sent</span>
               </div>
               <div className="text-3xl font-bold">
-                {sessions.filter(s => s.status === 'sent').length || 0}
+                {sessions.filter(s => s.email_status === 'sent').length || 0}
               </div>
             </div>
             
@@ -301,24 +289,24 @@ export default function ReEngagementDashboard() {
                           {session.session_id.substring(0, 8)}...
                         </div>
                         <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${
-                          session.status === 'sent' ? 'bg-green-100 text-green-700' :
-                          session.status === 'email_generated' ? 'bg-purple-100 text-purple-700' :
+                          session.email_status === 'sent' ? 'bg-green-100 text-green-700' :
+                          session.email_status === 'generated' ? 'bg-purple-100 text-purple-700' :
                           'bg-gray-100 text-gray-700'
                         }`}>
-                          {session.status.replace('_', ' ').toUpperCase()}
+                          {(session.email_status || 'pending').replace('_', ' ').toUpperCase()}
                         </span>
                       </div>
-                      
+
                       <div className="text-sm text-fk-muted mb-2">
                         {session.email || 'Anonymous User'}
                       </div>
-                      
+
                       <div className="flex items-center justify-between text-xs text-gray-500">
                         <span className="flex items-center gap-1">
-                          <Activity className="w-3 h-3" /> {session.events?.length || 0} events
+                          <Activity className="w-3 h-3" /> {session.event_count} events
                         </span>
                         <span>
-                          {new Date(session.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(session.last_event * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
                     </motion.div>
@@ -393,8 +381,8 @@ export default function ReEngagementDashboard() {
                   
                   <div className="p-6 max-h-[400px] overflow-y-auto">
                     <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-gray-200">
-                      {selectedSession.events && selectedSession.events.length > 0 ? (
-                        selectedSession.events.map((event, idx) => (
+                      {selectedEvents.length > 0 ? (
+                        selectedEvents.map((event, idx) => (
                           <div key={idx} className="relative">
                             <div className={`absolute -left-9 p-1.5 rounded-full bg-white border-2 border-white shadow-sm z-10 ${getEventColor(event.type).split(' ')[0]}`}>
                               {getEventIcon(event.type)}
@@ -405,7 +393,7 @@ export default function ReEngagementDashboard() {
                                   {event.type.replace(/_/g, ' ')}
                                 </span>
                                 <span className="text-xs text-gray-500">
-                                  {new Date(event.timestamp).toLocaleTimeString()}
+                                  {new Date(event.timestamp * 1000).toLocaleTimeString()}
                                 </span>
                               </div>
                               <p className="text-sm text-gray-700 break-words">
@@ -438,14 +426,18 @@ export default function ReEngagementDashboard() {
                             LLM Behavioral Analysis
                           </h3>
                           <p className="text-sm text-gray-700 mb-4 bg-white p-3 rounded-md border border-gray-200">
-                            {emailPreview.analysis_summary.journey_summary}
+                            {emailPreview.analysis_summary}
                           </p>
                           <div className="flex flex-wrap gap-2 mb-2">
-                            {emailPreview.analysis_summary.behavioral_signals?.map((signal, i) => (
-                              <span key={i} className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full border border-purple-200">
-                                {signal}
-                              </span>
-                            ))}
+                            {emailPreview.behavioral_signals
+                              ?.split('\n')
+                              .map(line => line.replace(/^-\s*/, '').trim())
+                              .filter(Boolean)
+                              .map((signal, i) => (
+                                <span key={i} className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full border border-purple-200">
+                                  {signal}
+                                </span>
+                              ))}
                           </div>
                         </div>
                       )}
@@ -455,34 +447,22 @@ export default function ReEngagementDashboard() {
                           <label className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1 block">Subject</label>
                           <div className="font-medium text-fk-ink truncate">{emailPreview.subject}</div>
                         </div>
-                        
-                        <button
-                          onClick={handleSendEmail}
-                          disabled={isSending || selectedSession.status === 'sent'}
-                          className={`flex items-center gap-2 px-6 py-2.5 rounded-md text-sm font-medium transition-all flex-shrink-0 ${
-                            selectedSession.status === 'sent'
-                              ? 'bg-green-100 text-green-700 cursor-default'
-                              : isSending
-                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                              : 'bg-green-600 text-white hover:bg-green-700 shadow-sm'
+
+                        <span
+                          className={`flex items-center gap-2 px-6 py-2.5 rounded-md text-sm font-medium flex-shrink-0 ${
+                            emailSent
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-amber-100 text-amber-700'
                           }`}
+                          title={emailSent ? undefined : 'No real email captured for this session, or SMTP is unconfigured — logged to the backend console instead.'}
                         >
-                          {selectedSession.status === 'sent' ? (
-                            <><CheckCircle2 className="w-4 h-4" /> Sent</>
-                          ) : isSending ? (
-                            <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</>
+                          {emailSent ? (
+                            <><CheckCircle2 className="w-4 h-4" /> Sent automatically</>
                           ) : (
-                            <><Send className="w-4 h-4" /> Send Email</>
+                            <><AlertCircle className="w-4 h-4" /> Not sent (see console)</>
                           )}
-                        </button>
+                        </span>
                       </div>
-                      
-                      {success && (
-                        <div className="p-3 bg-green-50 border-b border-green-100 text-green-700 text-sm flex items-center justify-center gap-2">
-                          <CheckCircle2 className="w-4 h-4" />
-                          {success}
-                        </div>
-                      )}
 
                       <div className="p-6 bg-gray-100 flex justify-center">
                         <div className="bg-white w-full max-w-[600px] shadow-sm border border-gray-200 min-h-[400px] rounded-sm overflow-hidden">

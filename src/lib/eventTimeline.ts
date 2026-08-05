@@ -208,7 +208,6 @@ export class EventTimeline {
         body: JSON.stringify({
           session_id: this.sessionId,
           events: eventsToSync,
-          email: sessionStorage.getItem('fk-user-email') || null,
         }),
       });
 
@@ -229,7 +228,6 @@ export class EventTimeline {
           session_id: this.sessionId,
           events: this.events,
           converted,
-          email: sessionStorage.getItem('fk-user-email') || null,
         }),
       });
     } catch (e) {
@@ -244,7 +242,6 @@ export class EventTimeline {
         const payload = JSON.stringify({
           session_id: this.sessionId,
           events: eventsToSync,
-          email: sessionStorage.getItem('fk-user-email') || null,
         });
         
         navigator.sendBeacon('http://localhost:8000/api/sync-timeline', payload);
